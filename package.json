@@ -1,0 +1,27 @@
+{
+  "name": "@mental/cli",
+  "version": "0.0.0",
+  "description": "Local-first OKF continuity layer for humans and coding agents",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "mental": "bin/cli.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/afaraha8403/mental.git"
+  },
+  "homepage": "https://github.com/afaraha8403/mental#readme",
+  "bugs": {
+    "url": "https://github.com/afaraha8403/mental/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
