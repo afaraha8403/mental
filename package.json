@@ -11,8 +11,17 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test test/*.test.mjs",
+    "mental": "node bin/cli.mjs"
   },
+  "files": [
+    "bin",
+    "skills",
+    "rules",
+    "hooks",
+    "README.md",
+    "LICENSE"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/afaraha8403/mental.git"

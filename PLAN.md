@@ -4,28 +4,28 @@ overview: "New product repo at `/home/ali/Development/Projects/mental` (own git 
 todos:
   - id: phase-0-repo
     content: "Create /home/ali/Development/Projects/mental, PLAN.md, then public GitHub repo github.com/afaraha8403/mental (NOT balacodeio); git push -u origin main"
-    status: pending
+    status: completed
   - id: phase-1-where
     content: Implement resolve/bindings/git lib + mental where (--json) + unit tests (origin normalize, walk-up, MENTAL_DIR, git root)
-    status: pending
+    status: completed
   - id: phase-2-okf-cli
     content: OKF templates, status, journal, decide/note; CLI-first skill + tiny always-on rule (zero Balakit strings)
-    status: pending
+    status: completed
   - id: phase-3-install-doctor
     content: mental install to user skill/rule dirs; doctor; ignore-check before creating ./.mental
-    status: pending
+    status: completed
   - id: phase-4-search
     content: search/list/show + sqlite FTS or file-scan fallback + reindex
-    status: pending
+    status: completed
   - id: phase-5-local-remap
     content: mental local --import/--move, remap/split/link, identity tests (mv, fork, two clones, worktree)
-    status: pending
+    status: completed
   - id: phase-6-optional
-    content: TTY menu, uninstall (no data wipe), hooks off-by-default, optional mental serve MCP
-    status: pending
+    content: uninstall (no data wipe), hooks off-by-default, optional mental serve MCP (heartbeat is the TTY no-args surface; no standing TUI)
+    status: completed
   - id: phase-7-deprecate-balakit
     content: Deprecate Mental in Balakit — changelog, README pointer to @mental/cli, remove skill/rule/plugin/CLI policy flags/PERSONAL_RULES, tests, generated AGENTS/CLAUDE mentions
-    status: pending
+    status: completed
 isProject: false
 ---
 
@@ -68,7 +68,7 @@ Today Mental is a **Balakit personal capability**: skill + always-on rule + giti
 - A **derived SQLite index** answers structured queries (type, status, tags, FTS, links).
 - **Default store is user-global** (`~/.mental/`), partitioned per project identity.
 - A **project may break off** into `./.mental/` (exclusive nearest-wins; no silent merge of personal + project).
-- Humans use a **CLI** (TTY menu or commands). Agents use the **same CLI with `--json`**, instructed by a **tiny always-on rule** + a **Skill**. Hooks and MCP are **optional**.
+- Humans use a **CLI** (TTY heartbeat or named commands). Agents use the **same CLI with `--json`**, instructed by a **tiny always-on rule** + a **Skill**. Hooks and MCP are **optional**.
 
 ### Reader of `.mental/`
 
@@ -85,7 +85,7 @@ The **user** (and future-them in two weeks). The agent is a scribe. Write for a 
 - Private by default; never store secrets; never commit `~/.mental` or project `.mental/` unless the user later opts into tracked (out of v1 if it complicates).
 - Missing Mental **must not block coding** (fail open).
 - Uninstall **must not delete OKF** without a typed confirmation phrase.
-- Existing Balakit users with `./.mental/`: **dual-read**, **single-write**, until they import.
+- Existing Balakit users with `./.mental/`: **process into `~/.mental/projects/<uuid>/`** on first **write** resolve (`install`, `status`, `journal`, … — not `where` or the TTY heartbeat). Classify onto canonical OKF paths, normalize frontmatter, rebuild the derived sqlite index. Never delete the leftover folder. After import, `where` reports **home** unless the user ran `mental local` (writes `.mental-local` marker).
 
 ### Non-goals (v1)
 
@@ -227,16 +227,23 @@ One section per coherent **task**, not per chat turn. Skip trivial/read-only tur
 **Order:**
 
 1. If `MENTAL_DIR` is set and is a directory → that path, mode `env`.
-2. Walk from `cwd` to git root (or filesystem root, stop at `$HOME`). If `<dir>/.mental/` exists as a **directory** → that path, mode `local`.
-3. Else if git repo: compute binding (section 5). Active path = `~/.mental/projects/<uuid>/` (create skeleton on first write, not necessarily on `where`).
-4. Else (not a git repo): `~/.mental` personal root, mode `personal`.
+2. Walk from `cwd` to git root (or filesystem root, stop at `$HOME`). If `<dir>/.mental/` exists **and** contains the `.mental-local` marker (`mental local`) → that path, mode `local`.
+3. Else if git repo: compute binding (section 5). Active path = `~/.mental/projects/<uuid>/` (create skeleton on first write, not necessarily on `where`). `where` and the TTY heartbeat are **read-only** (no binding create, no leftover ingest). If a leftover `./.mental/` exists without the marker, **ingest** it on the next write (`status`, `journal`, `install`, …): classify files onto canonical OKF paths, normalize frontmatter, skip dest files that already exist, never delete the source, then rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite`.
+4. Else (not a git repo): `~/.mental` personal root, mode `personal`. Leftover `./.mental` in a non-git folder is **not** imported (no UUID).
 
 **Exclusive:** never concatenate personal + project trees in `status`/`search` unless a later flag `--also-personal` is implemented (not v1).
 
-**Dual-read / single-write (migration):**
+**Leftover Balakit import (migration):**
 
-- If **both** `./.mental/` (legacy Balakit) **and** a home binding exist: `where` reports **local** (walk-up wins) so existing users keep working.
-- `mental doctor` warns: “legacy local bundle; run `mental local --import` from home or keep local.”
+- Leftover `./.mental/` without `.mental-local` is a **source**, not the write root.
+- On `mental install` / `status` / `journal` / other **write** resolve: **process** leftover files into `~/.mental/projects/<uuid>/` — not a byte copy.
+  - Canonical paths: `notes/<slug>.md`, `decisions/<date>-<slug>.md`, `journal/<YYYY-MM-DD>.md`. Root `journal.md` → `journal/imported-root.md`. Other root `*.md` → `notes/`.
+  - Normalize frontmatter: required `type`; default `status` (`Note`/`Journal` → `active`, `Decision` → `decided` if missing); `title` / `timestamp` / `tags`.
+  - Skip `status/` (disposable cache). Skip dest paths that already exist. Never delete the leftover folder.
+  - Rebuild the derived sqlite index (`concepts` + FTS5 + `links`) at `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite`.
+- `where` is read-only. After a write import, `where` reports **home**. Write-command JSON may include `imported: { from, copied, skipped }` and `indexed: { path, concepts, backend }`.
+- `mental doctor` warns: leftover still on disk (will import / already imported). Checks index presence.
+- `mental local` snapshots leftover into home first, then writes `.mental-local` so subsequent resolve stays **local**.
 - **Writes** go only to the resolved root. Never write to two trees.
 
 ---
@@ -275,9 +282,9 @@ Normalize origins: strip `.git`, lowercase host, strip userinfo, treat `git@gith
 
 **Commands:**
 
-- `mental remap` — interactive: pick binding for this cwd.
-- `mental split` — this clone gets a **new** uuid (copy or empty).
-- `mental link` — point this cwd at an existing uuid (second clone of same project).
+- `mental remap` — list bindings, or `mental remap --to <id>` / `--from <id>` for this cwd (writes `.mental-id`).
+- `mental split` — this clone gets a **new** uuid (`--copy` duplicates OKF). `mental new` is an alias.
+- `mental link --to <id>` — point this cwd at an existing uuid (second clone of same project).
 
 **Default for two clones of the same origin:** **share uuid** (same project brain). User `split` if they want divergence.
 
@@ -299,21 +306,22 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 
 **Package:** Node **ESM**, `bin` name `mental`. Suggested npm name `@mental/cli` (plain `mental` is likely taken — **check npm at implement time** and set `"bin": { "mental": "bin/cli.mjs" }`).
 
-**Runtime:** Node `>=18`. Dependencies: keep lean. Suggested: `@clack/prompts` (Balakit already uses it), `better-sqlite3` or `node:sqlite` if Node version allows — prefer **sql.js / better-sqlite3** with a documented native-build fallback. If native modules are painful, v1 search can be **in-process scan of frontmatter + ripgrep-like filter** and sqlite in v1.1. **Do not block v1 on vectors.**
+**Runtime:** Node `>=18`. Dependencies: keep lean. No standing TTY session in v1 (no `@clack/prompts`). `better-sqlite3` or `node:sqlite` if Node version allows — prefer **sql.js / better-sqlite3** with a documented native-build fallback. If native modules are painful, v1 search can be **in-process scan of frontmatter + ripgrep-like filter** and sqlite in v1.1. **Do not block v1 on vectors.**
 
-**No args + TTY:** interactive menu (Where, Status, Search, Journal, Local, Remap, Doctor, Hooks, Quit). **No args + not TTY:** print help, exit 2.
+**No args + TTY:** print a one-shot **heartbeat** (resume, last outcome + when, git one-liner, open decisions) and exit. Not a standing session. UUID, sqlite path, mode, and root belong on `mental where` / `mental doctor`. **Named commands** are one-shot (print or write, then exit). **`--json` never prompts.** **No args + not TTY:** print help, exit 2. There is no `mental ui` / `mental menu` in v1.
 
 **Global flags:** `--json`, `--dir <path>` (overrides resolve, like `MENTAL_DIR`), `--help`, `--version`.
 
 
 | Command                                        | Behavior                                                                                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mental where`                                 | Active root, uuid, mode, reason                                                                                                                         |
-| `mental status`                                | Regenerated view: git snapshot + latest Resume + open/deferred decisions. Writes `status/current.md` as cache.                                          |
-| `mental search <q>`                            | Index or file scan; `--type`, `--status`, `--tag`                                                                                                       |
-| `mental list`                                  | Concepts with filters                                                                                                                                   |
-| `mental show <path>`                           | One file, relative to bundle root                                                                                                                       |
-| `mental journal [--title] [--resume]`          | Append today’s journal section (or open editor). Agents pass `--title` `--body` `--resume` `--json`.                                                    |
+| `mental` (no args, TTY)                    | Print heartbeat (resume, last outcome, git, open decisions) and exit                                                                                    |
+| `mental where`                                 | Active root, uuid, mode, reason. Read-only: does not create a binding or ingest leftover.                                                                 |
+| `mental status`                                | Regenerated view: git snapshot + latest Resume + open/deferred decisions. Writes `status/current.md` as cache. Creates identity + leftover ingest on first write. |
+| `mental search <q>`                            | Index or file scan; `--type`, `--status`, `--tag`.                                                                                                      |
+| `mental list`                                  | Concepts with filters.                                                                                                                                  |
+| `mental show <path>`                           | One file, relative to bundle root.                                                                                                                      |
+| `mental journal [--title] [--resume]`          | Append today’s journal section. Missing `--title` prints usage (TTY and agents). Agents pass `--title` `--body` `--resume` `--json`.                    |
 | `mental decide`                                | Scaffold a decision file                                                                                                                                |
 | `mental note`                                  | Scaffold a note                                                                                                                                         |
 | `mental local [--import | --move]`             | Create `./.mental/`. `--import` copies home slice. `--move` copies and stops using home for this uuid (keep files in home unless user confirms delete). |
@@ -539,17 +547,19 @@ Mental **leaves Balakit**. The new repo is the only product. Balakit must not ke
 
 ### Phase 5 — local / remap / split / link
 
-- Full identity tests
+- Full identity tests (mv, SSH≡HTTPS, two clones, fork, path-then-origin merge, worktree, monorepo)
 - `mental local --import|--move`
+- `mental remap` / `split` / `link`
 
 ### Phase 6 — optional hooks + MCP
 
-- Default off
-- `mental serve` if time
+- Default off (`mental hooks on|off`; `mental install --hooks` opt-in)
+- `mental serve` MCP stdio (where/status/search/show/journal)
+- `uninstall`
 
 ### Phase 7 — polish (Mental repo)
 
-- TTY menu
+- TTY heartbeat (shipped — print and exit; no standing session)
 - `uninstall`
 
 ### Phase 8 — deprecate Mental in Balakit (required)
@@ -569,7 +579,7 @@ Work in `/home/ali/Development/Projects/balakit` **after** Mental CLI install wo
 ## 15. Testing and acceptance
 
 - `node --test` for resolver/bindings (no network).
-- Manual: install, `where` in a git repo, `journal`, move directory, `where` same uuid.
+- Manual: install, `journal` in a git repo, `where` (same uuid), move directory, `where` same uuid.
 - Agent acceptance: skill installed, agent asked “where did we leave off?” → must run `mental status --json` (or skill that does), **not** Grep on `Resume:`.
 
 ---

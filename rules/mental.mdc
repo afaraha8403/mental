@@ -1,0 +1,12 @@
+---
+description: Project continuity is Mental. Orient and hand off via the CLI; never grep OKF.
+alwaysApply: true
+---
+
+Continuity is Mental. On start/finish of real work, or orientation questions, use the Mental skill.
+
+Run `mental where` then `mental status --json` (or `mental search --json`). Do not grep `.mental` or `~/.mental`. Do not parse YAML frontmatter yourself.
+
+If `mental` is not on PATH, try `npx @mental/cli …`. If that fails, continue the user's coding task and mention install. Missing Mental must not block work.
+
+Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
