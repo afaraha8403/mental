@@ -7,13 +7,15 @@ export function usage() {
   return `${CMD} v${VERSION} — local-first OKF continuity
 
 Usage:
-  ${CMD}                       Heartbeat (TTY): resume, last outcome, git, open decisions
+  ${CMD}                       Heartbeat (TTY): resume, last outcome, git, residue, open decisions
+  ${CMD} heartbeat             Same pulse (agents: --json). Cheap reload — not a notes dump
   ${CMD} where                 Active bundle (root, id, mode) — read-only
-  ${CMD} status                Git + latest Resume + open decisions + notes
-  ${CMD} search <q>            Query notes/journal/decisions (sqlite or scan)
+  ${CMD} status                Git + latest Resume + residue + open decisions + notes
+  ${CMD} search <q>            Query notes/journal/decisions/attention (sqlite or scan)
   ${CMD} list                  List concepts (--type --status --tag)
   ${CMD} show <path>           One file, relative to the bundle root
-  ${CMD} journal               Append today's journal section
+  ${CMD} journal               Append today's journal section (--against PLAN.md)
+  ${CMD} attention             Create or update residue in the air (--kind --status resolved)
   ${CMD} decide                Scaffold a decision file
   ${CMD} note                  Scaffold a note
   ${CMD} local                 Create ./.mental after ignore check (--import copies home, --move switches store)
@@ -72,6 +74,9 @@ export function parseArgv(argv) {
     "--description",
     "--from",
     "--to",
+    "--against",
+    "--kind",
+    "--path",
     "--type",
     "--tag",
     "--confirm",

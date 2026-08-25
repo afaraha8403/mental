@@ -5,7 +5,7 @@ Minimal templates for project continuity. Substitute `<...>` placeholders.
 relative to the file containing them.
 
 Agents must not fill these by hand-editing YAML. Run `mental journal`,
-`mental decide`, `mental note`, and `mental status` (with `--json`).
+`mental attention`, `mental decide`, `mental note`, and `mental status` (with `--json`).
 
 ## Bundle skeleton
 
@@ -15,6 +15,7 @@ Agents must not fill these by hand-editing YAML. Run `mental journal`,
 ├── index.md
 ├── status/current.md
 ├── decisions/
+├── attention/
 ├── journal/
 └── notes/
 ```
@@ -44,6 +45,7 @@ Private continuity log for <repo>. Start at
 - [Status](status/current.md) — disposable snapshot derived from live evidence
 - [Journal](journal/) — concise outcomes and exact handoffs
 - [Decisions](decisions/) — consequential choices and rationale
+- [Attention](attention/) — residue still in the air after a hop
 - [Notes](notes/) — durable facts that prevent repeat investigation
 ```
 
@@ -60,7 +62,7 @@ status: active
 ---
 
 # Status — <project>
-_Derived <date> from journal tail + git + open decisions + notes. Stale? Re-derive._
+_Derived <date> from journal tail + git + residue + decisions + notes. Stale? Re-derive._
 
 ## Now
 <current focus, one or two factual sentences>
@@ -68,7 +70,14 @@ _Derived <date> from journal tail + git + open decisions + notes. Stale? Re-deri
 ## In flight
 <branch, PR, and uncommitted work observed in git; write "None" when clean>
 
-## Open decisions
+Against <PLAN.md>
+
+## In the air
+- [<title>](../attention/<file>.md) — direction
+- [<title>](../attention/<file>.md) — later
+- None
+
+## Unsettled
 - [<title>](../decisions/<file>.md) — open
 - [<title>](../decisions/<file>.md) — deferred: <what it awaits>
 
@@ -97,6 +106,8 @@ status: active
 ## HH:MM — <outcome>
 <what changed, evidence of completion, consequential decisions, and only context
 git cannot explain>
+
+Against: <optional repo-relative plan path, e.g. PLAN.md>
 
 Resume: <one exact next action> — open loops: <none or concise list>
 ```
@@ -129,6 +140,30 @@ resource: <optional link to PR/code/discussion>
 ## Outcome
 <For open: what input is needed. For deferred: what it awaits. For decided:
 what was chosen, why, and when. For superseded: link the replacement.>
+```
+
+## `attention/<YYYY-MM-DD>-<slug>.md`
+
+Residue still occupying working memory after a hop. Not a decision (no options).
+Not a note (not a durable fact). Not a todo. Body is 2–8 lines of why forgetting
+it would cost a reload. No checklist.
+
+```markdown
+---
+type: Attention
+title: <short residue>
+description: <one-line summary>
+tags: []
+timestamp: <ISO-8601>
+status: open        # open | later | resolved
+kind: direction     # direction | concern | thread
+from: <optional person>
+against: <optional repo-relative path, e.g. PLAN.md>
+---
+
+# <short residue>
+
+<Why this would cost a reload if forgotten. No checklist.>
 ```
 
 ## `notes/<slug>.md`

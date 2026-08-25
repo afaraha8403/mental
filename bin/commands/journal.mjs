@@ -2,7 +2,7 @@
  * `mental journal` — append one section to today's journal (task boundary).
  */
 import { resolveBundle } from "../lib/resolve.mjs";
-import { appendJournal, bundleName, ensureSkeleton } from "../lib/okf.mjs";
+import { appendJournal, bundleName, ensureSkeleton, repoRelativePath } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult } from "../lib/output.mjs";
 
@@ -33,10 +33,19 @@ export function cmdJournal(args, io = {}) {
   }
   const body = typeof args.flags?.body === "string" ? args.flags.body : "";
   const resume = typeof args.flags?.resume === "string" ? args.flags.resume : "Continue. — open loops: none";
+  const againstRaw = typeof args.flags?.against === "string" ? args.flags.against : undefined;
+  const against = againstRaw != null ? repoRelativePath(againstRaw) : undefined;
+  if (againstRaw != null && against === null) {
+    printResult(stdout, args.json, false, undefined, {
+      code: "usage",
+      message: "--against must be a repo-relative path (no ..)",
+    });
+    return 1;
+  }
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
-  const written = appendJournal(resolved.data.root, { title, body, resume });
+  const written = appendJournal(resolved.data.root, { title, body, resume, against });
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
   const data = { ...resolved.data, ...written, indexed };

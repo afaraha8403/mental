@@ -2,7 +2,7 @@
 
 Local-first continuity layer for you and your coding agents.
 
-Git records **what** changed. Mental records the small amount git cannot explain: where you left off, why a decision was made, and the next exact action. **OKF markdown is the source of truth.** SQLite is a derived cache. Agents call `mental … --json` — they do not grep YAML.
+Git records **what** changed. Mental records the small amount git cannot explain: where you left off, why a decision was made, what is still in the air after a hop, and the next exact action. **OKF markdown is the source of truth.** SQLite is a derived cache. Agents call `mental … --json` — they do not grep YAML.
 
 - **Repo:** https://github.com/afaraha8403/mental
 - **Spec:** [PLAN.md](./PLAN.md)
@@ -37,7 +37,7 @@ On a TTY, in any git repo:
 mental
 ```
 
-Prints a one-shot **heartbeat** and exits — resume, last outcome, git, open decisions. Not a menu. UUID / root / index live on `where` and `doctor`.
+Prints a one-shot **heartbeat** and exits — resume, last outcome, git, residue in the air, unsettled decisions. Not a menu. UUID / root / index live on `where` and `doctor`.
 
 Daily loop:
 
@@ -46,25 +46,30 @@ Daily loop:
 3. At a real task boundary (not every chat turn):
 
 ```bash
-mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none"
+mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none" --against PLAN.md
 ```
 
 Lookup:
 
 ```bash
-mental status          # git + resume + open decisions + notes (writes status/current.md cache)
+mental status          # git + resume + residue + open decisions + notes (writes status/current.md cache)
+mental heartbeat --json  # same pulse as `mental` on a TTY; agents use this
 mental where           # root, uuid, mode — read-only, does not create identity
 mental search overlay
 mental list --type Decision
 mental show notes/some-fact.md
 ```
 
-Write a decision only when it constrains the future:
+Write a decision only when it constrains the future. Write attention for residue that is not a choice (Tom said X, a concern, later):
 
 ```bash
 mental decide --title "Heartbeat only, no standing TUI" --status decided
+mental attention --title "Tom said ship the pointer not the dump" --kind direction --from Tom
+mental attention --title "Tom said ship the pointer not the dump" --status resolved
 mental note --title "Identity is a UUID in bindings.json"
 ```
+
+Mental is **not** a todo app. Do not store transcripts. Do not duplicate PLAN.md.
 
 Non-TTY (pipes, agents) always pass `--json`. No args + not a TTY prints help and exits 2.
 
@@ -74,13 +79,15 @@ Always:
 
 ```bash
 mental where --json
-mental status --json
+mental heartbeat --json
 ```
 
 ```bash
-mental journal --title "…" --body "…" --resume "…" --json
+mental journal --title "…" --body "…" --resume "…" --against PLAN.md --json
+mental attention --title "…" --kind concern --status open --json
 mental decide --title "…" --status open --json
 mental search "…" --json
+mental status --json
 ```
 
 Do not grep `.mental` or parse YAML. If `mental` is missing, continue the coding task (fail open) and mention install.
@@ -120,14 +127,16 @@ mental uninstall --delete-data --confirm DELETE   # wipe ~/.mental too
 
 | Command | What it does |
 | --- | --- |
-| `mental` | Heartbeat (TTY): resume, last outcome, git, open decisions; then exit. Non-TTY → help, exit 2 |
+| `mental` | Heartbeat (TTY): resume, last outcome, git, residue, unsettled decisions; then exit. Non-TTY → help, exit 2 |
+| `mental heartbeat` | Same pulse; agents pass `--json` |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only) |
-| `mental status` | Git + Resume + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
+| `mental status` | Git + Resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
 | `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`) |
 | `mental list` | List concepts |
 | `mental show <path>` | One OKF file relative to the bundle root |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
-| `mental journal --title --body --resume` | Append today’s journal section |
+| `mental journal --title --body --resume [--against]` | Append today’s journal section |
+| `mental attention --title --kind` | Create or update residue (`--status resolved` closes it) |
 | `mental decide --title` | Scaffold a decision |
 | `mental note --title` | Scaffold a note |
 | `mental local [--import \| --move]` | Project `./.mental` after ignore check |
@@ -162,6 +171,7 @@ OKF files under `~/.mental/projects/<uuid>/` (or `./.mental` after `mental local
 ```text
 journal/YYYY-MM-DD.md
 decisions/YYYY-MM-DD-slug.md
+attention/YYYY-MM-DD-slug.md
 notes/slug.md
 status/current.md          # disposable cache, not SoT
 ```

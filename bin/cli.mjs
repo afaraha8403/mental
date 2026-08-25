@@ -22,6 +22,7 @@ import { cmdReindex } from "./commands/reindex.mjs";
 import { cmdList } from "./commands/list.mjs";
 import { cmdShow } from "./commands/show.mjs";
 import { cmdHeartbeat } from "./commands/heartbeat.mjs";
+import { cmdAttention } from "./commands/attention.mjs";
 import { cmdRemap } from "./commands/remap.mjs";
 import { cmdSplit } from "./commands/split.mjs";
 import { cmdLink } from "./commands/link.mjs";
@@ -49,6 +50,8 @@ const COMMANDS = {
   reindex: cmdReindex,
   list: cmdList,
   show: cmdShow,
+  heartbeat: cmdHeartbeat,
+  attention: cmdAttention,
   remap: cmdRemap,
   split: cmdSplit,
   new: cmdSplit,

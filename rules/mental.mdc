@@ -5,8 +5,10 @@ alwaysApply: true
 
 Continuity is Mental. On start/finish of real work, or orientation questions, use the Mental skill.
 
-Run `mental where` then `mental status --json` (or `mental search --json`). Do not grep `.mental` or `~/.mental`. Do not parse YAML frontmatter yourself.
+Run `mental where` then `mental heartbeat --json` (or `mental status --json` when notes are needed). Do not grep `.mental` or `~/.mental`. Do not parse YAML frontmatter yourself.
 
 If `mental` is not on PATH, try `npx @mental/cli …`. If that fails, continue the user's coding task and mention install. Missing Mental must not block work.
 
 Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
+
+On a pasted transcript or a plan-progress question ("where in the plan / what's left?"), use the Mental skill. Cheap reload is `mental heartbeat --json`, not a notes dump.

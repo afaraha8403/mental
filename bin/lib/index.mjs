@@ -111,6 +111,7 @@ function inferType(rel) {
   if (rel.startsWith("journal/")) return "Journal";
   if (rel.startsWith("decisions/")) return "Decision";
   if (rel.startsWith("notes/")) return "Note";
+  if (rel.startsWith("attention/")) return "Attention";
   return "Note";
 }
 

@@ -1,5 +1,6 @@
 /**
- * `mental` with no args on a TTY — print the heartbeat and exit.
+ * `mental` with no args on a TTY, or `mental heartbeat` — print the pulse and exit.
+ * Agents: `mental heartbeat --json`.
  */
 import { collectHeartbeat, formatHeartbeat } from "../lib/heartbeat.mjs";
 import { printResult } from "../lib/output.mjs";

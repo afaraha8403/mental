@@ -159,10 +159,13 @@ test("formatHeartbeat omits uuid chrome", () => {
       when: { date: "2026-08-25", time: "14:02" },
     },
     openDecisions: [{ status: "open", title: "Park Clack" }],
+    attention: [],
   }, new Date(2026, 7, 25));
   assert.match(text, /▶ Ship heartbeat/);
   assert.match(text, /Dropped the catalog\s+\(14:02\)/);
   assert.match(text, /\[open\] Park Clack/);
+  assert.match(text, /In the air/);
+  assert.match(text, /Unsettled/);
   assert.doesNotMatch(text, /concept/);
   assert.doesNotMatch(text, /indexed/);
 });

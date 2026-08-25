@@ -4,7 +4,15 @@
  */
 import { resolveBundle } from "./resolve.mjs";
 import { gitSnapshot } from "./git.mjs";
-import { latestJournalHandoff, listOpenDecisions, localDate } from "./okf.mjs";
+import {
+  ATTENTION_HEARTBEAT_CAP,
+  latestJournalHandoff,
+  listOpenAttention,
+  listOpenDecisions,
+  localDate,
+} from "./okf.mjs";
+
+export { ATTENTION_HEARTBEAT_CAP };
 
 /**
  * Home mode without a UUID is `~/.mental/projects` (parent), not a bundle.
@@ -50,8 +58,9 @@ export function collectHeartbeat(args) {
   const root = isBundleRoot(where) ? where.root : null;
   const handoff = root
     ? latestJournalHandoff(root)
-    : { resume: null, outcome: null, file: null, when: null };
+    : { resume: null, outcome: null, file: null, when: null, against: null };
   const openDecisions = root ? listOpenDecisions(root) : [];
+  const attention = root ? listOpenAttention(root) : [];
 
   return {
     ok: true,
@@ -59,9 +68,16 @@ export function collectHeartbeat(args) {
       git,
       gitRoot: where.gitRoot,
       handoff,
+      against: handoff.against ?? null,
+      attention,
       openDecisions,
     },
   };
+}
+
+function formatAirItem(a) {
+  const tag = a.status === "later" ? "later" : a.kind || a.status || "open";
+  return `  [${tag}] ${a.title}`;
 }
 
 /**
@@ -79,12 +95,22 @@ export function formatHeartbeat(data, now = new Date()) {
     ? `${data.git.branch || "(unknown)"} ${data.git.dirty ? "(dirty)" : "(clean)"}`
     : "not a git repo";
   const recent = data.git.recent?.[0] ? `\n        ${data.git.recent[0]}` : "";
+  const against = data.against || data.handoff?.against;
+  const attention = data.attention ?? [];
+  const shown = attention.slice(0, ATTENTION_HEARTBEAT_CAP);
+  const extra =
+    attention.length > ATTENTION_HEARTBEAT_CAP
+      ? `\n  (+${attention.length - ATTENTION_HEARTBEAT_CAP} more)`
+      : "";
+  const air =
+    attention.length === 0 ? "  none" : shown.map(formatAirItem).join("\n") + extra;
   const open =
-    data.openDecisions.length === 0
+    (data.openDecisions ?? []).length === 0
       ? "  none"
       : data.openDecisions.map((d) => `  [${d.status}] ${d.title}`).join("\n");
 
-  return [`▶ ${resume}`, "", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, "Open", open].join(
-    "\n",
-  );
+  const lines = [`▶ ${resume}`];
+  if (against) lines.push(`Against ${against}`);
+  lines.push("", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, "In the air", air, "Unsettled", open);
+  return lines.join("\n");
 }

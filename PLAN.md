@@ -103,7 +103,7 @@ The **user** (and future-them in two weeks). The agent is a scribe. Write for a 
 ```mermaid
 flowchart TB
   subgraph sources [Source of truth]
-    OKF["OKF files: journal, decisions, notes, status"]
+    OKF["OKF files: journal, decisions, attention, notes, status"]
   end
   subgraph resolve [Resolve active bundle]
     Env["MENTAL_DIR"]
@@ -117,7 +117,7 @@ flowchart TB
   subgraph cli [mental CLI]
     Where["where / status"]
     Search["search / list / show"]
-    Write["journal / decide"]
+    Write["journal / attention / decide"]
     Doctor["doctor / remap / local"]
   end
   subgraph derived [Derived]
@@ -171,6 +171,7 @@ flowchart TB
       status/current.md
       journal/YYYY-MM-DD.md
       decisions/YYYY-MM-DD-slug.md
+      attention/YYYY-MM-DD-slug.md
       notes/slug.md
 ```
 
@@ -201,11 +202,12 @@ Port templates from [skills/mental/references/templates.md](skills/mental/refere
 | ----------------- | ------------------------------ | ---------------------------------------------- |
 | Journal           | `journal/YYYY-MM-DD.md`        | n/a (append-only sections)                     |
 | Decision          | `decisions/YYYY-MM-DD-slug.md` | `open` | `deferred` | `decided` | `superseded` |
+| Attention         | `attention/YYYY-MM-DD-slug.md` | `open` | `later` | `resolved`                  |
 | Note              | `notes/slug.md`                | `draft` | `active` | `superseded`              |
 | Status            | `status/current.md`            | regenerated cache, not SoT                     |
 
 
-Frontmatter: `type` required; recommend `title`, `description`, `timestamp`, `tags`. Paths are identities (don’t rename to “archive”). Links are relative markdown links.
+Frontmatter: `type` required; recommend `title`, `description`, `timestamp`, `tags`. Attention also has `kind` (`direction` | `concern` | `thread`) and optional `from` / `against`. Paths are identities (don’t rename to “archive”). Links are relative markdown links. Attention is residue, not a todo list — heartbeat shows at most 7 open+later items.
 
 **Journal section contract** (keep):
 
@@ -213,6 +215,7 @@ Frontmatter: `type` required; recommend `title`, `description`, `timestamp`, `ta
 ## HH:MM — <outcome>
 <what changed, evidence, decisions git cannot explain>
 
+Against: <optional repo-relative plan, e.g. PLAN.md>
 Resume: <one exact next action> — open loops: <none or list>
 ```
 
@@ -237,7 +240,7 @@ One section per coherent **task**, not per chat turn. Skip trivial/read-only tur
 
 - Leftover `./.mental/` without `.mental-local` is a **source**, not the write root.
 - On `mental install` / `status` / `journal` / other **write** resolve: **process** leftover files into `~/.mental/projects/<uuid>/` — not a byte copy.
-  - Canonical paths: `notes/<slug>.md`, `decisions/<date>-<slug>.md`, `journal/<YYYY-MM-DD>.md`. Root `journal.md` → `journal/imported-root.md`. Other root `*.md` → `notes/`.
+  - Canonical paths: `notes/<slug>.md`, `decisions/<date>-<slug>.md`, `attention/<date>-<slug>.md`, `journal/<YYYY-MM-DD>.md`. Root `journal.md` → `journal/imported-root.md`. Other root `*.md` → `notes/`.
   - Normalize frontmatter: required `type`; default `status` (`Note`/`Journal` → `active`, `Decision` → `decided` if missing); `title` / `timestamp` / `tags`.
   - Skip `status/` (disposable cache). Skip dest paths that already exist. Never delete the leftover folder.
   - Rebuild the derived sqlite index (`concepts` + FTS5 + `links`) at `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite`.
@@ -308,20 +311,22 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 
 **Runtime:** Node `>=18`. Dependencies: keep lean. No standing TTY session in v1 (no `@clack/prompts`). `better-sqlite3` or `node:sqlite` if Node version allows — prefer **sql.js / better-sqlite3** with a documented native-build fallback. If native modules are painful, v1 search can be **in-process scan of frontmatter + ripgrep-like filter** and sqlite in v1.1. **Do not block v1 on vectors.**
 
-**No args + TTY:** print a one-shot **heartbeat** (resume, last outcome + when, git one-liner, open decisions) and exit. Not a standing session. UUID, sqlite path, mode, and root belong on `mental where` / `mental doctor`. **Named commands** are one-shot (print or write, then exit). **`--json` never prompts.** **No args + not TTY:** print help, exit 2. There is no `mental ui` / `mental menu` in v1.
+**No args + TTY:** print a one-shot **heartbeat** (resume, last outcome + when, git one-liner, residue in the air, unsettled decisions) and exit. Not a standing session. UUID, sqlite path, mode, and root belong on `mental where` / `mental doctor`. **Named commands** are one-shot (print or write, then exit). **`--json` never prompts.** **No args + not TTY:** print help, exit 2. Agents use `mental heartbeat --json` for the cheap pulse. There is no `mental ui` / `mental menu` in v1.
 
 **Global flags:** `--json`, `--dir <path>` (overrides resolve, like `MENTAL_DIR`), `--help`, `--version`.
 
 
 | Command                                        | Behavior                                                                                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mental` (no args, TTY)                    | Print heartbeat (resume, last outcome, git, open decisions) and exit                                                                                    |
+| `mental` (no args, TTY)                    | Print heartbeat (resume, last outcome, git, residue, unsettled decisions) and exit                                                                                    |
+| `mental heartbeat`                             | Same pulse as TTY no-args; agents pass `--json`                                                                                                          |
 | `mental where`                                 | Active root, uuid, mode, reason. Read-only: does not create a binding or ingest leftover.                                                                 |
-| `mental status`                                | Regenerated view: git snapshot + latest Resume + open/deferred decisions. Writes `status/current.md` as cache. Creates identity + leftover ingest on first write. |
+| `mental status`                                | Regenerated view: git snapshot + latest Resume + residue + open/deferred decisions + notes. Writes `status/current.md` as cache. Creates identity + leftover ingest on first write. |
 | `mental search <q>`                            | Index or file scan; `--type`, `--status`, `--tag`.                                                                                                      |
 | `mental list`                                  | Concepts with filters.                                                                                                                                  |
 | `mental show <path>`                           | One file, relative to bundle root.                                                                                                                      |
-| `mental journal [--title] [--resume]`          | Append today’s journal section. Missing `--title` prints usage (TTY and agents). Agents pass `--title` `--body` `--resume` `--json`.                    |
+| `mental journal [--title] [--resume] [--against]` | Append today’s journal section. `--against` binds resume to a repo-relative plan path. Missing `--title` prints usage. Agents pass `--title` `--body` `--resume` `--json`. |
+| `mental attention`                             | Create or update residue (`--kind direction\|concern\|thread`, `--status open\|later\|resolved`). Update by `--title` or `--path`. |
 | `mental decide`                                | Scaffold a decision file                                                                                                                                |
 | `mental note`                                  | Scaffold a note                                                                                                                                         |
 | `mental local [--import | --move]`             | Create `./.mental/`. `--import` copies home slice. `--move` copies and stops using home for this uuid (keep files in home unless user confirms delete). |

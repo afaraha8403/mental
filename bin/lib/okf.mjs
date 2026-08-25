@@ -5,7 +5,11 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, cpSync } from "node:fs";
 import { basename, dirname, join, relative, resolve as resolvePath, sep } from "node:path";
 
-export const CONCEPT_DIRS = ["journal", "decisions", "notes", "status"];
+export const CONCEPT_DIRS = ["journal", "decisions", "notes", "attention", "status"];
+
+export const ATTENTION_STATUSES = new Set(["open", "later", "resolved"]);
+export const ATTENTION_KINDS = new Set(["direction", "concern", "thread"]);
+export const ATTENTION_HEARTBEAT_CAP = 7;
 
 /**
  * @param {Date} [d]
@@ -79,6 +83,20 @@ function slugify(s) {
 export { slugify };
 
 /**
+ * Repo-relative pointer (plan file, dump). Rejects `..` and absolute paths.
+ * @param {string | undefined} raw
+ * @returns {string | null | undefined} undefined if omitted, null if invalid
+ */
+export function repoRelativePath(raw) {
+  if (raw == null || raw === "") return undefined;
+  const s = String(raw).replace(/\\/g, "/").trim();
+  if (s.startsWith("/") || /^[A-Za-z]:/.test(s)) return null;
+  const parts = s.split("/").filter((p) => p && p !== ".");
+  if (parts.length === 0 || parts.some((p) => p === ".." || p.includes("\0"))) return null;
+  return parts.join("/");
+}
+
+/**
  * @param {string} root
  * @param {{ name?: string, now?: Date }} [opts]
  */
@@ -107,6 +125,7 @@ Private continuity log. Start at [current status](status/current.md).
 - [Status](status/current.md) — disposable snapshot derived from live evidence
 - [Journal](journal/) — concise outcomes and exact handoffs
 - [Decisions](decisions/) — consequential choices and rationale
+- [Attention](attention/) — residue still in the air after a hop
 - [Notes](notes/) — durable facts that prevent repeat investigation
 `,
       ),
@@ -127,11 +146,13 @@ Private continuity log. Start at [current status](status/current.md).
  *   now: string,
  *   inFlight: string,
  *   decisions: Array<{ title: string, file: string, status: string, awaits?: string }>,
+ *   attention?: Array<{ title: string, file: string, status: string, kind?: string }>,
  *   notes?: Array<{ title: string, file: string, status: string, description?: string }>,
  *   resume: string,
+ *   against?: string | null,
  * }} opts
  */
-export function renderStatus({ name, date, ts, now, inFlight, decisions, notes = [], resume }) {
+export function renderStatus({ name, date, ts, now, inFlight, decisions, attention = [], notes = [], resume, against = null }) {
   const decLines =
     decisions.length === 0
       ? "- None"
@@ -139,6 +160,20 @@ export function renderStatus({ name, date, ts, now, inFlight, decisions, notes =
           const extra = d.status === "deferred" && d.awaits ? `: ${d.awaits}` : "";
           return `- [${d.title}](../decisions/${d.file}) — ${d.status}${extra}`;
         }).join("\n");
+  const shownAttention = attention.slice(0, ATTENTION_HEARTBEAT_CAP);
+  const extraAir =
+    attention.length > ATTENTION_HEARTBEAT_CAP
+      ? `\n- (+${attention.length - ATTENTION_HEARTBEAT_CAP} more)`
+      : "";
+  const airLines =
+    shownAttention.length === 0
+      ? "- None"
+      : shownAttention
+          .map((a) => {
+            const tag = a.status === "later" ? "later" : a.kind || a.status;
+            return `- [${a.title}](../attention/${a.file}) — ${tag}`;
+          })
+          .join("\n") + extraAir;
   const noteLines =
     notes.length === 0
       ? "- None"
@@ -148,6 +183,7 @@ export function renderStatus({ name, date, ts, now, inFlight, decisions, notes =
             return `- [${n.title}](../notes/${n.file})${extra}`;
           })
           .join("\n");
+  const againstLine = against ? `\nAgainst ${against}\n` : "";
   return stringifyFrontmatter(
     {
       type: "Status",
@@ -158,15 +194,18 @@ export function renderStatus({ name, date, ts, now, inFlight, decisions, notes =
       status: "active",
     },
     `# Status — ${name}
-_Derived ${date} from journal tail + git + open decisions + notes. Stale? Re-derive._
+_Derived ${date} from journal tail + git + residue + decisions + notes. Stale? Re-derive._
 
 ## Now
 ${now}
 
 ## In flight
 ${inFlight}
+${againstLine}
+## In the air
+${airLines}
 
-## Open decisions
+## Unsettled
 ${decLines}
 
 ## Notes
@@ -183,7 +222,7 @@ ${resume}
  * @param {string} root
  */
 export function latestJournalHandoff(root) {
-  const empty = { resume: null, outcome: null, file: null, when: null };
+  const empty = { resume: null, outcome: null, file: null, when: null, against: null };
   const dir = join(root, "journal");
   if (!existsSync(dir)) return empty;
   const all = readdirSync(dir).filter((f) => f.endsWith(".md"));
@@ -196,6 +235,7 @@ export function latestJournalHandoff(root) {
   const sections = body.split(/^## /m).filter(Boolean);
   const last = sections[sections.length - 1] || body;
   const resumeM = last.match(/^Resume:\s*(.+)$/m) || body.match(/^Resume:\s*(.+)$/m);
+  const againstM = last.match(/^Against:\s*(.+)$/m) || last.match(/^Plan:\s*(.+)$/m);
   const headingM = last.match(/^([^\n]+)/);
   const heading = headingM ? headingM[1] : "";
   const outcome = heading.replace(/^\d{1,2}:\d{2}\s+—\s+/, "").trim() || null;
@@ -206,6 +246,7 @@ export function latestJournalHandoff(root) {
     outcome,
     file: `journal/${file}`,
     when: date ? { date, time: timeM ? timeM[1] : null } : null,
+    against: againstM ? againstM[1].trim() : null,
   };
 }
 
@@ -308,18 +349,163 @@ export function listNotes(root) {
 }
 
 /**
+ * Open or later attention (residue). Newest filename first. Resolved files stay on disk.
  * @param {string} root
- * @param {{ title: string, body?: string, resume?: string, now?: Date }} opts
  */
-export function appendJournal(root, { title, body = "", resume = "Continue. — open loops: none", now = new Date() }) {
+export function listOpenAttention(root) {
+  const dir = join(root, "attention");
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md")).sort().reverse()) {
+    const text = readFileSync(join(dir, file), "utf8");
+    const { data, body } = parseFrontmatter(text);
+    const status = String(data.status || "open");
+    if (status !== "open" && status !== "later") continue;
+    out.push({
+      path: `attention/${file}`,
+      file,
+      title: String(data.title || basename(file, ".md")),
+      status,
+      kind: data.kind ? String(data.kind) : "",
+      from: data.from ? String(data.from) : "",
+      against: data.against ? String(data.against) : "",
+      description: noteBlurb(data, body),
+    });
+  }
+  return out;
+}
+
+/**
+ * @param {string} root
+ * @param {{ path?: string, title?: string }} opts
+ * @returns {{ path: string, file: string, title: string, status: string, kind: string, from: string, against: string, data: Record<string, string | string[]>, body: string } | null}
+ */
+export function findAttention(root, { path, title } = {}) {
+  const dir = join(root, "attention");
+  if (!existsSync(dir)) return null;
+  if (path) {
+    const rel = String(path).replace(/\\/g, "/").replace(/^\/+/, "");
+    const got = readBundleFile(root, rel);
+    if (!got.ok) return null;
+    if (!got.data.path.startsWith("attention/") || !got.data.path.endsWith(".md")) return null;
+    const d = got.data.data;
+    return {
+      path: got.data.path,
+      file: basename(got.data.path),
+      title: String(d.title || basename(got.data.path, ".md")),
+      status: String(d.status || "open"),
+      kind: d.kind ? String(d.kind) : "",
+      from: d.from ? String(d.from) : "",
+      against: d.against ? String(d.against) : "",
+      data: d,
+      body: got.data.body,
+    };
+  }
+  if (!title) return null;
+  const matches = [];
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md"))) {
+    const text = readFileSync(join(dir, file), "utf8");
+    const parsed = parseFrontmatter(text);
+    const t = String(parsed.data.title || basename(file, ".md"));
+    if (t === title) {
+      matches.push({
+        path: `attention/${file}`,
+        file,
+        title: t,
+        status: String(parsed.data.status || "open"),
+        kind: parsed.data.kind ? String(parsed.data.kind) : "",
+        from: parsed.data.from ? String(parsed.data.from) : "",
+        against: parsed.data.against ? String(parsed.data.against) : "",
+        data: parsed.data,
+        body: parsed.body,
+      });
+    }
+  }
+  matches.sort((a, b) => b.file.localeCompare(a.file));
+  return matches[0] ?? null;
+}
+
+/**
+ * @param {string} root
+ * @param {{ title: string, status?: string, kind: string, from?: string, against?: string, description?: string, body?: string, slug?: string, now?: Date }} opts
+ */
+export function writeAttention(root, { title, status = "open", kind, from, against, description = "", body = "", slug, now = new Date() }) {
+  ensureSkeleton(root);
+  const day = localDate(now);
+  const s = slug || slugify(title);
+  const rel = `attention/${day}-${s}.md`;
+  const file = join(root, rel);
+  mkdirSync(dirname(file), { recursive: true });
+  if (existsSync(file)) throw Object.assign(new Error(`Attention already exists: ${rel}`), { code: "exists" });
+  const ts = now.toISOString();
+  const text = body.trim() || "<why this would cost a reload if forgotten>";
+  writeFileSync(
+    file,
+    stringifyFrontmatter(
+      {
+        type: "Attention",
+        title,
+        description: description || title,
+        tags: [],
+        timestamp: ts,
+        status,
+        kind,
+        from: from || undefined,
+        against: against || undefined,
+      },
+      `# ${title}
+
+${text}
+`,
+    ),
+  );
+  return { path: rel, updated: false };
+}
+
+/**
+ * @param {string} root
+ * @param {string} rel
+ * @param {{ title?: string, status?: string, kind?: string, from?: string, against?: string, description?: string, body?: string, now?: Date }} opts
+ */
+export function updateAttention(root, rel, { title, status, kind, from, against, description, body, now = new Date() }) {
+  const got = readBundleFile(root, rel);
+  if (!got.ok) {
+    throw Object.assign(new Error(got.error.message), { code: got.error.code });
+  }
+  const data = { ...got.data.data };
+  if (title) data.title = title;
+  if (status) data.status = status;
+  if (kind) data.kind = kind;
+  if (from != null && from !== "") data.from = from;
+  if (against != null && against !== "") data.against = against;
+  if (description) data.description = description;
+  data.timestamp = now.toISOString();
+  data.type = "Attention";
+  let nextBody = got.data.body;
+  if (body != null && body !== "") {
+    const heading = String(data.title || title || "Attention");
+    nextBody = `# ${heading}\n\n${body.trim()}\n`;
+  } else if (title) {
+    nextBody = got.data.body.replace(/^#\s+.+$/m, `# ${title}`);
+  }
+  writeFileSync(got.data.abs, stringifyFrontmatter(data, nextBody));
+  return { path: rel, updated: true };
+}
+
+/**
+ * @param {string} root
+ * @param {{ title: string, body?: string, resume?: string, against?: string, now?: Date }} opts
+ */
+export function appendJournal(root, { title, body = "", resume = "Continue. — open loops: none", against, now = new Date() }) {
   ensureSkeleton(root);
   const day = localDate(now);
   const file = join(root, "journal", `${day}.md`);
   const ts = now.toISOString();
   const time = localTime(now);
+  const againstLine = against ? `\nAgainst: ${against}\n` : "";
   const section = `## ${time} — ${title}
 ${body.trim()}
-
+${againstLine}
 Resume: ${resume}
 `;
   if (!existsSync(file)) {
@@ -346,7 +532,7 @@ ${section}`,
     const nextBody = `${existing.replace(/\s*$/, "")}\n\n${section}`;
     writeFileSync(file, stringifyFrontmatter(data, nextBody));
   }
-  return { path: `journal/${day}.md`, section };
+  return { path: `journal/${day}.md`, section, against: against ?? null };
 }
 
 /**

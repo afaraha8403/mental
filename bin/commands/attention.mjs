@@ -1,0 +1,139 @@
+/**
+ * `mental attention` — create or update residue still in the air after a hop.
+ * Unlike decide/note, this command must close items (`--status resolved`).
+ */
+import { resolveBundle } from "../lib/resolve.mjs";
+import {
+  ATTENTION_KINDS,
+  ATTENTION_STATUSES,
+  bundleName,
+  ensureSkeleton,
+  findAttention,
+  repoRelativePath,
+  updateAttention,
+  writeAttention,
+} from "../lib/okf.mjs";
+import { refreshIndex } from "../lib/index.mjs";
+import { printResult } from "../lib/output.mjs";
+
+function flagString(flags, key) {
+  return typeof flags?.[key] === "string" ? flags[key] : null;
+}
+
+export function cmdAttention(args, io = {}) {
+  const stdout = io.stdout ?? process.stdout;
+  const title = flagString(args.flags, "title");
+  const path = flagString(args.flags, "path");
+  if (!title && !path) {
+    printResult(stdout, args.json, false, undefined, {
+      code: "usage",
+      message: "mental attention requires --title (or --path to update)",
+    });
+    return 1;
+  }
+
+  const statusFlag = flagString(args.flags, "status");
+  if (statusFlag && !ATTENTION_STATUSES.has(statusFlag)) {
+    printResult(stdout, args.json, false, undefined, {
+      code: "usage",
+      message: `status must be ${[...ATTENTION_STATUSES].join("|")}`,
+    });
+    return 1;
+  }
+  const status = statusFlag || "open";
+
+  const kindFlag = flagString(args.flags, "kind");
+  if (kindFlag && !ATTENTION_KINDS.has(kindFlag)) {
+    printResult(stdout, args.json, false, undefined, {
+      code: "usage",
+      message: `kind must be ${[...ATTENTION_KINDS].join("|")}`,
+    });
+    return 1;
+  }
+
+  const againstRaw = flagString(args.flags, "against");
+  const against = againstRaw != null ? repoRelativePath(againstRaw) : undefined;
+  if (againstRaw != null && against === null) {
+    printResult(stdout, args.json, false, undefined, {
+      code: "usage",
+      message: "--against must be a repo-relative path (no ..)",
+    });
+    return 1;
+  }
+
+  const resolved = resolveBundle({
+    cwd: args.cwd ?? process.cwd(),
+    home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
+    env: args.env ?? process.env,
+    dir: args.dir ?? null,
+    write: true,
+  });
+  if (!resolved.ok) {
+    printResult(stdout, args.json, false, undefined, resolved.error);
+    return 1;
+  }
+  ensureSkeleton(resolved.data.root, {
+    name: bundleName(resolved.data.root, resolved.data.id || "project"),
+  });
+
+  const existing = findAttention(resolved.data.root, {
+    path: path || undefined,
+    title: title || undefined,
+  });
+
+  if (path && !existing) {
+    printResult(stdout, args.json, false, undefined, {
+      code: "not-found",
+      message: `no attention file at ${path}`,
+    });
+    return 1;
+  }
+
+  if (!existing && !kindFlag) {
+    printResult(stdout, args.json, false, undefined, {
+      code: "usage",
+      message: "mental attention create requires --kind direction|concern|thread",
+    });
+    return 1;
+  }
+
+  try {
+    const written = existing
+      ? updateAttention(resolved.data.root, existing.path, {
+          title: title || undefined,
+          status: statusFlag || undefined,
+          kind: kindFlag || undefined,
+          from: flagString(args.flags, "from") || undefined,
+          against: against || undefined,
+          description: flagString(args.flags, "description") || undefined,
+          body: flagString(args.flags, "body") || undefined,
+        })
+      : writeAttention(resolved.data.root, {
+          title,
+          status,
+          kind: kindFlag,
+          from: flagString(args.flags, "from") || undefined,
+          against: against || undefined,
+          description: flagString(args.flags, "description") || "",
+          body: flagString(args.flags, "body") || "",
+          slug: flagString(args.flags, "slug") || undefined,
+        });
+    const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
+    const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
+    const verb = written.updated ? "updated" : "wrote";
+    printResult(
+      stdout,
+      args.json,
+      true,
+      { ...resolved.data, ...written, indexed },
+      undefined,
+      () => `${verb} ${written.path}`,
+    );
+    return 0;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const code = /** @type {{ code?: string }} */ (err).code || "write";
+    printResult(stdout, args.json, false, undefined, { code, message });
+    return 1;
+  }
+}

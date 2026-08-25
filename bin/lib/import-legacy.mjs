@@ -19,6 +19,7 @@ const DEFAULT_STATUS = {
   Note: "active",
   Journal: "active",
   Decision: "decided",
+  Attention: "open",
   Status: "active",
 };
 
@@ -50,6 +51,7 @@ export function classifyLegacyPath(rel) {
   if (posix === "index.md") return { dest: "index.md", type: "Status" };
   if (posix.startsWith("notes/")) return { dest: posix, type: "Note" };
   if (posix.startsWith("decisions/")) return { dest: posix, type: "Decision" };
+  if (posix.startsWith("attention/")) return { dest: posix, type: "Attention" };
   if (posix.startsWith("journal/")) return { dest: posix, type: "Journal" };
   if (posix === "journal.md") return { dest: "journal/imported-root.md", type: "Journal" };
   if (!posix.includes("/")) return { dest: `notes/${posix}`, type: "Note" };
@@ -137,8 +139,9 @@ function rank(rel) {
   const p = rel.split("\\").join("/");
   if (p.startsWith("notes/")) return 0;
   if (p.startsWith("decisions/")) return 1;
-  if (p.startsWith("journal/")) return 2;
-  if (p === "index.md") return 3;
+  if (p.startsWith("attention/")) return 2;
+  if (p.startsWith("journal/")) return 3;
+  if (p === "index.md") return 4;
   return 4;
 }
 

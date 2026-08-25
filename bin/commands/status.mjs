@@ -11,6 +11,7 @@ import {
   ensureSkeleton,
   latestJournalHandoff,
   listNotes,
+  listOpenAttention,
   listOpenDecisions,
   localDate,
   renderStatus,
@@ -26,6 +27,13 @@ function formatGit(git, gitRoot) {
 }
 
 function formatHuman(data) {
+  const air =
+    data.attention.length === 0
+      ? "  none"
+      : data.attention.map((a) => {
+          const tag = a.status === "later" ? "later" : a.kind || a.status;
+          return `  - [${tag}] ${a.title} (${a.path})`;
+        }).join("\n");
   const dec =
     data.openDecisions.length === 0
       ? "  none"
@@ -39,8 +47,11 @@ function formatHuman(data) {
     `mode:    ${data.mode}`,
     `git:     ${data.git.branch || "—"} ${data.git.dirty ? "(dirty)" : "(clean)"}`,
     `resume:  ${data.resume || "—"}`,
+    `against: ${data.against || "—"}`,
     `now:     ${data.latestOutcome || "—"}`,
-    `open:`,
+    `in the air:`,
+    air,
+    `unsettled:`,
     dec,
     `notes:`,
     notes,
@@ -71,11 +82,13 @@ export function cmdStatus(args, io = {}) {
   const git = gitSnapshot(where.gitRoot, { env: args.env ?? process.env });
   const handoff = latestJournalHandoff(where.root);
   const openDecisions = listOpenDecisions(where.root);
+  const attention = listOpenAttention(where.root);
   const notes = listNotes(where.root);
   const name = bundleName(where.root, where.id || "project");
   const inFlight = formatGit(git, where.gitRoot);
   const resume = handoff.resume || "No journal yet — start work, then `mental journal` at the task boundary.";
   const latestOutcome = handoff.outcome || "No journal sections yet.";
+  const against = handoff.against || null;
 
   writeFileSync(
     join(where.root, "status", "current.md"),
@@ -90,6 +103,12 @@ export function cmdStatus(args, io = {}) {
         file: d.file,
         status: d.status,
       })),
+      attention: attention.map((a) => ({
+        title: a.title,
+        file: a.file,
+        status: a.status,
+        kind: a.kind,
+      })),
       notes: notes.map((n) => ({
         title: n.title,
         file: n.file,
@@ -97,6 +116,7 @@ export function cmdStatus(args, io = {}) {
         description: n.description,
       })),
       resume,
+      against,
     }),
   );
 
@@ -105,6 +125,8 @@ export function cmdStatus(args, io = {}) {
     git: { branch: git.branch, dirty: git.dirty, recent: git.recent },
     resume,
     latestOutcome,
+    against,
+    attention,
     openDecisions,
     notes,
     statusFile: "status/current.md",
