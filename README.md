@@ -76,7 +76,7 @@ npm i -g @balacode/mental
 mental install
 ```
 
-Last install wins. That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton. It also **removes leftover Balakit Mental skill/rule copies** (the old `npx balakit doctor` pointer) so they cannot fight the new rule. It does **not** turn on hooks or MCP, and it does not delete journals.
+Last install wins: an existing global `mental` bin is overwritten (npm 11 no longer fails with EEXIST). That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton. From a published install it also **upgrades** the CLI when npm has a newer version, then re-runs so skills match. It **removes leftover Balakit Mental skill/rule copies** (the old `npx balakit doctor` pointer) so they cannot fight the new rule. It does **not** turn on hooks or MCP, and it does not delete journals. A git checkout installs that tree and does not clobber it with the registry.
 
 From a clone, without npm:
 
@@ -86,7 +86,7 @@ node bin/cli.mjs install --json
 ```
 
 ```bash
-mental doctor          # PATH, bindings, ignore, skills
+mental doctor          # PATH, bindings, ignore, skills, npm update
 mental doctor --fix-ignore   # add .mental/ and .mental-id to your global git excludes
 ```
 
@@ -176,7 +176,7 @@ Mid-chat, not just start/finish: search decisions before changing an approach, r
 
 Do not grep `.mental` or parse YAML. If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task (fail open) and mention `npm i -g @balacode/mental` then `mental install`.
 
-Turns that invoked `mental` end with `</br>`, title `🧠 Mental  ` (two trailing spaces so chat markdown does not join lines), indented `Kind: Verb` items, then `</br>` (see the skill).
+Turns that invoked `mental` end with a separator line (`────────`), title `🧠 Mental  ` (two trailing spaces so chat markdown does not join lines), indented `Kind: Verb` items, then `────────` (see the skill). Do not emit `</br>` — it prints as literal tags.
 
 ## Identity (UUID, not the folder)
 
@@ -231,11 +231,11 @@ mental uninstall --delete-data --confirm DELETE   # wipe ~/.mental too
 | `mental remap [--to id]` | List or retarget this clone’s UUID |
 | `mental split [--copy]` | New UUID for this clone |
 | `mental link --to <id>` | Point this clone at an existing UUID |
-| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH; `--mcp` registers MCP config |
+| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH (overwrites existing bin; upgrades if npm is newer); `--mcp` registers MCP config |
 | `mental uninstall` | Remove installed skill/rule/hooks/MCP entries |
 | `mental hooks on\|off` | Optional session hooks |
 | `mental serve` | Optional MCP stdio (full command surface) |
-| `mental doctor` | PATH, bindings, ignore, skills. `--fix-ignore` adds `.mental/` to global excludes |
+| `mental doctor` | PATH, bindings, ignore, skills, npm update. `--fix-ignore` adds `.mental/` to global excludes |
 
 Global flags: `--json`, `--dir <path>` (same as `MENTAL_DIR`).
 

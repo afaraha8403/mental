@@ -41,7 +41,7 @@ function replaceWithSymlink(dest, target) {
 }
 
 /**
- * @param {{ home: string, env?: NodeJS.ProcessEnv }} opts
+ * @param {{ home: string, env?: NodeJS.ProcessEnv, spec?: string }} opts
  * @returns {{
  *   ok: boolean,
  *   bin: string | null,
@@ -50,13 +50,30 @@ function replaceWithSymlink(dest, target) {
  *   message: string,
  * }}
  */
-export function installGlobalCli({ home, env = process.env }) {
-  const npm = runNpm(
-    ["install", "-g", "--no-fund", "--no-audit", "--no-package-lock", PKG_ROOT],
-    env,
-  );
+export function installGlobalCli({ home, env = process.env, spec = PKG_ROOT }) {
   const prefix = npmGlobalPrefix(env);
   const npmBin = prefix ? npmGlobalBin(prefix) : null;
+  // npm 11 refuses to replace an existing global bin (EEXIST). Last install
+  // wins: drop our previous `mental` link (often leftover @mental/cli).
+  if (npmBin) {
+    try {
+      unlinkSync(npmBin);
+    } catch {
+      // missing
+    }
+  }
+  const npm = runNpm(
+    [
+      "install",
+      "-g",
+      "--force",
+      "--no-fund",
+      "--no-audit",
+      "--no-package-lock",
+      spec,
+    ],
+    env,
+  );
   const pathBin = join(home, ".local", "bin", CMD);
   const fallback = join(PKG_ROOT, "bin", "cli.mjs");
   const target =

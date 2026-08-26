@@ -52,7 +52,8 @@ test("formatHeartbeat ASCII fallback", () => {
 
 test("skill shows a copy-paste receipt example; rule points at it", () => {
   const skill = readFileSync(join(ROOT, "skills", "mental", "SKILL.md"), "utf8");
-  assert.match(skill, /<\/br>/);
+  assert.match(skill, /^────────$/m);
+  assert.doesNotMatch(skill, /^<\/br>$/m);
   assert.match(skill, /^🧠 Mental  $/m);
   assert.match(skill, /🚦 Attention: Recorded/);
   assert.match(skill, /🎯 Decision: Decided/);
@@ -61,7 +62,8 @@ test("skill shows a copy-paste receipt example; rule points at it", () => {
   assert.match(skill, /two trailing spaces/);
   assert.match(skill, /Not a code fence/);
   const rule = readFileSync(join(ROOT, "rules", "mental.mdc"), "utf8");
-  assert.match(rule, /<\/br>/);
+  assert.match(rule, /────────/);
+  assert.doesNotMatch(rule, /^<\/br>$/m);
   assert.match(rule, /two trailing spaces/);
   assert.match(rule, /Mental skill/);
 });

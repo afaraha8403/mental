@@ -22,11 +22,11 @@ Usage:
   ${CMD} remap                 List UUID bindings, or --to <id> / --from <id> for this clone
   ${CMD} split                 New UUID for this clone (--copy keeps OKF files)
   ${CMD} link                  Point this clone at --to <id>
-  ${CMD} install               Skill + rule + PATH; removes leftover Balakit Mental skill/rule copies
+  ${CMD} install               Skill + rule + PATH; overwrites existing bin; upgrades if npm is newer
   ${CMD} uninstall             Remove installed skill/rule/hooks (OKF stays unless --delete-data DELETE)
   ${CMD} hooks on|off          Optional session-start hooks (default off)
   ${CMD} serve                 Optional MCP stdio (heartbeat/where/status/search/list/show/journal/attention/decide/note)
-  ${CMD} doctor                PATH, bindings, ignore, skill, index
+  ${CMD} doctor                PATH, bindings, ignore, skill, index, update
   ${CMD} reindex               Rebuild derived sqlite index from OKF files
 
 TTY: no args prints a one-shot heartbeat and exits. Named commands are one-shot.

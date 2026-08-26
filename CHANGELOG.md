@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-08-26
+
+### Added
+
+- `mental doctor` checks npm for a newer `@balacode/mental` (warn only; fail open). `mental install` from a published install upgrades the global CLI when npm is ahead, then re-runs so skills match. `MENTAL_SKIP_UPDATE_CHECK=1` skips the network. Heartbeat never checks.
+
+### Changed
+
+- Agent Mental receipt wraps with a separator line (`────────`) instead of `</br>`, which printed as literal tags in Claude Code and other agents.
+
+### Fixed
+
+- `mental install` / `npm i -g` overwrites an existing global `mental` bin (npm 11 EEXIST). Leftover `@mental/cli` links no longer block `@balacode/mental`.
+
 ## [0.2.2] - 2026-08-26
 
 ### Added
@@ -49,7 +63,8 @@ First public release of the Mental CLI.
 - `install --mcp` registers `serve`; `decide` updates by title so an open decision can close.
 - Install, doctor, uninstall; hooks stay off by default.
 
-[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/afaraha8403/mental/releases/tag/v0.2.3
 [0.2.2]: https://github.com/afaraha8403/mental/releases/tag/v0.2.2
 [0.2.1]: https://github.com/afaraha8403/mental/releases/tag/v0.2.1
 [0.2.0]: https://github.com/afaraha8403/mental/releases/tag/v0.2.0

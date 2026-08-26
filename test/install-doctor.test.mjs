@@ -40,6 +40,26 @@ test("mental install --json copies skill + rule and creates ~/.mental skeleton",
   assert.match(ver.stdout.trim(), /^\d+\.\d+\.\d+$/);
 });
 
+test("install overwrites an existing global mental bin", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const prefixBin = join(home, ".local", "bin");
+  mkdirSync(prefixBin, { recursive: true });
+  writeFileSync(join(prefixBin, "mental"), "#!/bin/sh\necho leftover\n");
+  const r = mental(home, root, ["install", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, true);
+  assert.equal(body.data.cli.npm, true, JSON.stringify(body.data.cli));
+  const ver = spawnSync(join(home, ".local", "bin", "mental"), ["--version"], {
+    encoding: "utf8",
+    env: gitEnv(home),
+  });
+  assert.equal(ver.status, 0, ver.stderr || ver.stdout);
+  assert.match(ver.stdout.trim(), /^\d+\.\d+\.\d+$/);
+  assert.doesNotMatch(ver.stdout, /leftover/);
+});
+
 test("mental install follows a symlink skill dir (claude → agents)", () => {
   const home = tempHome();
   const { root } = initRepo(home);

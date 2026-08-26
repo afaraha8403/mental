@@ -9,11 +9,12 @@ import { loadBindings } from "../lib/bindings.mjs";
 import { checkMentalIgnored, ensureMentalExcluded, gitAvailable } from "../lib/ignore.mjs";
 import { skillsPresent } from "../lib/install-skills.mjs";
 import { printResult, brandMark } from "../lib/output.mjs";
-import { CMD } from "../lib/pkg.mjs";
+import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
 import { isOptedInLocal } from "../lib/import-legacy.mjs";
 import { findGitRoot } from "../lib/git.mjs";
 import { indexPath } from "../lib/index.mjs";
 import { leftoverBalakitMentalCount, findBalakitMental } from "../lib/legacy-balakit.mjs";
+import { checkForUpdate, cmpSemver, updateHint } from "../lib/update.mjs";
 
 function check(id, ok, message, level = "error") {
   return { id, ok, level, message };
@@ -148,6 +149,19 @@ export function cmdDoctor(args, io = {}) {
         ),
       );
     }
+  }
+
+  const upd = checkForUpdate({ env });
+  if (!upd.skipped && upd.latest) {
+    const behind = cmpSemver(upd.latest, VERSION) > 0;
+    checks.push(
+      check(
+        "update",
+        !behind,
+        behind ? updateHint(VERSION, upd.latest, NAME) : `CLI ${VERSION} (npm ${upd.latest})`,
+        behind ? "warn" : "info",
+      ),
+    );
   }
 
   const problems = checks.filter((c) => !c.ok && c.level === "error");

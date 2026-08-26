@@ -29,6 +29,7 @@ export function gitEnv(home) {
     GIT_COMMITTER_EMAIL: "mental@test.local",
     npm_config_prefix: join(home, ".local"),
     npm_config_update_notifier: "false",
+    MENTAL_SKIP_UPDATE_CHECK: "1",
   };
 }
 
