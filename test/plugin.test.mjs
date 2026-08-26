@@ -111,6 +111,7 @@ test("plugin.json is a closed Agent Plugins 1.0.0 manifest", () => {
     assert.ok(PLUGIN_FIELDS.has(key), `unknown plugin.json field: ${key}`);
   }
   const pkg = loadJson(join(ROOT, "package.json"));
+  assert.equal(pkg.name, "@balacode/mental");
   assert.equal(manifest.version, pkg.version);
   assert.equal(manifest.license, "MIT");
   assert.equal(typeof manifest.description, "string");

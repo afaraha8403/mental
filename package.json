@@ -1,5 +1,5 @@
 {
-  "name": "@mental/cli",
+  "name": "@balacode/mental",
   "version": "0.2.0",
   "description": "Never reconstruct where you left off. Mental keeps the resume, the decisions, and what's still in the air.",
   "license": "MIT",

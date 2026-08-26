@@ -1,6 +1,6 @@
-# Publishes @mental/cli when a GitHub Release is published.
+# Publishes @balacode/mental when a GitHub Release is published.
 # First-ever npm version cannot use OIDC (package must exist to attach a
-# trusted publisher). Publish 0.1.0 locally, then connect GitHub Actions on
+# trusted publisher). Publish 0.2.0 locally, then connect GitHub Actions on
 # npmjs.com. Later tags are published by this workflow with no token.
 name: Release
 
@@ -39,9 +39,10 @@ jobs:
           PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           npm install -g npm@latest
+          NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
-          if npm view "@mental/cli@${VERSION}" version >/dev/null 2>&1; then
-            echo "@mental/cli@${VERSION} already on npm — skip"
+          if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "${NAME}@${VERSION} already on npm — skip"
             exit 0
           fi
           if [ "$PRERELEASE" = "true" ]; then

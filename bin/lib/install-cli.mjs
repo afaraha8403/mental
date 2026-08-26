@@ -1,5 +1,5 @@
 /**
- * Put `mental` on PATH. Last `mental install` (or `npm i -g @mental/cli`) wins.
+ * Put `mental` on PATH. Last `mental install` (or `npm i -g @balacode/mental`) wins.
  *
  * `npm install -g` this package into the active npm prefix, then expose the
  * same binary at `~/.local/bin/mental` when that dir is the user's PATH bin

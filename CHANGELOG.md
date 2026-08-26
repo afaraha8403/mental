@@ -20,11 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- README now shows the logo, explains the [Agent Plugins 1.0.0](https://agent-plugins.org/specification) packaging, and includes copy-paste install prompts for Cursor, Claude Code, VS Code, and GitHub Copilot.
+- README now shows the logo, npm (`@balacode/mental`), [Agent Plugins 1.0.0](https://agent-plugins.org/specification) packaging, and copy-paste install prompts for Cursor, Claude Code, VS Code, and GitHub Copilot.
+- npm package is `@balacode/mental` (unscoped `mental` is taken). The CLI bin stays `mental`.
 
 ## [0.1.0] - 2026-08-26
 
-First public release of `@mental/cli`.
+First public release of the Mental CLI.
 
 ### Added
 

@@ -9,7 +9,7 @@ Run `mental where` then `mental heartbeat --json` (or `mental status --json` whe
 
 Mid-chat, not just start/finish: before changing an approach, `mental search "…" --json` for prior decisions. When residue surfaces ("X said…", a concern, "park this"), record `mental attention … --json` immediately — do not wait for the handoff. If other agents may have written since you oriented, re-pulse `mental heartbeat --json`; it is cheap and derives git live.
 
-If `mental` is not on PATH, try `npx @mental/cli …`. If that fails, continue the user's coding task and mention install. Missing Mental must not block work.
+If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, continue the user's coding task and mention install. Missing Mental must not block work.
 
 Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
 

@@ -4,15 +4,18 @@
 
 # Mental
 
+[![npm](https://img.shields.io/npm/v/@balacode/mental.svg)](https://www.npmjs.com/package/@balacode/mental)
+
 Local-first continuity layer for you and your coding agents.
 
 Git records **what** changed. Mental records the small amount git cannot explain: where you left off, why a decision was made, what is still in the air after a hop, and the next exact action. **OKF markdown is the source of truth.** SQLite is a derived cache. Agents call `mental … --json` — they do not grep YAML.
 
+- **npm:** [@balacode/mental](https://www.npmjs.com/package/@balacode/mental) — install this; the CLI binary is `mental`
 - **Repo:** https://github.com/afaraha8403/mental
 - **Spec:** [PLAN.md](./PLAN.md)
 - **Plugin standard:** [Agent Plugins 1.0.0](https://agent-plugins.org/specification)
 
-Mental is **not** a Balakit plugin. Default data lives in `~/.mental` (UUID bindings). Project `./.mental` only after `mental local`.
+Mental is **not** a Balakit plugin. Default data lives in `~/.mental` (UUID bindings). Project `./.mental` only after `mental local`. The unscoped npm package [`mental`](https://www.npmjs.com/package/mental) is a different project.
 
 ## Install
 
@@ -29,7 +32,7 @@ The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specificat
 
 Use this client's native plugin install if you have one, then put the CLI on PATH and finish setup:
 
-  npm i -g @mental/cli
+  npm i -g @balacode/mental
   mental install
   mental doctor
 
@@ -69,11 +72,11 @@ Plugin install loads the skill and MCP. Still run `mental install` so the CLI, s
 ### CLI
 
 ```bash
-npm i -g @mental/cli
+npm i -g @balacode/mental
 mental install
 ```
 
-Last install wins. That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton. It does **not** turn on hooks or MCP.
+The package name is `@balacode/mental`. After that, you type `mental`. Last install wins. That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton. It does **not** turn on hooks or MCP.
 
 From a clone, without npm:
 
@@ -171,7 +174,7 @@ mental status --json
 
 Mid-chat, not just start/finish: search decisions before changing an approach, record attention the moment residue surfaces, and re-pulse `mental heartbeat --json` whenever other agents may have written — it is cheap and derives git live.
 
-Do not grep `.mental` or parse YAML. If `mental` is missing, continue the coding task (fail open) and mention install.
+Do not grep `.mental` or parse YAML. If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task (fail open) and mention `npm i -g @balacode/mental` then `mental install`.
 
 Turns that invoked `mental` end with `<br>`, then the title `🧠 Mental`, then one type line per write/read (see the skill).
 

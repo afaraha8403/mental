@@ -123,8 +123,8 @@ not this repo, so links would 404. The CLI tool card already has the path.
 
 Mix writes and a read in one block if both happened. Never invent Mental activity.
 
-If `mental` is not on PATH, try `npx @mental/cli …`. If that fails, continue
-the user's coding task and mention `npm i -g @mental/cli` then `mental install`.
+If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, continue
+the user's coding task and mention `npm i -g @balacode/mental` then `mental install`.
 
 `where` reports `{ root, id, mode, reason, gitRoot }` and may include `imported`
 and `indexed` when a leftover project `./.mental/` was ingested into the home

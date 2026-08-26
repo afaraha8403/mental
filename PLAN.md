@@ -24,7 +24,7 @@ todos:
     content: uninstall (no data wipe), hooks off-by-default, optional mental serve MCP (heartbeat is the TTY no-args surface; no standing TUI)
     status: completed
   - id: phase-7-deprecate-balakit
-    content: Deprecate Mental in Balakit — changelog, README pointer to @mental/cli, remove skill/rule/plugin/CLI policy flags/PERSONAL_RULES, tests, generated AGENTS/CLAUDE mentions
+    content: Deprecate Mental in Balakit — changelog, README pointer to @balacode/mental, remove skill/rule/plugin/CLI policy flags/PERSONAL_RULES, tests, generated AGENTS/CLAUDE mentions
     status: completed
   - id: phase-9-agent-plugin
     content: "Ship as Agent Plugins 1.0.0 — root plugin.json, mcp.json stdio (./bin/cli.mjs serve), skills/mental; tests lock the closed schemas"
@@ -41,7 +41,7 @@ This document is the **source of truth for the next agent session**. After appro
 3. **Copy this entire plan verbatim into `PLAN.md` at the repo root** (plus `docs/` mirrors if useful). Do not summarize away detail.
 4. **Create a public GitHub repository on the personal account `afaraha8403`, never under the `balacodeio` org.** Canonical URL: `https://github.com/afaraha8403/mental`. `git remote add origin git@github.com:afaraha8403/mental.git` (or HTTPS), `git push -u origin main`.
 5. Implement Mental CLI in that repo (phases 0–6).
-6. **Then deprecate Mental out of Balakit** (phase 8, required — not optional). Balakit must stop shipping Mental skill/rule/plugin/CLI flags. Point users at `@mental/cli` / `github.com/afaraha8403/mental`. User `.mental/` data is never deleted.
+6. **Then deprecate Mental out of Balakit** (phase 8, required — not optional). Balakit must stop shipping Mental skill/rule/plugin/CLI flags. Point users at `@balacode/mental` / `github.com/afaraha8403/mental`. User `.mental/` data is never deleted.
 
 ### GitHub hosting (personal, public)
 
@@ -310,7 +310,7 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 
 ## 6. CLI surface
 
-**Package:** Node **ESM**, `bin` name `mental`. Suggested npm name `@mental/cli` (plain `mental` is likely taken — **check npm at implement time** and set `"bin": { "mental": "bin/cli.mjs" }`).
+**Package:** Node **ESM**, `bin` name `mental`. npm name `@balacode/mental` (unscoped `mental` is taken; set `"bin": { "mental": "bin/cli.mjs" }`).
 
 **Runtime:** Node `>=18`. Dependencies: keep lean. No standing TTY session in v1 (no `@clack/prompts`). `better-sqlite3` or `node:sqlite` if Node version allows — prefer **sql.js / better-sqlite3** with a documented native-build fallback. If native modules are painful, v1 search can be **in-process scan of frontmatter + ripgrep-like filter** and sqlite in v1.1. **Do not block v1 on vectors.**
 
@@ -381,7 +381,7 @@ Approximate text:
 
 - Continuity is Mental. On start/finish of real work, or orientation questions, use the Mental skill.
 - Run `mental where` then `mental status --json` (or `search --json`). Do not grep `.mental` or `~/.mental`.
-- If `mental` is not on PATH, try `npx @mental/cli …`. If that fails, continue the user’s coding task and mention install.
+- If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, continue the user’s coding task and mention install.
 - Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
 
 ### 8.3 Skill body (port from [skills/mental/SKILL.md](skills/mental/SKILL.md), rewrite)
@@ -444,7 +444,7 @@ Tracked/shared Mental is a later policy flag (Balakit already has `tracked` / `r
 **Human:**
 
 ```bash
-npm i -g @mental/cli    # or npx
+npm i -g @balacode/mental    # or npx
 mental install          # skills + tiny rule, user-global; creates ~/.mental skeleton
 ```
 
@@ -514,13 +514,13 @@ Mental **leaves Balakit**. The new repo is the only product. Balakit must not ke
 
 **Balakit changes (phase 8):**
 
-- Changelog `[Unreleased]` **Changes:** Mental is deprecated; install `@mental/cli` / see `https://github.com/afaraha8403/mental`.
+- Changelog `[Unreleased]` **Changes:** Mental is deprecated; install `@balacode/mental` / see `https://github.com/afaraha8403/mental`.
 - README / kit description: drop “flexible Mental continuity layer” as a Balakit feature.
 - Remove personal Mental from the installer: `PERSONAL_RULES`, `RULE_BUNDLED_SKILLS.mental` in [bin/lib/pkg.mjs](bin/lib/pkg.mjs); `mentalTooling` / `mentalDataPolicy` flags in [bin/cli.mjs](bin/cli.mjs) / [bin/commands/init.mjs](bin/commands/init.mjs); [bin/lib/mental-policy.mjs](bin/lib/mental-policy.mjs), [bin/lib/mental-exclude.mjs](bin/lib/mental-exclude.mjs); doctor/status branches that exist only for Mental.
 - Delete (or replace with a one-line stub that says “moved”) [skills/mental](skills/mental), [rules/mental.mdc](rules/mental.mdc), mirrors under `.cursor/skills/mental`, `.claude/skills/mental`, `.agents/skills/mental`, and [plugins/balakit-mental](plugins/balakit-mental). Run the existing plugin/sync scripts so generated files do not resurrect Mental.
 - Tests: drop Mental-policy install tests; keep ignore/doctor tests only if they still apply to other features.
 - Generated `AGENTS.md` / `CLAUDE.md` templates: remove Mental always-on blocks.
-- Optional compatibility: if `balakit add mental` remains, it should **fail with a message** (or exec `npx @mental/cli install`) — do not keep shipping the old skill.
+- Optional compatibility: if `balakit add mental` remains, it should **fail with a message** (or exec `npx @balacode/mental install`) — do not keep shipping the old skill.
 
 **Do not:** delete anyone’s `~/.mental` or repo `.mental/` data. Deprecate **tooling in Balakit**, not user journals.
 
