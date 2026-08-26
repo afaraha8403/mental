@@ -13,6 +13,6 @@ If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, conti
 
 Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
 
-If you invoked `mental` this turn, end the user-visible reply with `<br>`, then the title `🧠 Mental`, then type lines under it (example in the Mental skill). Not a code fence.
+If you invoked `mental` this turn, end the user-visible reply with `</br>`, then `🧠 Mental  ` (two trailing spaces), then indented `Kind: Verb` lines, then `</br>`. Never one line. Example in the Mental skill. Not a code fence.
 
 On a pasted transcript or a plan-progress question ("where in the plan / what's left?"), use the Mental skill. Cheap reload is `mental heartbeat --json`, not a notes dump.

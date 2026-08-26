@@ -176,7 +176,7 @@ Mid-chat, not just start/finish: search decisions before changing an approach, r
 
 Do not grep `.mental` or parse YAML. If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task (fail open) and mention `npm i -g @balacode/mental` then `mental install`.
 
-Turns that invoked `mental` end with `<br>`, then the title `🧠 Mental`, then one type line per write/read (see the skill).
+Turns that invoked `mental` end with `</br>`, title `🧠 Mental  ` (two trailing spaces so chat markdown does not join lines), indented `Kind: Verb` items, then `</br>` (see the skill).
 
 ## Identity (UUID, not the folder)
 
