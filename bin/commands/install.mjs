@@ -11,6 +11,7 @@ import { enableHooks } from "../lib/hooks.mjs";
 import { enableMcp } from "../lib/mcp.mjs";
 import { CMD } from "../lib/pkg.mjs";
 import { printResult, brandLine } from "../lib/output.mjs";
+import { purgeBalakitMental } from "../lib/legacy-balakit.mjs";
 
 export function cmdInstall(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -28,6 +29,10 @@ export function cmdInstall(args, io = {}) {
   const mcp = Boolean(args.flags?.mcp);
   const cwd = args.cwd ?? process.cwd();
 
+  const legacy = purgeBalakitMental({
+    home,
+    projectDir: cwd,
+  });
   const installed = installSkills({
     home,
     projectDir: project ? cwd : null,
@@ -61,6 +66,8 @@ export function cmdInstall(args, io = {}) {
     mcp: mcpResult,
     where: resolved.ok ? resolved.data : null,
     imported: imported || null,
+    legacyRemoved: legacy.removed,
+    legacyLeftover: legacy.leftover,
   };
   const importLine =
     imported?.copied?.length
@@ -73,6 +80,13 @@ export function cmdInstall(args, io = {}) {
       ? `\nMCP: ${CMD} serve registered in ${mcpResult.written.join(", ")}`
       : `\nMCP: config write failed (${mcpResult?.error?.message ?? "unknown"}) — add \`${CMD} serve\` manually`
     : "";
+  const legacyLine = legacy.removed.length
+    ? `\nremoved ${legacy.removed.length} Balakit Mental leftover(s)`
+    : "";
+  const leftoverLine =
+    legacy.leftover.length
+      ? `\nstill mixed Balakit block(s) (Mental text inside a kit block): ${legacy.leftover.join(", ")}`
+      : "";
   printResult(
     stdout,
     args.json,
@@ -80,7 +94,7 @@ export function cmdInstall(args, io = {}) {
     data,
     undefined,
     () =>
-      `${brandLine(`installed skill + rule (${installed.written.length} paths)`)}\n~/.mental skeleton: ${personal}${cliLine}${hookLine}${mcpLine}${importLine}`,
+      `${brandLine(`installed skill + rule (${installed.written.length} paths)`)}\n~/.mental skeleton: ${personal}${cliLine}${hookLine}${mcpLine}${importLine}${legacyLine}${leftoverLine}`,
   );
   return 0;
 }

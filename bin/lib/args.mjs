@@ -22,7 +22,7 @@ Usage:
   ${CMD} remap                 List UUID bindings, or --to <id> / --from <id> for this clone
   ${CMD} split                 New UUID for this clone (--copy keeps OKF files)
   ${CMD} link                  Point this clone at --to <id>
-  ${CMD} install               Skill + rule + put ${CMD} on PATH (overrides previous)
+  ${CMD} install               Skill + rule + PATH; removes leftover Balakit Mental skill/rule copies
   ${CMD} uninstall             Remove installed skill/rule/hooks (OKF stays unless --delete-data DELETE)
   ${CMD} hooks on|off          Optional session-start hooks (default off)
   ${CMD} serve                 Optional MCP stdio (heartbeat/where/status/search/list/show/journal/attention/decide/note)

@@ -2,21 +2,21 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { gitEnv, initRepo, tempHome } from "./helpers.mjs";
+import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
 import { ensureMentalExcluded, MENTAL_IGNORE_LINE } from "../bin/lib/ignore.mjs";
 import { defaultExcludesFile } from "../bin/lib/ignore.mjs";
 
-const CLI = fileURLToPath(new URL("../bin/cli.mjs", import.meta.url));
+const BALAKIT_MENTAL_RULE = `---
+description: Project continuity — derive current state before substantive work.
+alwaysApply: true
+---
 
-function mental(home, cwd, args) {
-  return spawnSync(process.execPath, [CLI, ...args], {
-    encoding: "utf8",
-    cwd,
-    env: gitEnv(home),
-  });
-}
+# The \`.mental/\` Project Continuity Layer
+
+Read the Mental data policy from \`.balakit/installed.json\` (\`mentalDataPolicy\`).
+When ignore fails, tell the user to run \`npx balakit doctor\`.
+`;
 
 test("mental install --json copies skill + rule and creates ~/.mental skeleton", () => {
   const home = tempHome();
@@ -91,4 +91,51 @@ test("ensureMentalExcluded is idempotent", () => {
   assert.equal(readFileSync(second.file, "utf8"), before);
   const n = before.split(/\r?\n/).filter((l) => l.trim() === MENTAL_IGNORE_LINE).length;
   assert.equal(n, 1);
+});
+
+test("install removes leftover Balakit Mental skill/rule; doctor warns first", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+
+  const gemini = join(home, ".gemini", "skills", "mental");
+  mkdirSync(gemini, { recursive: true });
+  writeFileSync(join(gemini, "SKILL.md"), BALAKIT_MENTAL_RULE);
+
+  mkdirSync(join(home, ".cursor", "rules"), { recursive: true });
+  writeFileSync(join(home, ".cursor", "rules", "mental.mdc"), BALAKIT_MENTAL_RULE);
+
+  mkdirSync(join(root, ".cursor", "skills", "mental"), { recursive: true });
+  writeFileSync(join(root, ".cursor", "skills", "mental", "SKILL.md"), BALAKIT_MENTAL_RULE);
+
+  mkdirSync(join(home, ".claude"), { recursive: true });
+  writeFileSync(
+    join(home, ".claude", "CLAUDE.md"),
+    `<!-- BEGIN balakit (managed — edits inside are overwritten on reinstall) -->
+${BALAKIT_MENTAL_RULE}
+<!-- END balakit -->
+`,
+  );
+
+  const pre = mental(home, root, ["doctor", "--json"]);
+  assert.ok(pre.status === 0 || pre.status === 3, pre.stderr || pre.stdout);
+  const preBody = JSON.parse(pre.stdout);
+  const warn = preBody.data.checks.find((c) => c.id === "legacy-balakit");
+  assert.ok(warn, "doctor should flag leftover Balakit Mental wiring");
+  assert.equal(warn.level, "warn");
+
+  const r = mental(home, root, ["install", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, true);
+  assert.ok(body.data.legacyRemoved.length >= 3, JSON.stringify(body.data.legacyRemoved));
+  assert.equal(existsSync(gemini), false);
+  assert.equal(existsSync(join(root, ".cursor", "skills", "mental")), false);
+  assert.doesNotMatch(readFileSync(join(home, ".cursor", "rules", "mental.mdc"), "utf8"), /npx balakit doctor/);
+  assert.match(readFileSync(join(home, ".cursor", "rules", "mental.mdc"), "utf8"), /Mental skill/);
+  assert.doesNotMatch(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8"), /BEGIN balakit/);
+  assert.match(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8"), /BEGIN mental/);
+
+  const post = mental(home, root, ["doctor", "--json"]);
+  const postBody = JSON.parse(post.stdout);
+  assert.equal(postBody.data.checks.some((c) => c.id === "legacy-balakit"), false);
 });

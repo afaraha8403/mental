@@ -13,6 +13,7 @@ import { CMD } from "../lib/pkg.mjs";
 import { isOptedInLocal } from "../lib/import-legacy.mjs";
 import { findGitRoot } from "../lib/git.mjs";
 import { indexPath } from "../lib/index.mjs";
+import { leftoverBalakitMentalCount, findBalakitMental } from "../lib/legacy-balakit.mjs";
 
 function check(id, ok, message, level = "error") {
   return { id, ok, level, message };
@@ -122,6 +123,27 @@ export function cmdDoctor(args, io = {}) {
           imported
             ? `leftover ${leftover} still on disk; already imported into ~/.mental/projects (not deleted)`
             : `leftover ${leftover} will import into ~/.mental/projects on next write (status/journal/install)`,
+          "warn",
+        ),
+      );
+    }
+
+    const leftoverWiring = leftoverBalakitMentalCount({ home, projectDir: gitRoot || cwd });
+    if (leftoverWiring > 0) {
+      const found = findBalakitMental({ home, projectDir: gitRoot || cwd });
+      const sample = [
+        ...found.skills,
+        ...found.rules,
+        ...found.plugins,
+        ...found.blocks.map((b) => b.file),
+      ]
+        .slice(0, 4)
+        .join(", ");
+      checks.push(
+        check(
+          "legacy-balakit",
+          false,
+          `Balakit Mental skill/rule still present (${sample}). Run \`${CMD} install\` to remove it.`,
           "warn",
         ),
       );

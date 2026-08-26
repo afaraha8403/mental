@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-08-26
+
+### Added
+
+- `mental install` finds leftover **Balakit** Mental skill/rule copies (fingerprint: `npx balakit doctor`, `mentalDataPolicy`, …) and deletes them before writing the standalone skill. Mental-only `<!-- BEGIN balakit -->` blocks are stripped. Journals and `./.mental` data are not deleted. `mental doctor` warns if any remain.
+
 ## [0.2.1] - 2026-08-26
 
 ### Changed
@@ -43,7 +49,8 @@ First public release of the Mental CLI.
 - `install --mcp` registers `serve`; `decide` updates by title so an open decision can close.
 - Install, doctor, uninstall; hooks stay off by default.
 
-[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/afaraha8403/mental/releases/tag/v0.2.2
 [0.2.1]: https://github.com/afaraha8403/mental/releases/tag/v0.2.1
 [0.2.0]: https://github.com/afaraha8403/mental/releases/tag/v0.2.0
 [0.1.0]: https://github.com/afaraha8403/mental/releases/tag/v0.1.0

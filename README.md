@@ -76,7 +76,7 @@ npm i -g @balacode/mental
 mental install
 ```
 
-The package name is `@balacode/mental`. After that, you type `mental`. Last install wins. That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton. It does **not** turn on hooks or MCP.
+Last install wins. That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton. It also **removes leftover Balakit Mental skill/rule copies** (the old `npx balakit doctor` pointer) so they cannot fight the new rule. It does **not** turn on hooks or MCP, and it does not delete journals.
 
 From a clone, without npm:
 
