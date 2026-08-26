@@ -12,7 +12,7 @@ import {
   writeDecision,
 } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, kindLine } from "../lib/output.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
@@ -92,7 +92,7 @@ export function cmdDecide(args, io = {}) {
       true,
       { ...resolved.data, ...written, indexed },
       undefined,
-      () => `${verb} ${written.path}`,
+      () => kindLine("decision", `${verb} ${written.path}`),
     );
     return 0;
   } catch (err) {

@@ -81,6 +81,48 @@ mental decide --title "…" --status decided --json
 mental note --title "…" --json
 ```
 
+## Mental receipt (end of turn)
+
+If you invoked `mental` this turn, end the **user-visible** reply with this block.
+Last thing in the message. Not a code fence (so emojis render).
+Skip the whole block if you did not run `mental`.
+
+Separator is a literal `<br>` on its own line (not dashes, not a blank line).
+Next line is the title `🧠 Mental`. Then one item line per thing that happened,
+type-emoji first. At most four item lines; if more, keep the writes and end
+with `+N more`.
+
+Titles only — no `file://` or markdown links. Mental files live in `~/.mental`,
+not this repo, so links would 404. The CLI tool card already has the path.
+
+**Writes (copy this shape):**
+
+```text
+<br>
+🧠 Mental
+📓 journaled “Resolver landed”
+🚦 recorded attention “Tom said ship”
+🎯 decided “Keep the JSON envelope”
+```
+
+**Read-only (heartbeat / search / show / list):**
+
+```text
+<br>
+🧠 Mental
+🔍 heartbeat
+```
+
+| Emoji | Kind | Item line |
+| --- | --- | --- |
+| 📓 | Journal | `📓 journaled “<title>”` |
+| 🚦 | Attention | `🚦 recorded attention “<title>”` or `🚦 resolved attention “<title>”` |
+| 🎯 | Decision | `🎯 decided “<title>”` or `🎯 opened decision “<title>”` |
+| 📝 | Note | `📝 noted “<title>”` |
+| 🔍 | Read | `🔍 heartbeat` / `🔍 searched` / `🔍 showed` / `🔍 listed` |
+
+Mix writes and a read in one block if both happened. Never invent Mental activity.
+
 If `mental` is not on PATH, try `npx @mental/cli …`. If that fails, continue
 the user's coding task and mention `npm i -g @mental/cli` then `mental install`.
 

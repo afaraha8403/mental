@@ -3,7 +3,7 @@
  */
 import { resolveBundle } from "../lib/resolve.mjs";
 import { reindexBundle } from "../lib/index.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, brandLine } from "../lib/output.mjs";
 
 export function cmdReindex(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -41,7 +41,7 @@ export function cmdReindex(args, io = {}) {
     indexed.ok ? undefined : { code: "index", message: indexed.error || "reindex failed" },
     (d) =>
       d.indexed.ok
-        ? `indexed ${d.indexed.concepts} concept(s) → ${d.indexed.path}`
+        ? brandLine(`indexed ${d.indexed.concepts} concept(s) → ${d.indexed.path}`)
         : d.indexed.error || "reindex failed",
   );
   return indexed.ok ? 0 : 1;

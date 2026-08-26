@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-26
+
 ### Added
 
 - Ranked FTS search (`bm25`) with snippets, and SQL-side `--type` / `--status` / `--tag` / `--kind` filters so a typed query cannot be crowded out by untyped matches.
 - `mental list` includes each concept's `description`; `--kind` filters attention on list and search.
 - `mental show` returns `backlinks` from the derived link index (file-scan fallback).
 - MCP `list` tool; search accepts the same typed filters as the CLI; tool results are compact JSON.
+- Agent **Mental receipt** at the end of a turn that used the CLI: `<br>`, title `🧠 Mental`, then type lines (📓 journal, 🚦 attention, 🎯 decision, 📝 note, 🔍 read). Example in the skill; the always-on rule points at it. TTY writes use the same type emojis. `--json` stays ASCII (`MENTAL_ASCII=1` strips emoji).
+- `mental install` copies the skill to `~/.config/opencode/skills/mental` (OpenCode).
 
 ### Changed
 
@@ -32,5 +36,6 @@ First public release of `@mental/cli`.
 - `install --mcp` registers `serve`; `decide` updates by title so an open decision can close.
 - Install, doctor, uninstall; hooks stay off by default.
 
-[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/afaraha8403/mental/releases/tag/v0.2.0
 [0.1.0]: https://github.com/afaraha8403/mental/releases/tag/v0.1.0

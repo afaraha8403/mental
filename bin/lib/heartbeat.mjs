@@ -11,6 +11,7 @@ import {
   listOpenDecisions,
   localDate,
 } from "./okf.mjs";
+import { brandMark } from "./output.mjs";
 
 export { ATTENTION_HEARTBEAT_CAP };
 
@@ -83,8 +84,9 @@ function formatAirItem(a) {
 /**
  * @param {Extract<ReturnType<typeof collectHeartbeat>, { ok: true }>["data"]} data
  * @param {Date} [now]
+ * @param {NodeJS.ProcessEnv} [env]
  */
-export function formatHeartbeat(data, now = new Date()) {
+export function formatHeartbeat(data, now = new Date(), env = process.env) {
   const resume =
     data.handoff.resume ||
     "No journal yet — start work, then `mental journal` at the task boundary.";
@@ -109,7 +111,7 @@ export function formatHeartbeat(data, now = new Date()) {
       ? "  none"
       : data.openDecisions.map((d) => `  [${d.status}] ${d.title}`).join("\n");
 
-  const lines = [`▶ ${resume}`];
+  const lines = [`${brandMark(env)} ${resume}`];
   if (against) lines.push(`Against ${against}`);
   lines.push("", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, "In the air", air, "Unsettled", open);
   return lines.join("\n");

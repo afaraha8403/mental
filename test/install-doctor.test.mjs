@@ -28,6 +28,7 @@ test("mental install --json copies skill + rule and creates ~/.mental skeleton",
   assert.equal(existsSync(join(home, ".claude", "skills", "mental", "SKILL.md")), true);
   assert.equal(existsSync(join(home, ".cursor", "skills", "mental", "SKILL.md")), true);
   assert.equal(existsSync(join(home, ".agents", "skills", "mental", "SKILL.md")), true);
+  assert.equal(existsSync(join(home, ".config", "opencode", "skills", "mental", "SKILL.md")), true);
   assert.equal(existsSync(join(home, ".cursor", "rules", "mental.mdc")), true);
   assert.equal(existsSync(join(home, ".mental", "index.md")), true);
   assert.match(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8"), /BEGIN mental/);

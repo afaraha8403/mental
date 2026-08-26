@@ -102,7 +102,7 @@ test("TTY no-args prints heartbeat and exits; does not persist bindings", async 
   });
   assert.equal(code, 0);
   const text = cap.buf();
-  assert.match(text, /▶ Read the heartbeat next/);
+  assert.match(text, /🧠 Read the heartbeat next/);
   assert.match(text, /Heartbeat handoff/);
   assert.match(text, /Git\s+main \(clean\)/);
   assert.doesNotMatch(text, /\bhome\s+·/);
@@ -161,7 +161,7 @@ test("formatHeartbeat omits uuid chrome", () => {
     openDecisions: [{ status: "open", title: "Park Clack" }],
     attention: [],
   }, new Date(2026, 7, 25));
-  assert.match(text, /▶ Ship heartbeat/);
+  assert.match(text, /🧠 Ship heartbeat/);
   assert.match(text, /Dropped the catalog\s+\(14:02\)/);
   assert.match(text, /\[open\] Park Clack/);
   assert.match(text, /In the air/);

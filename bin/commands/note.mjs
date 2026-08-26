@@ -4,7 +4,7 @@
 import { resolveBundle } from "../lib/resolve.mjs";
 import { bundleName, ensureSkeleton, writeNote } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, kindLine } from "../lib/output.mjs";
 
 const STATUSES = new Set(["draft", "active", "superseded"]);
 
@@ -50,7 +50,7 @@ export function cmdNote(args, io = {}) {
     });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
-    printResult(stdout, args.json, true, { ...resolved.data, ...written, indexed }, undefined, () => `wrote ${written.path}`);
+    printResult(stdout, args.json, true, { ...resolved.data, ...written, indexed }, undefined, () => kindLine("note", `wrote ${written.path}`));
     return 0;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

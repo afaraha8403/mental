@@ -4,7 +4,7 @@
 import { resolveBundle } from "../lib/resolve.mjs";
 import { readBundleFile } from "../lib/okf.mjs";
 import { listBacklinks } from "../lib/index.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, kindLine } from "../lib/output.mjs";
 
 export function cmdShow(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -55,7 +55,7 @@ export function cmdShow(args, io = {}) {
       d.backlinks.length === 0
         ? ""
         : `\n\nLinked from:\n${d.backlinks.map((b) => `  [${b.type}] ${b.title} (${b.path})`).join("\n")}`;
-    return `${head}\n${d.path}\n\n${d.body.trim() || "(empty)"}${linked}`;
+    return `${kindLine("read", head)}\n${d.path}\n\n${d.body.trim() || "(empty)"}${linked}`;
   });
   return 0;
 }

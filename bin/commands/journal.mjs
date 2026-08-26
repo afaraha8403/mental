@@ -4,7 +4,7 @@
 import { resolveBundle } from "../lib/resolve.mjs";
 import { appendJournal, bundleName, ensureSkeleton, repoRelativePath } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, kindLine } from "../lib/output.mjs";
 
 /**
  * @param {{ json: boolean, dir?: string, flags?: Record<string, string | boolean>, cwd?: string, home?: string, env?: NodeJS.ProcessEnv }} args
@@ -49,6 +49,6 @@ export function cmdJournal(args, io = {}) {
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
   const data = { ...resolved.data, ...written, indexed };
-  printResult(stdout, args.json, true, data, undefined, () => `appended ${written.path}`);
+  printResult(stdout, args.json, true, data, undefined, () => kindLine("journal", `appended ${written.path}`));
   return 0;
 }

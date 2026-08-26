@@ -1,6 +1,67 @@
 /**
  * Stable agent JSON envelope + human printers.
+ * Emoji is TTY-only. `--json` never includes a brand mark.
  */
+
+/**
+ * `MENTAL_ASCII=1` for consoles that cannot render emoji (legacy cmd.exe).
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function useAsciiBrand(env = process.env) {
+  const v = env.MENTAL_ASCII;
+  return v === "1" || v === "true" || v === "yes";
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function brandMark(env = process.env) {
+  return useAsciiBrand(env) ? "[mental]" : "🧠";
+}
+
+const KIND_EMOJI = {
+  journal: "📓",
+  attention: "🚦",
+  decision: "🎯",
+  note: "📝",
+  read: "🔍",
+};
+
+const KIND_ASCII = {
+  journal: "[journal]",
+  attention: "[attention]",
+  decision: "[decision]",
+  note: "[note]",
+  read: "[read]",
+};
+
+/**
+ * Type mark for TTY writes/reads. `--json` must not call this.
+ * @param {"journal" | "attention" | "decision" | "note" | "read"} kind
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function kindMark(kind, env = process.env) {
+  if (useAsciiBrand(env)) return KIND_ASCII[kind] || "[mental]";
+  return KIND_EMOJI[kind] || brandMark(env);
+}
+
+/**
+ * @param {"journal" | "attention" | "decision" | "note" | "read"} kind
+ * @param {string} text
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function kindLine(kind, text, env = process.env) {
+  return `${kindMark(kind, env)} ${text}`;
+}
+
+/**
+ * Prefix a TTY success line with the Mental mark.
+ * @param {string} text
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function brandLine(text, env = process.env) {
+  return `${brandMark(env)} ${text}`;
+}
 
 /**
  * @param {boolean} ok

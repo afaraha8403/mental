@@ -21,6 +21,7 @@ test("uninstall removes skill copies and leaves OKF unless DELETE", () => {
   const gone = mental(home, root, ["uninstall", "--json"]);
   assert.equal(gone.status, 0, gone.stderr || gone.stdout);
   assert.equal(existsSync(join(home, ".agents", "skills", "mental", "SKILL.md")), false);
+  assert.equal(existsSync(join(home, ".config", "opencode", "skills", "mental", "SKILL.md")), false);
   assert.equal(existsSync(slice), true);
 
   const wipe = mental(home, root, ["uninstall", "--json", "--delete-data", "--confirm", "DELETE"]);

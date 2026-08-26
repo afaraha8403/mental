@@ -1,6 +1,6 @@
 {
   "name": "@mental/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Never reconstruct where you left off. Mental keeps the resume, the decisions, and what's still in the air.",
   "license": "MIT",
   "type": "module",

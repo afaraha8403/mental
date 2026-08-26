@@ -73,7 +73,7 @@ npm i -g @mental/cli
 mental install
 ```
 
-Last install wins. That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, and `~/.agents`, and creates a `~/.mental` skeleton. It does **not** turn on hooks or MCP.
+Last install wins. That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton. It does **not** turn on hooks or MCP.
 
 From a clone, without npm:
 
@@ -172,6 +172,8 @@ mental status --json
 Mid-chat, not just start/finish: search decisions before changing an approach, record attention the moment residue surfaces, and re-pulse `mental heartbeat --json` whenever other agents may have written — it is cheap and derives git live.
 
 Do not grep `.mental` or parse YAML. If `mental` is missing, continue the coding task (fail open) and mention install.
+
+Turns that invoked `mental` end with `<br>`, then the title `🧠 Mental`, then one type line per write/read (see the skill).
 
 ## Identity (UUID, not the folder)
 

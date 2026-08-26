@@ -397,6 +397,7 @@ Approximate text:
 - `~/.claude/skills/mental/SKILL.md` (+ references)
 - `~/.cursor/skills/mental/`
 - `~/.agents/skills/mental/`
+- `~/.config/opencode/skills/mental/`
 - Optional: `.github/skills/mental` only with `--project`
 
 Mirror layout like Balakit: **one source** in the mental repo `skills/mental/`, copy to user dirs. Do not maintain five hand-edited copies in the product repo beyond documented mirrors if you use a tiny `scripts/install-skills.mjs`.

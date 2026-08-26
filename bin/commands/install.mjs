@@ -10,7 +10,7 @@ import { installGlobalCli } from "../lib/install-cli.mjs";
 import { enableHooks } from "../lib/hooks.mjs";
 import { enableMcp } from "../lib/mcp.mjs";
 import { CMD } from "../lib/pkg.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, brandLine } from "../lib/output.mjs";
 
 export function cmdInstall(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -80,7 +80,7 @@ export function cmdInstall(args, io = {}) {
     data,
     undefined,
     () =>
-      `installed skill + rule (${installed.written.length} paths)\n~/.mental skeleton: ${personal}${cliLine}${hookLine}${mcpLine}${importLine}`,
+      `${brandLine(`installed skill + rule (${installed.written.length} paths)`)}\n~/.mental skeleton: ${personal}${cliLine}${hookLine}${mcpLine}${importLine}`,
   );
   return 0;
 }

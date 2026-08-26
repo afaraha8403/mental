@@ -5,21 +5,19 @@ import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, r
 import { dirname, join } from "node:path";
 import { BEGIN, END, RULES_DIR, SKILLS_DIR } from "./pkg.mjs";
 
-const RULE_BODY = `Continuity is Mental. On start/finish of real work, or orientation questions, use the Mental skill.
-
-Run \`mental where\` then \`mental status --json\` (or \`mental search --json\`). Do not grep \`.mental\` or \`~/.mental\`. Do not parse YAML frontmatter yourself.
-
-If \`mental\` is not on PATH, try \`npx @mental/cli …\`. If that fails, continue the user's coding task and mention install. Missing Mental must not block work.
-
-Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run \`mental doctor\`.
-`;
-
 export function skillSourceDir() {
   return join(SKILLS_DIR, "mental");
 }
 
 export function ruleSourceFile() {
   return join(RULES_DIR, "mental.mdc");
+}
+
+/** Body of the always-on rule (frontmatter stripped) — single source is rules/mental.mdc. */
+export function ruleBodyText() {
+  const raw = readFileSync(ruleSourceFile(), "utf8");
+  const m = raw.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/);
+  return (m ? m[1] : raw).trim();
 }
 
 /**
@@ -32,6 +30,7 @@ export function userInstallTargets(home) {
       join(home, ".claude", "skills", "mental"),
       join(home, ".cursor", "skills", "mental"),
       join(home, ".agents", "skills", "mental"),
+      join(home, ".config", "opencode", "skills", "mental"),
     ],
     cursorRule: join(home, ".cursor", "rules", "mental.mdc"),
     managedDocs: [
@@ -104,7 +103,7 @@ export function installSkills({ home, projectDir = null, dryRun = false }) {
     copyRule(targets.cursorRule);
     written.push(targets.cursorRule);
     for (const doc of targets.managedDocs) {
-      mergeManaged(doc, RULE_BODY);
+      mergeManaged(doc, ruleBodyText());
       written.push(doc);
     }
     if (projectDir) {

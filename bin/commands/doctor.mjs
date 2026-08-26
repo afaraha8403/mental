@@ -8,7 +8,7 @@ import { resolveBundle, findLocalMental } from "../lib/resolve.mjs";
 import { loadBindings } from "../lib/bindings.mjs";
 import { checkMentalIgnored, ensureMentalExcluded, gitAvailable } from "../lib/ignore.mjs";
 import { skillsPresent } from "../lib/install-skills.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, brandMark } from "../lib/output.mjs";
 import { CMD } from "../lib/pkg.mjs";
 import { isOptedInLocal } from "../lib/import-legacy.mjs";
 import { findGitRoot } from "../lib/git.mjs";
@@ -143,7 +143,8 @@ export function cmdDoctor(args, io = {}) {
     (d) =>
       d.checks
         .map((c) => `${c.ok ? "✓" : "✖"} ${c.id}: ${c.message}`)
-        .join("\n") + (problems.length ? `\n${problems.length} problem(s)` : "\n✓ doctor clean"),
+        .join("\n") +
+      (problems.length ? `\n${problems.length} problem(s)` : `\n${brandMark()} doctor clean`),
   );
   return problems.length ? 3 : 0;
 }
