@@ -1,31 +1,45 @@
 /**
- * `mental decide` — scaffold a decision file (paths are identities).
+ * `mental decide` — create or update a decision. Paths are identities:
+ * closing an open decision updates the existing file (same as attention).
  */
 import { resolveBundle } from "../lib/resolve.mjs";
-import { bundleName, ensureSkeleton, writeDecision } from "../lib/okf.mjs";
+import {
+  DECISION_STATUSES,
+  bundleName,
+  ensureSkeleton,
+  findDecision,
+  updateDecision,
+  writeDecision,
+} from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult } from "../lib/output.mjs";
 
-const STATUSES = new Set(["open", "deferred", "decided", "superseded"]);
+function flagString(flags, key) {
+  return typeof flags?.[key] === "string" ? flags[key] : null;
+}
 
 export function cmdDecide(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
-  const title = typeof args.flags?.title === "string" ? args.flags.title : null;
-  if (!title) {
+  const title = flagString(args.flags, "title");
+  const path = flagString(args.flags, "path");
+  if (!title && !path) {
     printResult(stdout, args.json, false, undefined, {
       code: "usage",
-      message: "mental decide requires --title",
+      message: "mental decide requires --title (or --path to update)",
     });
     return 1;
   }
-  const status = typeof args.flags?.status === "string" ? args.flags.status : "open";
-  if (!STATUSES.has(status)) {
+
+  const statusFlag = flagString(args.flags, "status");
+  if (statusFlag && !DECISION_STATUSES.has(statusFlag)) {
     printResult(stdout, args.json, false, undefined, {
       code: "usage",
-      message: `status must be ${[...STATUSES].join("|")}`,
+      message: `status must be ${[...DECISION_STATUSES].join("|")}`,
     });
     return 1;
   }
+  const status = statusFlag || "open";
+
   const resolved = resolveBundle({
     cwd: args.cwd ?? process.cwd(),
     home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
@@ -40,17 +54,46 @@ export function cmdDecide(args, io = {}) {
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
-  try {
-    const written = writeDecision(resolved.data.root, {
-      title,
-      status,
-      description: typeof args.flags?.description === "string" ? args.flags.description : "",
-      body: typeof args.flags?.body === "string" ? args.flags.body : "",
-      slug: typeof args.flags?.slug === "string" ? args.flags.slug : undefined,
+
+  const existing = findDecision(resolved.data.root, {
+    path: path || undefined,
+    title: title || undefined,
+  });
+
+  if (path && !existing) {
+    printResult(stdout, args.json, false, undefined, {
+      code: "not-found",
+      message: `no decision file at ${path}`,
     });
+    return 1;
+  }
+
+  try {
+    const written = existing
+      ? updateDecision(resolved.data.root, existing.path, {
+          title: title || undefined,
+          status: statusFlag || undefined,
+          description: flagString(args.flags, "description") || undefined,
+          body: flagString(args.flags, "body") || undefined,
+        })
+      : writeDecision(resolved.data.root, {
+          title,
+          status,
+          description: flagString(args.flags, "description") || "",
+          body: flagString(args.flags, "body") || "",
+          slug: flagString(args.flags, "slug") || undefined,
+        });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
-    printResult(stdout, args.json, true, { ...resolved.data, ...written, indexed }, undefined, () => `wrote ${written.path}`);
+    const verb = written.updated ? "updated" : "wrote";
+    printResult(
+      stdout,
+      args.json,
+      true,
+      { ...resolved.data, ...written, indexed },
+      undefined,
+      () => `${verb} ${written.path}`,
+    );
     return 0;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

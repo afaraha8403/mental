@@ -72,3 +72,58 @@ test("decide --json scaffolds an open decision that status lists", () => {
   assert.equal(st.data.openDecisions[0].title, "Use UUID identity");
   assert.equal(st.data.openDecisions[0].status, "open");
 });
+
+test("decide --status decided updates by title and drops from heartbeat", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  mental(home, root, ["decide", "--json", "--title", "Use UUID identity", "--status", "open"]);
+  const closed = mental(home, root, [
+    "decide",
+    "--json",
+    "--title",
+    "Use UUID identity",
+    "--status",
+    "decided",
+    "--body",
+    "Chosen: UUID in bindings.json, not origin.",
+  ]);
+  assert.equal(closed.status, 0, closed.stderr || closed.stdout);
+  const body = JSON.parse(closed.stdout);
+  assert.equal(body.ok, true);
+  assert.equal(body.data.updated, true);
+
+  const hb = JSON.parse(mental(home, root, ["heartbeat", "--json"]).stdout);
+  assert.equal(hb.data.openDecisions.length, 0);
+
+  const listed = JSON.parse(mental(home, root, ["list", "--json", "--type", "Decision"]).stdout);
+  assert.equal(listed.data.items.length, 1);
+  assert.equal(listed.data.items[0].status, "decided");
+});
+
+test("decide --path updates the named file; missing path is not-found", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const created = JSON.parse(
+    mental(home, root, ["decide", "--json", "--title", "Fork heuristic", "--status", "open"]).stdout,
+  );
+  const path = created.data.path;
+  const r = mental(home, root, [
+    "decide",
+    "--json",
+    "--path",
+    path,
+    "--status",
+    "deferred",
+    "--description",
+    "Awaits remap UX",
+  ]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const md = readFileSync(join(created.data.root, path), "utf8");
+  const { data } = parseFrontmatter(md);
+  assert.equal(data.status, "deferred");
+  assert.equal(data.description, "Awaits remap UX");
+
+  const missing = mental(home, root, ["decide", "--json", "--path", "decisions/nope.md", "--status", "decided"]);
+  assert.equal(missing.status, 1);
+  assert.match(missing.stdout, /not-found|no decision/);
+});

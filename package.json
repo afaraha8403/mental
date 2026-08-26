@@ -19,6 +19,8 @@
     "skills",
     "rules",
     "hooks",
+    "plugin.json",
+    "mcp.json",
     "README.md",
     "LICENSE"
   ],

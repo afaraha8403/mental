@@ -25,7 +25,7 @@ Usage:
   ${CMD} install               Skill + rule + put ${CMD} on PATH (overrides previous)
   ${CMD} uninstall             Remove installed skill/rule/hooks (OKF stays unless --delete-data DELETE)
   ${CMD} hooks on|off          Optional session-start hooks (default off)
-  ${CMD} serve                 Optional MCP stdio (where/status/search/show/journal)
+  ${CMD} serve                 Optional MCP stdio (heartbeat/where/status/search/show/journal/attention/decide/note)
   ${CMD} doctor                PATH, bindings, ignore, skill, index
   ${CMD} reindex               Rebuild derived sqlite index from OKF files
 

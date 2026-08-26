@@ -9,11 +9,14 @@ description: >-
   non-trivial repository work, answering project-orientation questions,
   ingesting a transcript into residue (never storing the transcript), or
   recording a decision that git cannot explain.
+license: MIT
+compatibility: Requires Node.js >=18 and git. Bundled MCP launches ./bin/cli.mjs serve.
+metadata:
+  author: Ali Farahat
+  version: "1.0.0"
+  tags: continuity,journal,decisions,orientation,handoff
 user-invocable: true
 disable-model-invocation: false
-version: "1.0.0"
-author: "Ali Farahat"
-tags: ["continuity", "journal", "decisions", "orientation", "handoff"]
 when_to_use: |
   USE WHEN:
   - You begin substantive work in a repository.
@@ -25,6 +28,8 @@ when_to_use: |
   - The user states a concern, "Tom said X", or "park this for later".
   - A substantive task reaches a verified handoff point.
   - A consequential decision is made, deferred, or awaiting user input.
+  - Mid-task: you are about to change an approach, residue surfaces, or other
+    agents may have written since you oriented.
 
   DO NOT USE WHEN:
   - The turn is trivial or read-only and does not ask for project orientation.
@@ -70,6 +75,7 @@ mental search "…" --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --json
 mental attention --title "…" --kind direction --status open --json
 mental decide --title "…" --status open --json
+mental decide --title "…" --status decided --json
 mental note --title "…" --json
 ```
 
@@ -118,7 +124,10 @@ future work, or is explicitly deferred:
 
 ```text
 mental decide --title "…" --status open --json
+mental decide --title "…" --status decided --json
 ```
+
+Same `--title` updates the existing file (paths are identities). `--path` targets a specific file.
 
 **Attention (residue), not journal, not note.** Use when something occupies
 working memory after a hop but is not a choice-fork and not a durable fact:
@@ -150,6 +159,26 @@ cost a reload, keep the 7 costliest-to-forget; the rest stay in the source.
 left?"): `mental heartbeat --json` (or `status --json`) + read `against` + the
 plan file in the repo. Answer from pointer + last handoff + open attention.
 Do not copy the plan into Mental.
+
+### Mid-chat re-entry (between orient and close)
+
+Mental is not only a start/finish ritual. Step back in cheaply whenever:
+
+- **Approach change** — before abandoning or switching an approach,
+  `mental search "…" --json` (and `mental list --type Decision --json`) for
+  decisions that already settled it. If the switch constrains the future,
+  record it with `mental decide` at once.
+- **Residue surfaces** — "Tom said X", a worry, "park this": record
+  `mental attention` **now**, not at handoff. Chat memory fades; the OKF file
+  does not.
+- **Parallel agents** — other sessions share the same home slice. If time
+  passed or another agent may have written, re-pulse `mental heartbeat --json`
+  before acting on stale assumptions. It derives git live and costs little.
+- **"Why is it like this?"** — `mental search "…" --json` before asking the
+  user; a decision or note may already hold the answer.
+
+Reads are always safe. Writes stay selective: mid-chat re-entry does not change
+what deserves a decision, attention item, or note.
 
 ### 3. Close at a deterministic task boundary
 

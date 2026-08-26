@@ -9,6 +9,8 @@ Git records **what** changed. Mental records the small amount git cannot explain
 
 Mental is **not** a Balakit plugin. Default data lives in `~/.mental` (UUID bindings). Project `./.mental` only after `mental local`.
 
+The repo is an [Agent Plugins](https://agent-plugins.org/) 1.0.0 package: root `plugin.json`, skill at `skills/mental/`, MCP at `mcp.json` (`./bin/cli.mjs serve`). Compatible clients load those directly. The tiny always-on rule and optional hooks are **not** portable v1 components — they still come from `mental install` / `mental hooks on`.
+
 Not on npm yet. Do not publish until the maintainer asks.
 
 ## Install (this machine)
@@ -69,6 +71,8 @@ mental attention --title "Tom said ship the pointer not the dump" --status resol
 mental note --title "Identity is a UUID in bindings.json"
 ```
 
+Same `--title` updates the existing decision (paths are identities). `--path` targets a specific file.
+
 Mental is **not** a todo app. Do not store transcripts. Do not duplicate PLAN.md.
 
 Non-TTY (pipes, agents) always pass `--json`. No args + not a TTY prints help and exits 2.
@@ -86,9 +90,12 @@ mental heartbeat --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --json
 mental attention --title "…" --kind concern --status open --json
 mental decide --title "…" --status open --json
+mental decide --title "…" --status decided --json
 mental search "…" --json
 mental status --json
 ```
+
+Mid-chat, not just start/finish: search decisions before changing an approach, record attention the moment residue surfaces, and re-pulse `mental heartbeat --json` whenever other agents may have written — it is cheap and derives git live.
 
 Do not grep `.mental` or parse YAML. If `mental` is missing, continue the coding task (fail open) and mention install.
 
@@ -114,9 +121,11 @@ Default **off**. Skill + rule are the contract.
 ```bash
 mental hooks on        # Cursor sessionStart + Claude SessionStart/PreCompact → mental status --json
 mental hooks off
-mental serve           # MCP stdio: where, status, search, show, journal
-mental install --mcp   # print a mcpServers snippet; does not enable hooks
+mental serve           # MCP stdio: heartbeat, where, status, search, show, journal, attention, decide, note
+mental install --mcp   # register `mental serve` in ~/.cursor/mcp.json + ~/.claude.json; does not enable hooks
 ```
+
+MCP is how tool-only agents (parallel sessions, orchestrators) re-pulse and record mid-chat. `mental uninstall` removes the MCP entries too.
 
 ```bash
 mental uninstall                 # remove skill/rule/hooks copies; ~/.mental stays
@@ -137,16 +146,16 @@ mental uninstall --delete-data --confirm DELETE   # wipe ~/.mental too
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
 | `mental journal --title --body --resume [--against]` | Append today’s journal section |
 | `mental attention --title --kind` | Create or update residue (`--status resolved` closes it) |
-| `mental decide --title` | Scaffold a decision |
+| `mental decide --title` | Create or update a decision (`--status decided` closes by title; `--path` targets a file) |
 | `mental note --title` | Scaffold a note |
 | `mental local [--import \| --move]` | Project `./.mental` after ignore check |
 | `mental remap [--to id]` | List or retarget this clone’s UUID |
 | `mental split [--copy]` | New UUID for this clone |
 | `mental link --to <id>` | Point this clone at an existing UUID |
-| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH |
-| `mental uninstall` | Remove installed skill/rule/hooks |
+| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH; `--mcp` registers MCP config |
+| `mental uninstall` | Remove installed skill/rule/hooks/MCP entries |
 | `mental hooks on\|off` | Optional session hooks |
-| `mental serve` | Optional MCP stdio |
+| `mental serve` | Optional MCP stdio (full command surface) |
 | `mental doctor` | PATH, bindings, ignore, skills. `--fix-ignore` adds `.mental/` to global excludes |
 
 Global flags: `--json`, `--dir <path>` (same as `MENTAL_DIR`).
@@ -177,3 +186,13 @@ status/current.md          # disposable cache, not SoT
 ```
 
 Index: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` (rebuildable).
+
+Agent Plugin (this repo):
+
+```text
+plugin.json                # Agent Plugins 1.0.0 manifest
+mcp.json                   # stdio MCP → ./bin/cli.mjs serve
+skills/mental/SKILL.md
+rules/mental.mdc           # Cursor always-on pointer (install copies it)
+hooks/session-start.sh     # optional; mental hooks on
+```

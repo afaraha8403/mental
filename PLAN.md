@@ -26,6 +26,9 @@ todos:
   - id: phase-7-deprecate-balakit
     content: Deprecate Mental in Balakit — changelog, README pointer to @mental/cli, remove skill/rule/plugin/CLI policy flags/PERSONAL_RULES, tests, generated AGENTS/CLAUDE mentions
     status: completed
+  - id: phase-9-agent-plugin
+    content: "Ship as Agent Plugins 1.0.0 — root plugin.json, mcp.json stdio (./bin/cli.mjs serve), skills/mental; tests lock the closed schemas"
+    status: completed
 isProject: false
 ---
 
@@ -327,7 +330,7 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 | `mental show <path>`                           | One file, relative to bundle root.                                                                                                                      |
 | `mental journal [--title] [--resume] [--against]` | Append today’s journal section. `--against` binds resume to a repo-relative plan path. Missing `--title` prints usage. Agents pass `--title` `--body` `--resume` `--json`. |
 | `mental attention`                             | Create or update residue (`--kind direction\|concern\|thread`, `--status open\|later\|resolved`). Update by `--title` or `--path`. |
-| `mental decide`                                | Scaffold a decision file                                                                                                                                |
+| `mental decide`                                | Create or update a decision (`--title` or `--path`; `--status decided` closes)                                                                          |
 | `mental note`                                  | Scaffold a note                                                                                                                                         |
 | `mental local [--import | --move]`             | Create `./.mental/`. `--import` copies home slice. `--move` copies and stops using home for this uuid (keep files in home unless user confirms delete). |
 | `mental remap` / `split` / `link`              | Identity                                                                                                                                                |
@@ -407,7 +410,17 @@ Never Stop auto-journal.
 
 ### 8.5 MCP (optional)
 
-`mental serve`: tools `where`, `status`, `search`, `show`, `journal` wrapping CLI functions in-process (don’t spawn a nested CLI if you can import lib). Register via `mental install --mcp`. Agents View likes tools; still keep CLI for everyone else.
+`mental serve`: tools `heartbeat`, `where`, `status`, `search`, `show`, `journal`, `attention`, `decide`, `note` wrapping CLI functions in-process (don’t spawn a nested CLI if you can import lib). `mental install --mcp` registers `mental serve` in user-level MCP configs (`~/.cursor/mcp.json`, `~/.claude.json`); `mental uninstall` removes only Mental’s entry. MCP exists so tool-only agents (parallel sessions, orchestrators) can re-pulse and record mid-chat; still keep CLI for everyone else.
+
+### 8.6 Agent Plugins package (portable)
+
+The repo root **is** the plugin root ([Agent Plugins 1.0.0](https://agent-plugins.org/specification)):
+
+- `plugin.json` — closed manifest (`$schema` + `name` required). No inline MCP, hooks, or rules in this file.
+- `skills/mental/SKILL.md` — discovered as the immediate child of `skills/`.
+- `mcp.json` — stdio `mental` → `./bin/cli.mjs serve` (plugin-relative command; `cwd` `${PLUGIN_ROOT}`).
+
+Rules and hooks stay client-specific (`rules/mental.mdc`, `hooks/session-start.sh`) and install via `mental install` / `mental hooks on`. They are not portable v1 components. Do not add `.cursor-plugin/` unless we later want Cursor marketplace extras on top of the portable package.
 
 ---
 
@@ -468,6 +481,8 @@ PLAN.md                 # this plan, verbatim
 README.md               # install + mental where/status/search + privacy
 LICENSE                 # MIT
 package.json
+plugin.json             # Agent Plugins 1.0.0 manifest
+mcp.json                # stdio MCP → ./bin/cli.mjs serve
 bin/cli.mjs             # argv router
 bin/commands/*.mjs      # where, status, search, journal, local, remap, doctor, install, hooks, serve
 bin/lib/resolve.mjs     # bundle resolution
@@ -577,7 +592,13 @@ Work in `/home/ali/Development/Projects/balakit` **after** Mental CLI install wo
 - Do not wipe user `.mental/` data
 - README: how humans and agents use it; remap; fail-open
 
-**Minimum shippable:** Phases 0–3 + journal/status/where + CLI-first skill. Search/index can follow immediately but `where`+`status`+skill rewrite is the de-risk spike from deliberation.
+### Phase 9 — Agent Plugins package
+
+- Root `plugin.json` targeting `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`
+- Root `mcp.json` targeting the matching MCP schema; stdio command `./bin/cli.mjs serve`
+- `skills/mental/` already matches discovery (immediate child + `SKILL.md`)
+- Tests: closed schemas, name rules, command stays inside the plugin root
+- Do **not** treat rules/hooks as portable components
 
 ---
 

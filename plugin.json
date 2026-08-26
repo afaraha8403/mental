@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "mental",
+  "version": "0.0.0",
+  "description": "Local-first OKF continuity layer for humans and coding agents. Git records what changed; Mental records the resume point, decisions, and residue git cannot explain.",
+  "author": {
+    "name": "Ali Farahat",
+    "url": "https://github.com/afaraha8403"
+  },
+  "homepage": "https://github.com/afaraha8403/mental#readme",
+  "repository": "https://github.com/afaraha8403/mental",
+  "license": "MIT",
+  "keywords": [
+    "continuity",
+    "journal",
+    "decisions",
+    "okf",
+    "skills",
+    "mcp"
+  ]
+}

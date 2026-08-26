@@ -6,6 +6,7 @@ import { existsSync, rmSync } from "node:fs";
 import { userMentalDir } from "../lib/bindings.mjs";
 import { uninstallSkills } from "../lib/uninstall.mjs";
 import { disableHooks } from "../lib/hooks.mjs";
+import { disableMcp } from "../lib/mcp.mjs";
 import { printResult } from "../lib/output.mjs";
 
 export function cmdUninstall(args, io = {}) {
@@ -34,6 +35,7 @@ export function cmdUninstall(args, io = {}) {
     projectDir: args.flags?.project ? args.cwd ?? process.cwd() : null,
   });
   const hooks = disableHooks(home);
+  const mcp = disableMcp(home);
   let wiped = null;
   if (deleteData && confirm === "DELETE") {
     const root = userMentalDir(home);
@@ -47,7 +49,7 @@ export function cmdUninstall(args, io = {}) {
     stdout,
     args.json,
     true,
-    { removed: skills.removed, hooks: hooks.written, wiped },
+    { removed: skills.removed, hooks: hooks.written, mcp: mcp.written, wiped },
     undefined,
     () =>
       `removed ${skills.removed.length} skill/rule path(s)${wiped ? `\nwiped ${wiped}` : "\nOKF left in place (~/.mental)"}`,

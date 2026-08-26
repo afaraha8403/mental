@@ -8,6 +8,7 @@ import { ensureSkeleton } from "../lib/okf.mjs";
 import { installSkills } from "../lib/install-skills.mjs";
 import { installGlobalCli } from "../lib/install-cli.mjs";
 import { enableHooks } from "../lib/hooks.mjs";
+import { enableMcp } from "../lib/mcp.mjs";
 import { CMD } from "../lib/pkg.mjs";
 import { printResult } from "../lib/output.mjs";
 
@@ -38,9 +39,8 @@ export function cmdInstall(args, io = {}) {
   let hookResult = null;
   if (hooks) hookResult = enableHooks(home);
 
-  const mcpSnippet = mcp
-    ? { mcpServers: { mental: { command: CMD, args: ["serve"] } } }
-    : null;
+  let mcpResult = null;
+  if (mcp) mcpResult = enableMcp(home);
 
   const resolved = resolveBundle({
     cwd,
@@ -58,7 +58,7 @@ export function cmdInstall(args, io = {}) {
     cli,
     project: project ? `${cwd}/.github/skills/mental` : null,
     hooks: hookResult,
-    mcp: mcpSnippet,
+    mcp: mcpResult,
     where: resolved.ok ? resolved.data : null,
     imported: imported || null,
   };
@@ -68,7 +68,11 @@ export function cmdInstall(args, io = {}) {
       : "";
   const cliLine = cli.bin ? `\nCLI: ${cli.bin}` : "";
   const hookLine = hooks ? "\nhooks: enabled (session-start → mental status --json)" : "";
-  const mcpLine = mcp ? `\nMCP snippet: ${CMD} serve` : "";
+  const mcpLine = mcp
+    ? mcpResult?.ok
+      ? `\nMCP: ${CMD} serve registered in ${mcpResult.written.join(", ")}`
+      : `\nMCP: config write failed (${mcpResult?.error?.message ?? "unknown"}) — add \`${CMD} serve\` manually`
+    : "";
   printResult(
     stdout,
     args.json,

@@ -10,6 +10,7 @@ export const CONCEPT_DIRS = ["journal", "decisions", "notes", "attention", "stat
 export const ATTENTION_STATUSES = new Set(["open", "later", "resolved"]);
 export const ATTENTION_KINDS = new Set(["direction", "concern", "thread"]);
 export const ATTENTION_HEARTBEAT_CAP = 7;
+export const DECISION_STATUSES = new Set(["open", "deferred", "decided", "superseded"]);
 
 /**
  * @param {Date} [d]
@@ -312,6 +313,50 @@ export function listOpenDecisions(root) {
 }
 
 /**
+ * @param {string} root
+ * @param {{ path?: string, title?: string }} opts
+ * @returns {{ path: string, file: string, title: string, status: string, data: Record<string, string | string[]>, body: string } | null}
+ */
+export function findDecision(root, { path, title } = {}) {
+  const dir = join(root, "decisions");
+  if (!existsSync(dir)) return null;
+  if (path) {
+    const rel = String(path).replace(/\\/g, "/").replace(/^\/+/, "");
+    const got = readBundleFile(root, rel);
+    if (!got.ok) return null;
+    if (!got.data.path.startsWith("decisions/") || !got.data.path.endsWith(".md")) return null;
+    const d = got.data.data;
+    return {
+      path: got.data.path,
+      file: basename(got.data.path),
+      title: String(d.title || basename(got.data.path, ".md")),
+      status: String(d.status || "open"),
+      data: d,
+      body: got.data.body,
+    };
+  }
+  if (!title) return null;
+  const matches = [];
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md"))) {
+    const text = readFileSync(join(dir, file), "utf8");
+    const parsed = parseFrontmatter(text);
+    const t = String(parsed.data.title || basename(file, ".md"));
+    if (t === title) {
+      matches.push({
+        path: `decisions/${file}`,
+        file,
+        title: t,
+        status: String(parsed.data.status || "open"),
+        data: parsed.data,
+        body: parsed.body,
+      });
+    }
+  }
+  matches.sort((a, b) => b.file.localeCompare(a.file));
+  return matches[0] ?? null;
+}
+
+/**
  * One-line blurb for status JSON: frontmatter description, else first body paragraph.
  * @param {Record<string, string | string[]>} data
  * @param {string} body
@@ -574,7 +619,34 @@ ${body.trim() || "<why this choice matters>"}
 ${defaultBody}`,
     ),
   );
-  return { path: rel };
+  return { path: rel, updated: false };
+}
+
+/**
+ * @param {string} root
+ * @param {string} rel
+ * @param {{ title?: string, status?: string, description?: string, body?: string, now?: Date }} opts
+ */
+export function updateDecision(root, rel, { title, status, description, body, now = new Date() }) {
+  const got = readBundleFile(root, rel);
+  if (!got.ok) {
+    throw Object.assign(new Error(got.error.message), { code: got.error.code });
+  }
+  const data = { ...got.data.data };
+  if (title) data.title = title;
+  if (status) data.status = status;
+  if (description) data.description = description;
+  data.timestamp = now.toISOString();
+  data.type = "Decision";
+  let nextBody = got.data.body;
+  if (body != null && body !== "") {
+    const heading = String(data.title || title || "Decision");
+    nextBody = `# ${heading}\n\n${body.trim()}\n`;
+  } else if (title) {
+    nextBody = got.data.body.replace(/^#\s+.+$/m, `# ${title}`);
+  }
+  writeFileSync(got.data.abs, stringifyFrontmatter(data, nextBody));
+  return { path: rel, updated: true };
 }
 
 /**

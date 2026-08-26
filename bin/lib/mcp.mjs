@@ -1,23 +1,32 @@
 /**
  * Minimal MCP stdio server (JSON-RPC + Content-Length). Default off.
  * Tools wrap the same command handlers as the CLI; agents should still prefer
- * `mental … --json` when they can shell.
+ * `mental … --json` when they can shell. MCP exists so agents that only speak
+ * tools (parallel sessions, orchestrators) can re-pulse and record mid-chat.
+ * Also owns `enableMcp`/`disableMcp` — the `install --mcp` config writers.
  */
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { cmdWhere } from "../commands/where.mjs";
+import { cmdHeartbeat } from "../commands/heartbeat.mjs";
 import { cmdStatus } from "../commands/status.mjs";
 import { cmdSearch } from "../commands/search.mjs";
 import { cmdShow } from "../commands/show.mjs";
 import { cmdJournal } from "../commands/journal.mjs";
+import { cmdAttention } from "../commands/attention.mjs";
+import { cmdDecide } from "../commands/decide.mjs";
+import { cmdNote } from "../commands/note.mjs";
 import { VERSION, CMD } from "./pkg.mjs";
 
 const PROTOCOL = "2024-11-05";
 
 const TOOLS = [
+  { name: "heartbeat", description: "Cheap pulse: resume, last outcome, git, residue, unsettled decisions. Safe to re-call any time mid-chat.", inputSchema: { type: "object", properties: {} } },
   { name: "where", description: "Active Mental bundle (root, id, mode)", inputSchema: { type: "object", properties: {} } },
-  { name: "status", description: "Git + latest Resume + open decisions", inputSchema: { type: "object", properties: {} } },
+  { name: "status", description: "Git + latest Resume + open decisions + notes", inputSchema: { type: "object", properties: {} } },
   {
     name: "search",
-    description: "Search OKF concepts",
+    description: "Search OKF concepts (decisions, attention, notes, journal)",
     inputSchema: {
       type: "object",
       properties: { q: { type: "string" } },
@@ -35,13 +44,56 @@ const TOOLS = [
   },
   {
     name: "journal",
-    description: "Append today's journal section",
+    description: "Append today's journal section (one per task boundary, not per turn)",
     inputSchema: {
       type: "object",
       properties: {
         title: { type: "string" },
         body: { type: "string" },
         resume: { type: "string" },
+      },
+      required: ["title"],
+    },
+  },
+  {
+    name: "attention",
+    description: "Create or update residue still in the air. Create needs title + kind; update by title or path; close with status resolved.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        kind: { type: "string", enum: ["direction", "concern", "thread"] },
+        status: { type: "string", enum: ["open", "later", "resolved"] },
+        from: { type: "string", description: "Who raised it (e.g. Tom)" },
+        body: { type: "string" },
+        path: { type: "string", description: "Bundle-relative path of an existing item to update" },
+      },
+    },
+  },
+  {
+    name: "decide",
+    description: "Create or update a decision. Same title updates the existing file (close with status decided).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        status: { type: "string", enum: ["open", "deferred", "decided", "superseded"] },
+        description: { type: "string" },
+        body: { type: "string" },
+        path: { type: "string", description: "Bundle-relative path of an existing decision to update" },
+      },
+    },
+  },
+  {
+    name: "note",
+    description: "Record a durable, non-obvious, repository-specific fact",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        status: { type: "string", enum: ["draft", "active", "superseded"] },
+        description: { type: "string" },
+        body: { type: "string" },
       },
       required: ["title"],
     },
@@ -76,6 +128,7 @@ function runTool(name, args, ctx) {
     flags: {},
     rest: [],
   };
+  if (name === "heartbeat") return capture(cmdHeartbeat, base);
   if (name === "where") return capture(cmdWhere, base);
   if (name === "status") return capture(cmdStatus, base);
   if (name === "search") return capture(cmdSearch, { ...base, rest: [String(args.q || "")] });
@@ -88,6 +141,37 @@ function runTool(name, args, ctx) {
         body: args.body || "",
         resume: args.resume || "Continue. — open loops: none",
       },
+    });
+  }
+  if (name === "attention") {
+    return capture(cmdAttention, {
+      ...base,
+      flags: {
+        title: args.title,
+        path: args.path,
+        kind: args.kind,
+        status: args.status,
+        from: args.from,
+        body: args.body,
+      },
+    });
+  }
+  if (name === "decide") {
+    return capture(cmdDecide, {
+      ...base,
+      flags: {
+        title: args.title,
+        path: args.path,
+        status: args.status,
+        description: args.description,
+        body: args.body,
+      },
+    });
+  }
+  if (name === "note") {
+    return capture(cmdNote, {
+      ...base,
+      flags: { title: args.title, status: args.status, description: args.description, body: args.body },
     });
   }
   return { code: 1, body: { ok: false, error: { code: "unknown-tool", message: name } } };
@@ -186,6 +270,78 @@ export function serveMcp(ctx = {}) {
     stdin.on("end", () => resolve(0));
     stdin.on("error", () => resolve(1));
   });
+}
+
+/**
+ * Cursor user-level MCP config (`mcpServers` at top level).
+ * @param {string} home
+ */
+export function cursorMcpPath(home) {
+  return join(home, ".cursor", "mcp.json");
+}
+
+/**
+ * Claude Code user-level MCP config (`mcpServers` at top level of ~/.claude.json).
+ * @param {string} home
+ */
+export function claudeMcpPath(home) {
+  return join(home, ".claude.json");
+}
+
+function readJson(file, fallback) {
+  if (!existsSync(file)) return fallback;
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(file, data) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+const MCP_ENTRY = () => ({ command: CMD, args: ["serve"] });
+
+/**
+ * Register `mental serve` in user-level MCP configs so tool-only agents can
+ * reach Mental mid-chat. Upserts the `mental` key (install overrides previous);
+ * never touches other servers. Fails open per file with a parse error.
+ * @param {string} home
+ */
+export function enableMcp(home) {
+  /** @type {string[]} */
+  const written = [];
+  for (const file of [cursorMcpPath(home), claudeMcpPath(home)]) {
+    const cfg = readJson(file, {});
+    if (!cfg) {
+      return { ok: false, error: { code: "mcp-parse", message: `Could not parse ${file}` }, written };
+    }
+    cfg.mcpServers = cfg.mcpServers && typeof cfg.mcpServers === "object" ? cfg.mcpServers : {};
+    cfg.mcpServers[CMD] = MCP_ENTRY();
+    writeJson(file, cfg);
+    written.push(file);
+  }
+  return { ok: true, written, server: MCP_ENTRY() };
+}
+
+/**
+ * Remove only Mental's own MCP entry (identified by `command: "mental"`).
+ * @param {string} home
+ */
+export function disableMcp(home) {
+  /** @type {string[]} */
+  const written = [];
+  for (const file of [cursorMcpPath(home), claudeMcpPath(home)]) {
+    const cfg = readJson(file, null);
+    const entry = cfg?.mcpServers?.[CMD];
+    if (!entry || entry.command !== CMD) continue;
+    delete cfg.mcpServers[CMD];
+    writeJson(file, cfg);
+    written.push(file);
+  }
+  return { ok: true, written };
 }
 
 export { TOOLS, handle, encode, runTool };

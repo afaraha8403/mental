@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "mental": {
+      "type": "stdio",
+      "command": "./bin/cli.mjs",
+      "args": ["serve"],
+      "cwd": "${PLUGIN_ROOT}"
+    }
+  }
+}
