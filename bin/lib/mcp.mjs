@@ -12,6 +12,7 @@ import { cmdHeartbeat } from "../commands/heartbeat.mjs";
 import { cmdStatus } from "../commands/status.mjs";
 import { cmdSearch } from "../commands/search.mjs";
 import { cmdShow } from "../commands/show.mjs";
+import { cmdList } from "../commands/list.mjs";
 import { cmdJournal } from "../commands/journal.mjs";
 import { cmdAttention } from "../commands/attention.mjs";
 import { cmdDecide } from "../commands/decide.mjs";
@@ -26,11 +27,30 @@ const TOOLS = [
   { name: "status", description: "Git + latest Resume + open decisions + notes", inputSchema: { type: "object", properties: {} } },
   {
     name: "search",
-    description: "Search OKF concepts (decisions, attention, notes, journal)",
+    description: "Search OKF concepts (decisions, attention, notes, journal). Structured filters optional; then show a path.",
     inputSchema: {
       type: "object",
-      properties: { q: { type: "string" } },
+      properties: {
+        q: { type: "string" },
+        type: { type: "string", description: "Concept type (Decision, Attention, Note, Journal)" },
+        status: { type: "string" },
+        tag: { type: "string" },
+        kind: { type: "string", description: "Attention kind: direction | concern | thread" },
+      },
       required: ["q"],
+    },
+  },
+  {
+    name: "list",
+    description: "List OKF concepts with typed frontmatter filters (no query). Prefer this over search for status/type/kind.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        type: { type: "string" },
+        status: { type: "string" },
+        tag: { type: "string" },
+        kind: { type: "string", description: "Attention kind: direction | concern | thread" },
+      },
     },
   },
   {
@@ -131,7 +151,29 @@ function runTool(name, args, ctx) {
   if (name === "heartbeat") return capture(cmdHeartbeat, base);
   if (name === "where") return capture(cmdWhere, base);
   if (name === "status") return capture(cmdStatus, base);
-  if (name === "search") return capture(cmdSearch, { ...base, rest: [String(args.q || "")] });
+  if (name === "search") {
+    return capture(cmdSearch, {
+      ...base,
+      rest: [String(args.q || "")],
+      flags: {
+        type: args.type,
+        status: args.status,
+        tag: args.tag,
+        kind: args.kind,
+      },
+    });
+  }
+  if (name === "list") {
+    return capture(cmdList, {
+      ...base,
+      flags: {
+        type: args.type,
+        status: args.status,
+        tag: args.tag,
+        kind: args.kind,
+      },
+    });
+  }
   if (name === "show") return capture(cmdShow, { ...base, rest: [String(args.path || "")] });
   if (name === "journal") {
     return capture(cmdJournal, {
@@ -205,7 +247,7 @@ function handle(msg, ctx) {
     const name = msg.params?.name;
     const args = msg.params?.arguments || {};
     const { body } = runTool(name, args, ctx);
-    const text = JSON.stringify(body, null, 2);
+    const text = JSON.stringify(body);
     const isError = body.ok === false;
     return {
       jsonrpc: "2.0",

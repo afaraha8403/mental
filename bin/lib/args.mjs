@@ -12,8 +12,8 @@ Usage:
   ${CMD} where                 Active bundle (root, id, mode) — read-only
   ${CMD} status                Git + latest Resume + residue + open decisions + notes
   ${CMD} search <q>            Query notes/journal/decisions/attention (sqlite or scan)
-  ${CMD} list                  List concepts (--type --status --tag)
-  ${CMD} show <path>           One file, relative to the bundle root
+  ${CMD} list                  List concepts (--type --status --tag --kind)
+  ${CMD} show <path>           One file, relative to the bundle root (includes backlinks)
   ${CMD} journal               Append today's journal section (--against PLAN.md)
   ${CMD} attention             Create or update residue in the air (--kind --status resolved)
   ${CMD} decide                Scaffold a decision file
@@ -25,7 +25,7 @@ Usage:
   ${CMD} install               Skill + rule + put ${CMD} on PATH (overrides previous)
   ${CMD} uninstall             Remove installed skill/rule/hooks (OKF stays unless --delete-data DELETE)
   ${CMD} hooks on|off          Optional session-start hooks (default off)
-  ${CMD} serve                 Optional MCP stdio (heartbeat/where/status/search/show/journal/attention/decide/note)
+  ${CMD} serve                 Optional MCP stdio (heartbeat/where/status/search/list/show/journal/attention/decide/note)
   ${CMD} doctor                PATH, bindings, ignore, skill, index
   ${CMD} reindex               Rebuild derived sqlite index from OKF files
 

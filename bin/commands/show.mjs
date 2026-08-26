@@ -3,6 +3,7 @@
  */
 import { resolveBundle } from "../lib/resolve.mjs";
 import { readBundleFile } from "../lib/okf.mjs";
+import { listBacklinks } from "../lib/index.mjs";
 import { printResult } from "../lib/output.mjs";
 
 export function cmdShow(args, io = {}) {
@@ -31,17 +32,30 @@ export function cmdShow(args, io = {}) {
     printResult(stdout, args.json, false, undefined, file.error);
     return 1;
   }
+  const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
+  const backlinks = listBacklinks({
+    root: resolved.data.root,
+    path: file.data.path,
+    id: resolved.data.id,
+    home,
+    env: args.env ?? process.env,
+  });
   const payload = {
     ...resolved.data,
     path: file.data.path,
     frontmatter: file.data.data,
     body: file.data.body,
+    backlinks,
   };
   printResult(stdout, args.json, true, payload, undefined, (d) => {
     const title = typeof d.frontmatter.title === "string" ? d.frontmatter.title : d.path;
     const type = typeof d.frontmatter.type === "string" ? d.frontmatter.type : "";
     const head = type ? `${title}  [${type}]` : title;
-    return `${head}\n${d.path}\n\n${d.body.trim() || "(empty)"}`;
+    const linked =
+      d.backlinks.length === 0
+        ? ""
+        : `\n\nLinked from:\n${d.backlinks.map((b) => `  [${b.type}] ${b.title} (${b.path})`).join("\n")}`;
+    return `${head}\n${d.path}\n\n${d.body.trim() || "(empty)"}${linked}`;
   });
   return 0;
 }

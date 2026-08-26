@@ -1,0 +1,51 @@
+# Publishes @mental/cli when a GitHub Release is published.
+# First-ever npm version cannot use OIDC (package must exist to attach a
+# trusted publisher). Publish 0.1.0 locally, then connect GitHub Actions on
+# npmjs.com. Later tags are published by this workflow with no token.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Check package version matches tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          test "$TAG" = "v$PKG"
+
+      - name: Publish to npm
+        env:
+          PRERELEASE: ${{ github.event.release.prerelease }}
+        run: |
+          npm install -g npm@latest
+          VERSION=$(node -p "require('./package.json').version")
+          if npm view "@mental/cli@${VERSION}" version >/dev/null 2>&1; then
+            echo "@mental/cli@${VERSION} already on npm — skip"
+            exit 0
+          fi
+          if [ "$PRERELEASE" = "true" ]; then
+            npm publish --access public --tag beta
+          else
+            npm publish --access public
+          fi

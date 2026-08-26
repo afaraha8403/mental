@@ -325,9 +325,9 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 | `mental heartbeat`                             | Same pulse as TTY no-args; agents pass `--json`                                                                                                          |
 | `mental where`                                 | Active root, uuid, mode, reason. Read-only: does not create a binding or ingest leftover.                                                                 |
 | `mental status`                                | Regenerated view: git snapshot + latest Resume + residue + open/deferred decisions + notes. Writes `status/current.md` as cache. Creates identity + leftover ingest on first write. |
-| `mental search <q>`                            | Index or file scan; `--type`, `--status`, `--tag`.                                                                                                      |
-| `mental list`                                  | Concepts with filters.                                                                                                                                  |
-| `mental show <path>`                           | One file, relative to bundle root.                                                                                                                      |
+| `mental search <q>`                            | Index or file scan; `--type`, `--status`, `--tag`, `--kind`. Hits include `description` + `snippet`; FTS ordered by bm25. |
+| `mental list`                                  | Concepts with filters (`--type`, `--status`, `--tag`, `--kind`); includes `description`. |
+| `mental show <path>`                           | One file, relative to bundle root. JSON includes `backlinks`. |
 | `mental journal [--title] [--resume] [--against]` | Append today’s journal section. `--against` binds resume to a repo-relative plan path. Missing `--title` prints usage. Agents pass `--title` `--body` `--resume` `--json`. |
 | `mental attention`                             | Create or update residue (`--kind direction\|concern\|thread`, `--status open\|later\|resolved`). Update by `--title` or `--path`. |
 | `mental decide`                                | Create or update a decision (`--title` or `--path`; `--status decided` closes)                                                                          |
@@ -350,13 +350,15 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 
 ## 7. Index (steal okf-tools, implement small)
 
-v1 schema (illustrative):
+v0.2 schema:
 
-- `concepts(path PK, type, title, status, tags_json, mtime, body_text)`
-- `links(src, dest, raw)`
-- FTS5 on `title + body_text`
+- `concepts(path PK, type, title, description, status, kind, from_val, against, tags_json, mtime, body_text)`
+- `links(src, dest, raw)` — dest is bundle-relative; `show` queries backlinks
+- FTS5 on `title + body_text`, `ORDER BY bm25(concepts_fts)`, `snippet()` on body
 
-Rebuild: walk `*.md` except `index.md`/`log.md` special cases per OKF. Incremental: skip unchanged mtime.
+`INDEX_VERSION` in `bin/lib/index.mjs`: mismatch drops and recreates tables. Rebuild: walk `*.md` except `index.md`/`log.md` special cases per OKF. Incremental mtime skip is still later.
+
+Typed filters (`type`, `status`, `tag`, `kind`) apply **in SQL before LIMIT**, not as a JS post-filter.
 
 If `better-sqlite3` is too heavy for first merge: implement `search` as gray-matter parse + substring, with `--json`, and leave sqlite behind a `mental reindex` stub. **Prefer sqlite in v1** if install is smooth.
 
@@ -410,7 +412,7 @@ Never Stop auto-journal.
 
 ### 8.5 MCP (optional)
 
-`mental serve`: tools `heartbeat`, `where`, `status`, `search`, `show`, `journal`, `attention`, `decide`, `note` wrapping CLI functions in-process (don’t spawn a nested CLI if you can import lib). `mental install --mcp` registers `mental serve` in user-level MCP configs (`~/.cursor/mcp.json`, `~/.claude.json`); `mental uninstall` removes only Mental’s entry. MCP exists so tool-only agents (parallel sessions, orchestrators) can re-pulse and record mid-chat; still keep CLI for everyone else.
+`mental serve`: tools `heartbeat`, `where`, `status`, `search`, `list`, `show`, `journal`, `attention`, `decide`, `note` wrapping CLI functions in-process (don’t spawn a nested CLI if you can import lib). Search/list accept `type`/`status`/`tag`/`kind`. Tool JSON is compact (not pretty-printed). `mental install --mcp` registers `mental serve` in user-level MCP configs (`~/.cursor/mcp.json`, `~/.claude.json`); `mental uninstall` removes only Mental’s entry. MCP exists so tool-only agents (parallel sessions, orchestrators) can re-pulse and record mid-chat; still keep CLI for everyone else.
 
 ### 8.6 Agent Plugins package (portable)
 
@@ -420,7 +422,7 @@ The repo root **is** the plugin root ([Agent Plugins 1.0.0](https://agent-plugin
 - `skills/mental/SKILL.md` — discovered as the immediate child of `skills/`.
 - `mcp.json` — stdio `mental` → `./bin/cli.mjs serve` (plugin-relative command; `cwd` `${PLUGIN_ROOT}`).
 
-Rules and hooks stay client-specific (`rules/mental.mdc`, `hooks/session-start.sh`) and install via `mental install` / `mental hooks on`. They are not portable v1 components. Do not add `.cursor-plugin/` unless we later want Cursor marketplace extras on top of the portable package.
+Rules and hooks stay client-specific (`rules/mental.mdc`, `hooks/session-start.sh`) and install via `mental install` / `mental hooks on`. They are not portable v1 components. Cursor-facing extras live in `.cursor-plugin/plugin.json` (`logo: assets/logo.svg`). Claude Code extras live in `.claude-plugin/plugin.json` (`displayName: Mental`, `mcpServers: ./mcp.json`). Do not put `logo` on the portable `plugin.json` — the schema is closed.
 
 ---
 

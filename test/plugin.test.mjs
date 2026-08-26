@@ -216,7 +216,35 @@ test("plugin package paths stay inside the plugin root", () => {
   assert.equal(relative(ROOT, cmd).startsWith(".."), false);
   assert.equal(existsSync(join(ROOT, "bin", "cli.mjs")), true);
   const pkg = loadJson(join(ROOT, "package.json"));
-  for (const extra of ["plugin.json", "mcp.json"]) {
+  for (const extra of ["plugin.json", "mcp.json", "assets"]) {
     assert.ok(pkg.files.includes(extra), `package.json files must include ${extra}`);
   }
+});
+
+test("Cursor shim points at the SVG logo; Claude shim has displayName", () => {
+  const logo = join(ROOT, "assets", "logo.svg");
+  assert.equal(statSync(logo).isFile(), true);
+  assert.match(readFileSync(logo, "utf8"), /<svg[\s\S]*<\/svg>/);
+  const plugin = loadJson(join(ROOT, "plugin.json"));
+  assert.equal("logo" in plugin, false, "portable plugin.json must not grow a logo field");
+
+  const cursor = loadJson(join(ROOT, ".cursor-plugin", "plugin.json"));
+  assert.equal(cursor.name, "mental");
+  assert.equal(cursor.logo, "assets/logo.svg");
+  assert.equal(cursor.description, plugin.description);
+  assert.equal(cursor.version, plugin.version);
+  assert.equal(existsSync(join(ROOT, cursor.logo)), true);
+
+  const claude = loadJson(join(ROOT, ".claude-plugin", "plugin.json"));
+  assert.equal(claude.name, "mental");
+  assert.equal(claude.displayName, "Mental");
+  assert.equal(claude.mcpServers, "./.mcp.json");
+  assert.equal(existsSync(join(ROOT, ".mcp.json")), true);
+  const claudeMcp = loadJson(join(ROOT, ".mcp.json"));
+  assert.equal(claudeMcp.mcpServers.mental.command, "node");
+  assert.equal(claude.description, plugin.description);
+
+  const market = loadJson(join(ROOT, ".claude-plugin", "marketplace.json"));
+  assert.equal(market.name, "mental");
+  assert.equal(market.plugins[0].source, "./");
 });

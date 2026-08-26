@@ -1,0 +1,17 @@
+{
+  "name": "mental",
+  "owner": {
+    "name": "Ali Farahat",
+    "url": "https://github.com/afaraha8403"
+  },
+  "metadata": {
+    "description": "Never reconstruct where you left off."
+  },
+  "plugins": [
+    {
+      "name": "mental",
+      "source": "./",
+      "description": "Never reconstruct where you left off. Mental keeps the resume, the decisions, and what's still in the air — so you and your agents continue as if the last session never ended."
+    }
+  ]
+}

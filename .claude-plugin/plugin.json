@@ -1,6 +1,6 @@
 {
-  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mental",
+  "displayName": "Mental",
   "version": "0.1.0",
   "description": "Never reconstruct where you left off. Mental keeps the resume, the decisions, and what's still in the air — so you and your agents continue as if the last session never ended.",
   "author": {
@@ -17,5 +17,6 @@
     "okf",
     "skills",
     "mcp"
-  ]
+  ],
+  "mcpServers": "./.mcp.json"
 }

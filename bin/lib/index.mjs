@@ -10,7 +10,10 @@ import { dirname, join, relative } from "node:path";
 import { parseFrontmatter } from "./okf.mjs";
 
 const require = createRequire(import.meta.url);
-const INDEX_VERSION = "1";
+/** Bump when the concepts table shape changes; mismatch drops and recreates. */
+export const INDEX_VERSION = "2";
+
+const SNIPPET_CHARS = 160;
 
 /**
  * @param {string} home
@@ -32,20 +35,63 @@ function loadDatabaseSync() {
 }
 
 /**
- * @param {Array<{ type: string, status: string, tags: string[] }>} items
- * @param {{ type?: string, status?: string, tag?: string }} [filters]
+ * @param {Array<{ type: string, status: string, tags: string[], kind?: string }>} items
+ * @param {{ type?: string, status?: string, tag?: string, kind?: string }} [filters]
  */
-export function filterConcepts(items, { type, status, tag } = {}) {
+export function filterConcepts(items, { type, status, tag, kind } = {}) {
   let out = items;
   if (type) out = out.filter((c) => c.type.toLowerCase() === String(type).toLowerCase());
   if (status) out = out.filter((c) => c.status === status);
   if (tag) out = out.filter((c) => c.tags.includes(String(tag)));
+  if (kind) out = out.filter((c) => String(c.kind || "").toLowerCase() === String(kind).toLowerCase());
   return out;
 }
 
 /**
+ * Bundle-relative dest for a markdown link. `./` and `../` resolve against
+ * the source file; anything else is treated as already bundle-relative (OKF).
+ * @param {string} src
+ * @param {string} dest
+ */
+export function normalizeDest(src, dest) {
+  let d = String(dest || "")
+    .split("#")[0]
+    .trim()
+    .replace(/\\/g, "/");
+  if (!d) return "";
+  if (d.startsWith("/")) d = d.slice(1);
+  if (d.startsWith("./") || d.startsWith("../")) {
+    const srcDir = src.includes("/") ? src.slice(0, src.lastIndexOf("/")) : "";
+    const segs = [...(srcDir ? srcDir.split("/") : []), ...d.split("/")];
+    const parts = [];
+    for (const s of segs) {
+      if (s === "." || s === "") continue;
+      if (s === "..") parts.pop();
+      else parts.push(s);
+    }
+    d = parts.join("/");
+  }
+  if (d && !d.endsWith(".md")) d += ".md";
+  return d;
+}
+
+/**
  * @param {string} root bundle directory
- * @returns {Array<{ path: string, type: string, title: string, status: string, tags: string[], mtime: number, body: string, abs: string }>}
+ * @returns {Array<{
+ *   path: string,
+ *   type: string,
+ *   title: string,
+ *   description: string,
+ *   status: string,
+ *   kind: string,
+ *   from: string,
+ *   against: string,
+ *   tags: string[],
+ *   mtime: number,
+ *   body: string,
+ *   searchable: string,
+ *   abs: string,
+ * }>}
  */
 export function listConcepts(root) {
   /** @type {ReturnType<typeof listConcepts>} */
@@ -98,10 +144,15 @@ function walk(base, dir, out) {
       path: rel,
       type,
       title,
+      description,
       status: String(data.status || ""),
+      kind: data.kind ? String(data.kind) : "",
+      from: data.from ? String(data.from) : "",
+      against: data.against ? String(data.against) : "",
       tags: Array.isArray(data.tags) ? data.tags.map(String) : data.tags ? [String(data.tags)] : [],
       mtime: Math.floor(st.mtimeMs),
-      body: searchable,
+      body,
+      searchable,
       abs,
     });
   }
@@ -117,7 +168,12 @@ function inferType(rel) {
 
 const LINK_RE = /\[[^\]]*\]\(([^)]+)\)/g;
 
-function extractLinks(src, body) {
+/**
+ * @param {string} src
+ * @param {string} body
+ * @returns {Array<{ src: string, dest: string, raw: string }>}
+ */
+export function extractLinks(src, body) {
   /** @type {Array<{ src: string, dest: string, raw: string }>} */
   const out = [];
   let m;
@@ -125,9 +181,53 @@ function extractLinks(src, body) {
   while ((m = re.exec(body))) {
     const raw = m[1].trim();
     if (!raw || raw.startsWith("http:") || raw.startsWith("https:") || raw.startsWith("mailto:")) continue;
-    out.push({ src, dest: raw.split("#")[0], raw });
+    const dest = normalizeDest(src, raw);
+    if (!dest) continue;
+    out.push({ src, dest, raw });
   }
   return out;
+}
+
+const SCHEMA_SQL = `
+  PRAGMA journal_mode = WAL;
+  CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
+  CREATE TABLE IF NOT EXISTS concepts (
+    path TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT,
+    description TEXT,
+    status TEXT,
+    kind TEXT,
+    from_val TEXT,
+    against TEXT,
+    tags_json TEXT,
+    mtime INTEGER,
+    body_text TEXT
+  );
+  CREATE TABLE IF NOT EXISTS links (
+    src TEXT NOT NULL,
+    dest TEXT NOT NULL,
+    raw TEXT
+  );
+  CREATE VIRTUAL TABLE IF NOT EXISTS concepts_fts USING fts5(path, title, body_text);
+`;
+
+/**
+ * @param {import("node:sqlite").DatabaseSync} db
+ */
+function ensureSchema(db) {
+  db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);");
+  let version = "0";
+  try {
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'version'").get();
+    version = row?.value ? String(row.value) : "0";
+  } catch {
+    version = "0";
+  }
+  if (version !== INDEX_VERSION) {
+    db.exec("DROP TABLE IF EXISTS concepts; DROP TABLE IF EXISTS links; DROP TABLE IF EXISTS concepts_fts;");
+  }
+  db.exec(SCHEMA_SQL);
 }
 
 /**
@@ -144,42 +244,33 @@ export function reindexBundle({ root, id, home, env = process.env }) {
   try {
     mkdirSync(dirname(file), { recursive: true });
     const db = new DatabaseSync(file);
-    db.exec(`
-      PRAGMA journal_mode = WAL;
-      CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);
-      CREATE TABLE IF NOT EXISTS concepts (
-        path TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        title TEXT,
-        status TEXT,
-        tags_json TEXT,
-        mtime INTEGER,
-        body_text TEXT
-      );
-      CREATE TABLE IF NOT EXISTS links (
-        src TEXT NOT NULL,
-        dest TEXT NOT NULL,
-        raw TEXT
-      );
-      CREATE VIRTUAL TABLE IF NOT EXISTS concepts_fts USING fts5(path, title, body_text);
-    `);
+    ensureSchema(db);
     db.exec("DELETE FROM concepts; DELETE FROM links; DELETE FROM concepts_fts;");
     const insC = db.prepare(
-      "INSERT INTO concepts (path, type, title, status, tags_json, mtime, body_text) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO concepts (path, type, title, description, status, kind, from_val, against, tags_json, mtime, body_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     const insL = db.prepare("INSERT INTO links (src, dest, raw) VALUES (?, ?, ?)");
     const insF = db.prepare("INSERT INTO concepts_fts (path, title, body_text) VALUES (?, ?, ?)");
     for (const c of concepts) {
-      insC.run(c.path, c.type, c.title, c.status, JSON.stringify(c.tags), c.mtime, c.body);
-      insF.run(c.path, c.title, c.body);
+      insC.run(
+        c.path,
+        c.type,
+        c.title,
+        c.description,
+        c.status,
+        c.kind,
+        c.from,
+        c.against,
+        JSON.stringify(c.tags),
+        c.mtime,
+        c.searchable,
+      );
+      insF.run(c.path, c.title, c.searchable);
       for (const l of extractLinks(c.path, c.body)) insL.run(l.src, l.dest, l.raw);
     }
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("version", INDEX_VERSION);
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("root", root);
-    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run(
-      "builtAt",
-      new Date().toISOString(),
-    );
+    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("builtAt", new Date().toISOString());
     db.close();
     return { ok: true, path: file, concepts: concepts.length, backend: "sqlite" };
   } catch (err) {
@@ -195,6 +286,39 @@ export function reindexBundle({ root, id, home, env = process.env }) {
 
 /**
  * @param {{
+ *   type?: string,
+ *   status?: string,
+ *   tag?: string,
+ *   kind?: string,
+ * }} filters
+ * @returns {{ sql: string, params: string[] }}
+ */
+function filterSql(filters) {
+  /** @type {string[]} */
+  const clauses = [];
+  /** @type {string[]} */
+  const params = [];
+  if (filters.type) {
+    clauses.push("lower(c.type) = lower(?)");
+    params.push(filters.type);
+  }
+  if (filters.status) {
+    clauses.push("c.status = ?");
+    params.push(filters.status);
+  }
+  if (filters.kind) {
+    clauses.push("lower(c.kind) = lower(?)");
+    params.push(filters.kind);
+  }
+  if (filters.tag) {
+    clauses.push("EXISTS (SELECT 1 FROM json_each(c.tags_json) WHERE value = ?)");
+    params.push(filters.tag);
+  }
+  return { sql: clauses.length ? ` AND ${clauses.join(" AND ")}` : "", params };
+}
+
+/**
+ * @param {{
  *   root: string,
  *   id?: string | null,
  *   home?: string | null,
@@ -203,6 +327,7 @@ export function reindexBundle({ root, id, home, env = process.env }) {
  *   type?: string,
  *   status?: string,
  *   tag?: string,
+ *   kind?: string,
  *   limit?: number,
  * }} opts
  */
@@ -215,67 +340,111 @@ export function searchBundle({
   type,
   status,
   tag,
+  kind,
   limit = 50,
 }) {
   const needle = q.trim().toLowerCase();
+  const filters = { type, status, tag, kind };
   if (id && home) {
     const file = indexPath(home, id, env);
     const DatabaseSync = loadDatabaseSync();
     if (DatabaseSync && existsSync(file)) {
+      maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file });
       try {
-        return { backend: "sqlite", hits: searchSqlite(DatabaseSync, file, needle, { type, status, tag, limit }) };
+        return { backend: "sqlite", hits: searchSqlite(DatabaseSync, file, needle, { ...filters, limit }) };
       } catch {
         // fall through to scan
       }
     }
   }
-  return { backend: "scan", hits: searchScan(listConcepts(root), needle, { type, status, tag, limit }) };
+  return { backend: "scan", hits: searchScan(listConcepts(root), needle, { ...filters, limit }) };
+}
+
+/**
+ * Rebuild if the on-disk schema predates INDEX_VERSION.
+ * @param {{ root: string, id: string, home: string, env: NodeJS.ProcessEnv, DatabaseSync: typeof import("node:sqlite").DatabaseSync, file: string }} opts
+ */
+function maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file }) {
+  let version = "0";
+  const db = new DatabaseSync(file);
+  try {
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'version'").get();
+    version = row?.value ? String(row.value) : "0";
+  } catch {
+    version = "0";
+  } finally {
+    db.close();
+  }
+  if (version !== INDEX_VERSION) reindexBundle({ root, id, home, env });
 }
 
 /**
  * @param {typeof import("node:sqlite").DatabaseSync} DatabaseSync
  */
-function searchSqlite(DatabaseSync, file, needle, { type, status, tag, limit }) {
+function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, limit }) {
   const db = new DatabaseSync(file);
   try {
+    const { sql: extra, params: filterParams } = filterSql({ type, status, tag, kind });
     const like = db.prepare(
-      `SELECT path, type, title, status, tags_json
-       FROM concepts
-       WHERE lower(title) LIKE ? OR lower(body_text) LIKE ? OR lower(path) LIKE ?
+      `SELECT c.path AS path, c.type AS type, c.title AS title, c.description AS description,
+              c.status AS status, c.kind AS kind, c.tags_json AS tags_json, c.body_text AS body_text
+       FROM concepts c
+       WHERE (lower(c.title) LIKE ? OR lower(c.body_text) LIKE ? OR lower(c.path) LIKE ?)${extra}
        LIMIT ?`,
     );
     const pat = `%${needle}%`;
     let rows = [];
     try {
       const fts = db.prepare(
-        `SELECT c.path AS path, c.type AS type, c.title AS title, c.status AS status, c.tags_json AS tags_json
-         FROM concepts_fts f
-         JOIN concepts c ON c.path = f.path
-         WHERE concepts_fts MATCH ?
+        `SELECT c.path AS path, c.type AS type, c.title AS title, c.description AS description,
+                c.status AS status, c.kind AS kind, c.tags_json AS tags_json,
+                snippet(concepts_fts, 2, '', '', '…', 32) AS snippet
+         FROM concepts_fts
+         JOIN concepts c ON c.path = concepts_fts.path
+         WHERE concepts_fts MATCH ?${extra}
+         ORDER BY bm25(concepts_fts)
          LIMIT ?`,
       );
-      const tokens = needle.replace(/[^\p{L}\p{N}\s]+/gu, " ").trim().split(/\s+/).filter(Boolean);
+      const tokens = needle
+        .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+        .trim()
+        .split(/\s+/)
+        .filter(Boolean);
       const q = tokens.length ? tokens.map((t) => `${t}*`).join(" AND ") : needle;
-      rows = fts.all(q, limit);
+      rows = fts.all(q, ...filterParams, limit);
     } catch {
       rows = [];
     }
     if (!rows || rows.length === 0) {
-      rows = like.all(pat, pat, pat, limit);
+      try {
+        rows = like.all(pat, pat, pat, ...filterParams, limit);
+      } catch {
+        rows = [];
+      }
     }
-    return filterHits(
-      (rows || []).map((r) => ({
-        path: String(r.path ?? ""),
-        type: String(r.type ?? ""),
-        title: String(r.title || ""),
-        status: String(r.status || ""),
-        tags: parseTagsJson(r.tags_json),
-      })),
-      { type, status, tag, limit },
-    );
+    return (rows || []).map((r) => rowToHit(r, needle)).slice(0, limit);
   } finally {
     db.close();
   }
+}
+
+/**
+ * @param {Record<string, unknown>} r
+ * @param {string} needle
+ */
+function rowToHit(r, needle) {
+  const body = String(r.body_text ?? r.snippet ?? "");
+  const snippet = r.snippet != null && String(r.snippet).trim() ? String(r.snippet).trim() : scanSnippet(body, needle);
+  return {
+    path: String(r.path ?? ""),
+    type: String(r.type ?? ""),
+    title: String(r.title || ""),
+    description: String(r.description || ""),
+    status: String(r.status || ""),
+    kind: String(r.kind || ""),
+    tags: parseTagsJson(r.tags_json),
+    snippet,
+  };
 }
 
 function parseTagsJson(raw) {
@@ -287,25 +456,108 @@ function parseTagsJson(raw) {
   }
 }
 
-function searchScan(concepts, needle, { type, status, tag, limit }) {
-  const hits = concepts
-    .filter((c) => `${c.title}\n${c.body}`.toLowerCase().includes(needle))
+/**
+ * @param {string} text
+ * @param {string} needle
+ */
+function scanSnippet(text, needle, max = SNIPPET_CHARS) {
+  const compact = String(text || "").replace(/\s+/g, " ").trim();
+  if (!compact) return "";
+  const lower = compact.toLowerCase();
+  const i = needle ? lower.indexOf(needle) : 0;
+  if (i < 0) return compact.slice(0, max);
+  const start = Math.max(0, i - 40);
+  let s = compact.slice(start, start + max);
+  if (start > 0) s = `…${s}`;
+  if (start + max < compact.length) s = `${s}…`;
+  return s;
+}
+
+function searchScan(concepts, needle, { type, status, tag, kind, limit }) {
+  const hits = filterConcepts(concepts, { type, status, tag, kind })
+    .filter((c) => `${c.title}\n${c.searchable}`.toLowerCase().includes(needle))
     .map((c) => ({
       path: c.path,
       type: c.type,
       title: c.title,
+      description: c.description,
       status: c.status,
+      kind: c.kind,
       tags: c.tags,
+      snippet: scanSnippet(c.searchable, needle),
     }));
-  return filterHits(hits, { type, status, tag, limit });
+  return hits.slice(0, limit);
 }
 
-function filterHits(hits, { type, status, tag, limit }) {
-  let out = hits;
-  if (type) out = out.filter((h) => h.type.toLowerCase() === type.toLowerCase());
-  if (status) out = out.filter((h) => h.status === status);
-  if (tag) out = out.filter((h) => h.tags.includes(tag));
-  return out.slice(0, limit);
+/**
+ * Concepts that link to `path` (bundle-relative). SQLite first, file-scan fallback.
+ * @param {{
+ *   root: string,
+ *   path: string,
+ *   id?: string | null,
+ *   home?: string | null,
+ *   env?: NodeJS.ProcessEnv,
+ * }} opts
+ * @returns {Array<{ path: string, type: string, title: string }>}
+ */
+export function listBacklinks({ root, path: rel, id = null, home = null, env = process.env }) {
+  const target = normalizeDest("", rel) || rel;
+  if (id && home) {
+    const file = indexPath(home, id, env);
+    const DatabaseSync = loadDatabaseSync();
+    if (DatabaseSync && existsSync(file)) {
+      maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file });
+      try {
+        return backlinksSqlite(DatabaseSync, file, target);
+      } catch {
+        // fall through to scan
+      }
+    }
+  }
+  return backlinksScan(listConcepts(root), target);
+}
+
+/**
+ * @param {typeof import("node:sqlite").DatabaseSync} DatabaseSync
+ * @param {string} file
+ * @param {string} target
+ */
+function backlinksSqlite(DatabaseSync, file, target) {
+  const db = new DatabaseSync(file);
+  try {
+    const rows = db
+      .prepare(
+        `SELECT DISTINCT c.path AS path, c.type AS type, c.title AS title
+         FROM links l
+         JOIN concepts c ON c.path = l.src
+         WHERE l.dest = ? AND l.src != ?
+         ORDER BY c.path`,
+      )
+      .all(target, target);
+    return (rows || []).map((r) => ({
+      path: String(r.path ?? ""),
+      type: String(r.type ?? ""),
+      title: String(r.title || ""),
+    }));
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * @param {ReturnType<typeof listConcepts>} concepts
+ * @param {string} target
+ */
+function backlinksScan(concepts, target) {
+  /** @type {Array<{ path: string, type: string, title: string }>} */
+  const out = [];
+  for (const c of concepts) {
+    if (c.path === target) continue;
+    if (extractLinks(c.path, c.body).some((l) => l.dest === target)) {
+      out.push({ path: c.path, type: c.type, title: c.title });
+    }
+  }
+  return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 
 /**

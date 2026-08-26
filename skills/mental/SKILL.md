@@ -72,6 +72,8 @@ mental where --json
 mental heartbeat --json
 mental status --json
 mental search "…" --json
+mental list --type Decision --json
+mental show <path> --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --json
 mental attention --title "…" --kind direction --status open --json
 mental decide --title "…" --status open --json
@@ -164,18 +166,22 @@ Do not copy the plan into Mental.
 
 Mental is not only a start/finish ritual. Step back in cheaply whenever:
 
+- **Structured lookup** — open decisions, residue of a kind, a status:
+  `mental list --type Decision --status open --json` (or `--kind direction`).
+  Do not search and do not grep YAML for field filters.
 - **Approach change** — before abandoning or switching an approach,
-  `mental search "…" --json` (and `mental list --type Decision --json`) for
-  decisions that already settled it. If the switch constrains the future,
-  record it with `mental decide` at once.
+  `mental search "…" --json` then `mental show <path> --json` for the hit
+  (backlinks are on `show`). Also `mental list --type Decision --json`.
+  If the switch constrains the future, record it with `mental decide` at once.
 - **Residue surfaces** — "Tom said X", a worry, "park this": record
   `mental attention` **now**, not at handoff. Chat memory fades; the OKF file
   does not.
 - **Parallel agents** — other sessions share the same home slice. If time
   passed or another agent may have written, re-pulse `mental heartbeat --json`
   before acting on stale assumptions. It derives git live and costs little.
-- **"Why is it like this?"** — `mental search "…" --json` before asking the
-  user; a decision or note may already hold the answer.
+- **"Why is it like this?"** — `mental search "…" --json`, then `show` the
+  path; a decision or note may already hold the answer. Follow `backlinks`
+  instead of grepping.
 
 Reads are always safe. Writes stay selective: mid-chat re-entry does not change
 what deserves a decision, attention item, or note.

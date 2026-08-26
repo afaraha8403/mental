@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="Mental" width="128" height="128">
+</p>
+
 # Mental
 
 Local-first continuity layer for you and your coding agents.
@@ -6,30 +10,98 @@ Git records **what** changed. Mental records the small amount git cannot explain
 
 - **Repo:** https://github.com/afaraha8403/mental
 - **Spec:** [PLAN.md](./PLAN.md)
+- **Plugin standard:** [Agent Plugins 1.0.0](https://agent-plugins.org/specification)
 
 Mental is **not** a Balakit plugin. Default data lives in `~/.mental` (UUID bindings). Project `./.mental` only after `mental local`.
 
-The repo is an [Agent Plugins](https://agent-plugins.org/) 1.0.0 package: root `plugin.json`, skill at `skills/mental/`, MCP at `mcp.json` (`./bin/cli.mjs serve`). Compatible clients load those directly. The tiny always-on rule and optional hooks are **not** portable v1 components — they still come from `mental install` / `mental hooks on`.
+## Install
 
-Not on npm yet. Do not publish until the maintainer asks.
+### Paste this into your agent
 
-## Install (this machine)
+Copy the block into Cursor, Claude Code, Copilot, Codex, or any other coding agent:
 
-From a clone of this repo:
+```text
+Install Mental from https://github.com/afaraha8403/mental.
+
+Mental is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air.
+
+The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skill at skills/mental/, MCP at mcp.json.
+
+Use this client's native plugin install if you have one, then put the CLI on PATH and finish setup:
+
+  npm i -g @mental/cli
+  mental install
+  mental doctor
+
+Do not enable hooks unless I ask. Optional MCP is `mental install --mcp`. After doctor, tell me what it reports.
+```
+
+### Client one-liners
+
+**Cursor** — paste in Agent chat:
+
+```text
+/add-plugin https://github.com/afaraha8403/mental
+```
+
+**Claude Code:**
+
+```text
+/plugin marketplace add afaraha8403/mental
+/plugin install mental@mental
+```
+
+**VS Code** — Command Palette → **Chat: Install Plugin From Source**, then:
+
+```text
+https://github.com/afaraha8403/mental
+```
+
+**GitHub Copilot CLI:**
+
+```bash
+copilot plugin marketplace add afaraha8403/mental
+copilot plugin install mental@mental
+```
+
+Plugin install loads the skill and MCP. Still run `mental install` so the CLI, skill, and tiny always-on rule land on this machine.
+
+### CLI
+
+```bash
+npm i -g @mental/cli
+mental install
+```
+
+Last install wins. That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, and `~/.agents`, and creates a `~/.mental` skeleton. It does **not** turn on hooks or MCP.
+
+From a clone, without npm:
 
 ```bash
 cd /path/to/mental
 node bin/cli.mjs install --json
 ```
 
-That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, and `~/.agents`, and creates a `~/.mental` skeleton. It does **not** turn on hooks or MCP.
-
 ```bash
 mental doctor          # PATH, bindings, ignore, skills
 mental doctor --fix-ignore   # add .mental/ and .mental-id to your global git excludes
 ```
 
-After `@mental/cli` is published: `npm i -g @mental/cli` then `mental install` (last install wins).
+## Agent Plugins 1.0.0
+
+Mental is packaged as a portable [Agent Plugins](https://agent-plugins.org/) 1.0.0 plugin — the vendor-neutral format maintained by Amazon, Cursor, Microsoft, OpenAI, and Vercel. Compatible clients (Cursor, VS Code, GitHub Copilot, ChatGPT/Codex, Kiro) load the same directory: no per-client rewrite of the skill or MCP server.
+
+The spec's interoperability floor is small and closed:
+
+| Piece | Where | Role |
+| --- | --- | --- |
+| `plugin.json` | repo root | Manifest (`$schema` + `name`). The portable schema has no icon field. |
+| `skills/mental/` | Agent Skills | Procedure: when to journal, CLI contract, privacy. |
+| `mcp.json` | repo root | stdio MCP → `./bin/cli.mjs serve` (`cwd` `${PLUGIN_ROOT}`) |
+
+Cursor extras live in `.cursor-plugin/plugin.json` (logo). Claude Code extras live in `.claude-plugin/plugin.json` (`displayName: Mental`) and `.claude-plugin/marketplace.json`. Rules and hooks are **not** portable v1 components — they still come from `mental install` / `mental hooks on`.
+
+Plugin install loads the skill and MCP. The CLI remains the contract: humans type `mental`; agents call `mental … --json`.
 
 ## How you use it (human)
 
@@ -58,7 +130,7 @@ mental status          # git + resume + residue + open decisions + notes (writes
 mental heartbeat --json  # same pulse as `mental` on a TTY; agents use this
 mental where           # root, uuid, mode — read-only, does not create identity
 mental search overlay
-mental list --type Decision
+mental list --type Decision --kind direction
 mental show notes/some-fact.md
 ```
 
@@ -92,6 +164,8 @@ mental attention --title "…" --kind concern --status open --json
 mental decide --title "…" --status open --json
 mental decide --title "…" --status decided --json
 mental search "…" --json
+mental list --type Decision --json
+mental show notes/some-fact.md --json
 mental status --json
 ```
 
@@ -121,7 +195,7 @@ Default **off**. Skill + rule are the contract.
 ```bash
 mental hooks on        # Cursor sessionStart + Claude SessionStart/PreCompact → mental status --json
 mental hooks off
-mental serve           # MCP stdio: heartbeat, where, status, search, show, journal, attention, decide, note
+mental serve           # MCP stdio: heartbeat, where, status, search, list, show, journal, attention, decide, note
 mental install --mcp   # register `mental serve` in ~/.cursor/mcp.json + ~/.claude.json; does not enable hooks
 ```
 
@@ -140,9 +214,9 @@ mental uninstall --delete-data --confirm DELETE   # wipe ~/.mental too
 | `mental heartbeat` | Same pulse; agents pass `--json` |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only) |
 | `mental status` | Git + Resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
-| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`) |
-| `mental list` | List concepts |
-| `mental show <path>` | One OKF file relative to the bundle root |
+| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`); hits include `description` + `snippet` |
+| `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`) |
+| `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`) |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
 | `mental journal --title --body --resume [--against]` | Append today’s journal section |
 | `mental attention --title --kind` | Create or update residue (`--status resolved` closes it) |
@@ -192,6 +266,9 @@ Agent Plugin (this repo):
 ```text
 plugin.json                # Agent Plugins 1.0.0 manifest
 mcp.json                   # stdio MCP → ./bin/cli.mjs serve
+assets/logo.svg            # Cursor logo (portable spec has no icon field)
+.cursor-plugin/plugin.json
+.claude-plugin/plugin.json # displayName: Mental
 skills/mental/SKILL.md
 rules/mental.mdc           # Cursor always-on pointer (install copies it)
 hooks/session-start.sh     # optional; mental hooks on

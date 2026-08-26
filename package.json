@@ -1,7 +1,7 @@
 {
   "name": "@mental/cli",
-  "version": "0.0.0",
-  "description": "Local-first OKF continuity layer for humans and coding agents",
+  "version": "0.1.0",
+  "description": "Never reconstruct where you left off. Mental keeps the resume, the decisions, and what's still in the air.",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -21,7 +21,12 @@
     "hooks",
     "plugin.json",
     "mcp.json",
+    "assets",
+    ".cursor-plugin",
+    ".claude-plugin",
+    ".mcp.json",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "repository": {

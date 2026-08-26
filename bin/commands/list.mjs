@@ -1,5 +1,5 @@
 /**
- * `mental list` — concepts in the active bundle (filters: --type --status --tag).
+ * `mental list` — concepts in the active bundle (filters: --type --status --tag --kind).
  */
 import { resolveBundle } from "../lib/resolve.mjs";
 import { filterConcepts, listConcepts } from "../lib/index.mjs";
@@ -10,7 +10,9 @@ function summarize(c) {
     path: c.path,
     type: c.type,
     title: c.title,
+    description: c.description || "",
     status: c.status,
+    kind: c.kind || "",
     tags: c.tags,
   };
 }
@@ -31,8 +33,16 @@ export function cmdList(args, io = {}) {
   const type = typeof args.flags?.type === "string" ? args.flags.type : undefined;
   const status = typeof args.flags?.status === "string" ? args.flags.status : undefined;
   const tag = typeof args.flags?.tag === "string" ? args.flags.tag : undefined;
-  const items = filterConcepts(listConcepts(resolved.data.root), { type, status, tag }).map(summarize);
-  const data = { ...resolved.data, items, type: type ?? null, status: status ?? null, tag: tag ?? null };
+  const kind = typeof args.flags?.kind === "string" ? args.flags.kind : undefined;
+  const items = filterConcepts(listConcepts(resolved.data.root), { type, status, tag, kind }).map(summarize);
+  const data = {
+    ...resolved.data,
+    items,
+    type: type ?? null,
+    status: status ?? null,
+    tag: tag ?? null,
+    kind: kind ?? null,
+  };
   printResult(stdout, args.json, true, data, undefined, (d) => {
     if (d.items.length === 0) return "(none)";
     return d.items.map((i) => `[${i.type}] ${i.title} (${i.path})`).join("\n");

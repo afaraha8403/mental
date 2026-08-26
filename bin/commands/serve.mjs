@@ -1,6 +1,6 @@
 /**
  * `mental serve` — optional MCP stdio wrapping the CLI commands
- * (heartbeat/where/status/search/show/journal/attention/decide/note).
+ * (heartbeat/where/status/search/list/show/journal/attention/decide/note).
  */
 import { serveMcp } from "../lib/mcp.mjs";
 
