@@ -11,7 +11,7 @@ import { parseFrontmatter } from "./okf.mjs";
 
 const require = createRequire(import.meta.url);
 /** Bump when the concepts table shape changes; mismatch drops and recreates. */
-export const INDEX_VERSION = "2";
+export const INDEX_VERSION = "3";
 
 const SNIPPET_CHARS = 160;
 
@@ -209,11 +209,27 @@ const SCHEMA_SQL = `
     dest TEXT NOT NULL,
     raw TEXT
   );
-  CREATE VIRTUAL TABLE IF NOT EXISTS concepts_fts USING fts5(path, title, body_text);
 `;
+
+const FTS_SQL = `CREATE VIRTUAL TABLE IF NOT EXISTS concepts_fts USING fts5(path, title, body_text);`;
+
+/**
+ * FTS5 is optional. Some Node `node:sqlite` builds ship without the module.
+ * Concepts + links still index; search falls back to LIKE / file scan.
+ * @param {import("node:sqlite").DatabaseSync} db
+ */
+function enableFts5(db) {
+  try {
+    db.exec(FTS_SQL);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * @param {import("node:sqlite").DatabaseSync} db
+ * @returns {boolean} whether FTS5 is available on this connection
  */
 function ensureSchema(db) {
   db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT);");
@@ -228,11 +244,12 @@ function ensureSchema(db) {
     db.exec("DROP TABLE IF EXISTS concepts; DROP TABLE IF EXISTS links; DROP TABLE IF EXISTS concepts_fts;");
   }
   db.exec(SCHEMA_SQL);
+  return enableFts5(db);
 }
 
 /**
  * @param {{ root: string, id: string, home: string, env?: NodeJS.ProcessEnv }} opts
- * @returns {{ ok: boolean, path: string | null, concepts: number, backend: "sqlite" | "none", error?: string }}
+ * @returns {{ ok: boolean, path: string | null, concepts: number, backend: "sqlite" | "none", fts5?: boolean, error?: string }}
  */
 export function reindexBundle({ root, id, home, env = process.env }) {
   const file = indexPath(home, id, env);
@@ -244,13 +261,20 @@ export function reindexBundle({ root, id, home, env = process.env }) {
   try {
     mkdirSync(dirname(file), { recursive: true });
     const db = new DatabaseSync(file);
-    ensureSchema(db);
-    db.exec("DELETE FROM concepts; DELETE FROM links; DELETE FROM concepts_fts;");
+    const fts5 = ensureSchema(db);
+    db.exec("DELETE FROM concepts; DELETE FROM links;");
+    if (fts5) {
+      try {
+        db.exec("DELETE FROM concepts_fts;");
+      } catch {
+        // table missing on a partial previous build
+      }
+    }
     const insC = db.prepare(
       "INSERT INTO concepts (path, type, title, description, status, kind, from_val, against, tags_json, mtime, body_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     const insL = db.prepare("INSERT INTO links (src, dest, raw) VALUES (?, ?, ?)");
-    const insF = db.prepare("INSERT INTO concepts_fts (path, title, body_text) VALUES (?, ?, ?)");
+    const insF = fts5 ? db.prepare("INSERT INTO concepts_fts (path, title, body_text) VALUES (?, ?, ?)") : null;
     for (const c of concepts) {
       insC.run(
         c.path,
@@ -265,14 +289,15 @@ export function reindexBundle({ root, id, home, env = process.env }) {
         c.mtime,
         c.searchable,
       );
-      insF.run(c.path, c.title, c.searchable);
+      insF?.run(c.path, c.title, c.searchable);
       for (const l of extractLinks(c.path, c.body)) insL.run(l.src, l.dest, l.raw);
     }
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("version", INDEX_VERSION);
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("root", root);
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("builtAt", new Date().toISOString());
+    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("fts5", fts5 ? "1" : "0");
     db.close();
-    return { ok: true, path: file, concepts: concepts.length, backend: "sqlite" };
+    return { ok: true, path: file, concepts: concepts.length, backend: "sqlite", fts5 };
   } catch (err) {
     return {
       ok: false,
@@ -390,6 +415,7 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
               c.status AS status, c.kind AS kind, c.tags_json AS tags_json, c.body_text AS body_text
        FROM concepts c
        WHERE (lower(c.title) LIKE ? OR lower(c.body_text) LIKE ? OR lower(c.path) LIKE ?)${extra}
+       ORDER BY CASE WHEN lower(c.title) LIKE ? THEN 0 ELSE 1 END, c.path
        LIMIT ?`,
     );
     const pat = `%${needle}%`;
@@ -417,7 +443,7 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
     }
     if (!rows || rows.length === 0) {
       try {
-        rows = like.all(pat, pat, pat, ...filterParams, limit);
+        rows = like.all(pat, pat, pat, ...filterParams, pat, limit);
       } catch {
         rows = [];
       }
@@ -485,7 +511,13 @@ function searchScan(concepts, needle, { type, status, tag, kind, limit }) {
       kind: c.kind,
       tags: c.tags,
       snippet: scanSnippet(c.searchable, needle),
-    }));
+    }))
+    .sort((a, b) => {
+      const at = a.title.toLowerCase().includes(needle) ? 0 : 1;
+      const bt = b.title.toLowerCase().includes(needle) ? 0 : 1;
+      if (at !== bt) return at - bt;
+      return a.path.localeCompare(b.path);
+    });
   return hits.slice(0, limit);
 }
 
