@@ -5,13 +5,13 @@
     "url": "https://github.com/afaraha8403"
   },
   "metadata": {
-    "description": "Never reconstruct where you left off."
+    "description": "Local-first continuity for coding agents — CLI, MCP, and Agent Skills."
   },
   "plugins": [
     {
       "name": "mental",
       "source": "./",
-      "description": "Never reconstruct where you left off. Mental keeps the resume, the decisions, and what's still in the air — so you and your agents continue as if the last session never ended."
+      "description": "Never reconstruct where you left off. Local-first continuity for you and your coding agents — resume, decisions, and what's still in the air. CLI, MCP, and Agent Skills for Cursor, Claude Code, Copilot, and Codex."
     }
   ]
 }
