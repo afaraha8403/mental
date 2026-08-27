@@ -1,7 +1,7 @@
 {
   "name": "mental",
   "version": "0.2.3",
-  "description": "Never reconstruct where you left off. Mental keeps the resume, the decisions, and what's still in the air — so you and your agents continue as if the last session never ended.",
+  "description": "Never reconstruct where you left off. Local-first continuity for you and your coding agents — resume, decisions, and what's still in the air. CLI, MCP, and Agent Skills for Cursor, Claude Code, Copilot, and Codex.",
   "author": {
     "name": "Ali Farahat",
     "url": "https://github.com/afaraha8403"
@@ -11,11 +11,23 @@
   "license": "MIT",
   "keywords": [
     "continuity",
+    "coding-agents",
+    "ai-agents",
+    "cursor",
+    "claude-code",
+    "copilot",
+    "mcp",
+    "mcp-server",
+    "agent-skills",
+    "agent-plugins",
+    "llm",
+    "cli",
+    "local-first",
     "journal",
     "decisions",
     "okf",
-    "skills",
-    "mcp"
+    "handoff",
+    "context"
   ],
   "logo": "assets/logo.svg"
 }

@@ -112,6 +112,11 @@ test("plugin.json is a closed Agent Plugins 1.0.0 manifest", () => {
   }
   const pkg = loadJson(join(ROOT, "package.json"));
   assert.equal(pkg.name, "@balacode/mental");
+  assert.ok(Array.isArray(pkg.keywords));
+  for (const needle of ["mcp", "cursor", "claude-code", "agent-skills", "coding-agents"]) {
+    assert.ok(pkg.keywords.includes(needle), `package.json keywords must include ${needle}`);
+    assert.ok(manifest.keywords.includes(needle), `plugin.json keywords must include ${needle}`);
+  }
   assert.equal(manifest.version, pkg.version);
   assert.equal(manifest.license, "MIT");
   assert.equal(typeof manifest.description, "string");

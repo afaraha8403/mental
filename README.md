@@ -9,7 +9,8 @@
 </p>
 
 <p align="center">
-  Local-first continuity for you and your coding agents.
+  Local-first continuity for humans and coding agents.<br>
+  CLI, MCP, and Agent Skills — Cursor, Claude Code, Copilot, Codex.
 </p>
 
 <p align="center">
@@ -18,6 +19,15 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
   <a href="./package.json"><img src="https://img.shields.io/badge/deps-0-brightgreen.svg" alt="zero runtime dependencies"></a>
   <a href="https://agent-plugins.org/specification"><img src="https://img.shields.io/badge/Agent%20Plugins-1.0.0-111111.svg" alt="Agent Plugins 1.0.0"></a>
+  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-stdio-555555.svg" alt="MCP stdio"></a>
+</p>
+
+<p align="center">
+  <a href="https://cursor.com"><img src="https://img.shields.io/badge/Cursor-plugin-111111.svg" alt="Cursor"></a>
+  <a href="https://claude.ai/code"><img src="https://img.shields.io/badge/Claude%20Code-plugin-d97706.svg" alt="Claude Code"></a>
+  <a href="https://code.visualstudio.com"><img src="https://img.shields.io/badge/VS%20Code-plugin-007ACC.svg" alt="VS Code"></a>
+  <a href="https://github.com/features/copilot"><img src="https://img.shields.io/badge/GitHub%20Copilot-plugin-000000.svg" alt="GitHub Copilot"></a>
+  <a href="https://agent-plugins.org/specification"><img src="https://img.shields.io/badge/Agent%20Skills-portable-111111.svg" alt="Agent Skills"></a>
 </p>
 
 Git records **what** changed. Mental records the small amount git cannot: where you left off, why a decision was made, what is still in the air after a hop, and the next exact action.

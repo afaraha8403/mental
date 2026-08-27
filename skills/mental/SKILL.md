@@ -1,20 +1,21 @@
 ---
 name: mental
 description: >-
-  Maintains a project-continuity log via the Mental CLI. Reconstructs where
-  work stands from git, the latest journal handoff, open decisions, and
-  attention residue; records why consequential decisions were made; extracts
-  residue from a meeting dump or plan-progress question; and leaves an exact
-  resume point after substantive work. Use when starting or finishing
-  non-trivial repository work, answering project-orientation questions,
-  ingesting a transcript into residue (never storing the transcript), or
-  recording a decision that git cannot explain.
+  Local-first continuity CLI for coding agents (Cursor, Claude Code, Copilot,
+  Codex, MCP). Maintains a project-continuity log via the Mental CLI.
+  Reconstructs where work stands from git, the latest journal handoff, open
+  decisions, and attention residue; records why consequential decisions were
+  made; extracts residue from a meeting dump or plan-progress question; and
+  leaves an exact resume point after substantive work. Use when starting or
+  finishing non-trivial repository work, answering project-orientation
+  questions, ingesting a transcript into residue (never storing the
+  transcript), or recording a decision that git cannot explain.
 license: MIT
-compatibility: Requires Node.js >=18 and git. Bundled MCP launches ./bin/cli.mjs serve.
+compatibility: Requires Node.js >=18 and git. Bundled MCP launches ./bin/cli.mjs serve. Agent Plugins 1.0.0 + Agent Skills.
 metadata:
   author: Ali Farahat
   version: "1.0.0"
-  tags: continuity,journal,decisions,orientation,handoff
+  tags: continuity,coding-agents,mcp,agent-skills,cursor,claude-code,copilot,journal,decisions,handoff,local-first
 user-invocable: true
 disable-model-invocation: false
 when_to_use: |
