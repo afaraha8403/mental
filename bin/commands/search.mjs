@@ -9,7 +9,7 @@ export function cmdSearch(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const q = args.rest.join(" ").trim();
   if (!q) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental search requires a query",
     });
@@ -23,7 +23,7 @@ export function cmdSearch(args, io = {}) {
     write: false,
   });
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
   const type = typeof args.flags?.type === "string" ? args.flags.type : undefined;
@@ -42,7 +42,7 @@ export function cmdSearch(args, io = {}) {
     kind,
   });
   const data = { ...resolved.data, q, ...found };
-  printResult(stdout, args.json, true, data, undefined, (d) => {
+  printResult(stdout, args, true, data, undefined, (d) => {
     if (d.hits.length === 0) return `no hits for ${d.q} (${d.backend})`;
     return d.hits
       .map((h) => {

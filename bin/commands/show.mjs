@@ -10,7 +10,7 @@ export function cmdShow(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const rel = (args.rest[0] || (typeof args.flags?.path === "string" ? args.flags.path : "")).trim();
   if (!rel) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental show requires a path relative to the bundle root",
     });
@@ -24,12 +24,12 @@ export function cmdShow(args, io = {}) {
     write: false,
   });
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
   const file = readBundleFile(resolved.data.root, rel);
   if (!file.ok) {
-    printResult(stdout, args.json, false, undefined, file.error);
+    printResult(stdout, args, false, undefined, file.error);
     return 1;
   }
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
@@ -47,7 +47,7 @@ export function cmdShow(args, io = {}) {
     body: file.data.body,
     backlinks,
   };
-  printResult(stdout, args.json, true, payload, undefined, (d) => {
+  printResult(stdout, args, true, payload, undefined, (d) => {
     const title = typeof d.frontmatter.title === "string" ? d.frontmatter.title : d.path;
     const type = typeof d.frontmatter.type === "string" ? d.frontmatter.type : "";
     const head = type ? `${title}  [${type}]` : title;

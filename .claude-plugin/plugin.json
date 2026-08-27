@@ -1,7 +1,7 @@
 {
   "name": "mental",
   "displayName": "Mental",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Never reconstruct where you left off. Local-first continuity for you and your coding agents — resume, decisions, and what's still in the air. CLI, MCP, and Agent Skills for Cursor, Claude Code, Copilot, and Codex.",
   "author": {
     "name": "Ali Farahat",

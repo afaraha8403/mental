@@ -55,6 +55,8 @@ about observed versus inferred information.
 **OKF markdown is the source of truth.** Agents must call the CLI with `--json`.
 Do not grep `.mental`, `~/.mental`, or YAML frontmatter. Humans on a TTY can run `mental` with no args for a one-shot heartbeat (resume, last outcome, git, residue, open decisions). Agents use `mental heartbeat --json` for the same cheap reload — not `status` unless they need notes. Do not call `pulse` every turn or dump journals into context.
 
+If the JSON envelope includes `update` (`current`, `latest`, `hint`), tell the user **once this session** that a newer Mental CLI is on npm and they can run `mental install`. Do not block work. Do not put this on the Mental receipt.
+
 ## Non-goals
 
 - Not a task manager, GTD app, chat transcript store, analytics store, or

@@ -13,7 +13,7 @@ export function cmdUninstall(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   if (!home) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "no-home",
       message: "HOME is unset; nothing to uninstall.",
     });
@@ -23,7 +23,7 @@ export function cmdUninstall(args, io = {}) {
   const deleteData = Boolean(args.flags?.["delete-data"]);
   const confirm = typeof args.flags?.confirm === "string" ? args.flags.confirm : args.rest[0] || "";
   if (deleteData && confirm !== "DELETE") {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "Refusing to delete OKF. Pass --delete-data --confirm DELETE to wipe ~/.mental.",
     });
@@ -47,7 +47,7 @@ export function cmdUninstall(args, io = {}) {
 
   printResult(
     stdout,
-    args.json,
+    args,
     true,
     { removed: skills.removed, hooks: hooks.written, mcp: mcp.written, wiped },
     undefined,

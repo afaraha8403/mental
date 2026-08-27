@@ -15,11 +15,11 @@ export function cmdReindex(args, io = {}) {
     write: true,
   });
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
   if (!resolved.data.id) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "no-id",
       message: "No project UUID yet; reindex needs a git binding. Run `mental where` in a repo.",
     });
@@ -35,7 +35,7 @@ export function cmdReindex(args, io = {}) {
     });
   printResult(
     stdout,
-    args.json,
+    args,
     indexed.ok,
     { ...resolved.data, indexed },
     indexed.ok ? undefined : { code: "index", message: indexed.error || "reindex failed" },

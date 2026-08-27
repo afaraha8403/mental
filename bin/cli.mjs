@@ -85,7 +85,7 @@ export async function run(argv, ctx = {}) {
     args = parseArgv(argv);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    printResult(stdout, argv.includes("--json"), false, undefined, {
+    printResult(stdout, { json: argv.includes("--json"), env }, false, undefined, {
       code: "usage",
       message,
     });
@@ -117,7 +117,7 @@ export async function run(argv, ctx = {}) {
 
   const handler = COMMANDS[args.command];
   if (!handler) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "unknown-command",
       message: `Unknown command: ${args.command}`,
     });

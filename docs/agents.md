@@ -116,4 +116,12 @@ Stable:
 { "ok": false, "error": { "code": "usage", "message": "…" } }
 ```
 
+When this CLI is behind npm, a sibling is added (omitted when current or skipped):
+
+```json
+{ "ok": true, "data": { }, "update": { "current": "0.4.0", "latest": "0.5.0", "hint": "CLI 0.4.0; npm 0.5.0. Run `mental install` or `npm i -g --force @balacode/mental`." } }
+```
+
+If `update` is present, tell the user **once this session** and suggest `mental install`. Do not block work. Do not put it on the Mental receipt.
+
 `where` data: `{ root, id, mode, reason, gitRoot }`. Write commands may include `imported` and `indexed` when a leftover `./.mental/` was ingested.

@@ -36,7 +36,7 @@ TTY: no args prints a one-shot heartbeat and exits. Named commands are one-shot.
 Non-TTY / agents: always pass --json. Do not grep OKF / YAML.
 
 Global flags:
-  --json             Machine-readable { ok, data } | { ok, error }
+  --json             Machine-readable { ok, data } | { ok, error }; optional sibling update when npm is ahead
   --dir <path>       Override resolve (same as MENTAL_DIR)
   -h, --help         Show this help
   -v, --version      Print version

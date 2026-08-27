@@ -34,7 +34,7 @@ export function cmdLocal(args, io = {}) {
 
   const gate = assertLocalIgnorable(destRoot, { env });
   if (!gate.ok) {
-    printResult(stdout, args.json, false, undefined, gate.error);
+    printResult(stdout, args, false, undefined, gate.error);
     return 1;
   }
 
@@ -59,7 +59,7 @@ export function cmdLocal(args, io = {}) {
     write: true,
   });
   if (!homeWhere.ok) {
-    printResult(stdout, args.json, false, undefined, homeWhere.error);
+    printResult(stdout, args, false, undefined, homeWhere.error);
     return 1;
   }
 
@@ -107,7 +107,7 @@ export function cmdLocal(args, io = {}) {
   };
   printResult(
     stdout,
-    args.json,
+    args,
     true,
     data,
     undefined,

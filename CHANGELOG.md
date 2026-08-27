@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-27
+
+### Added
+
+- Every `--json` envelope may include an `update` sibling (`current`, `latest`, `hint`) when npm is ahead of this CLI. Agents tell the user once and suggest `mental install`. TTY prints the same hint. Backed by a 7-day cache under `${XDG_CACHE_HOME:-~/.cache}/mental/npm-latest.json` so ordinary commands never `npm view`; `MENTAL_SKIP_UPDATE_CHECK=1` still skips. `doctor` / `install` still check live.
+
+### Fixed
+
+- GitHub Release workflow no longer sets `setup-node` `registry-url`. That wrote a dummy `NODE_AUTH_TOKEN` and made npm skip OIDC trusted publishing (E404), so `0.3.1` and `0.4.0` never landed on the registry.
+
 ## [0.4.0] - 2026-08-27
 
 ### Added
@@ -113,7 +123,8 @@ First public release of the Mental CLI.
 - `install --mcp` registers `serve`; `decide` updates by title so an open decision can close.
 - Install, doctor, uninstall; hooks stay off by default.
 
-[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/afaraha8403/mental/releases/tag/v0.4.1
 [0.4.0]: https://github.com/afaraha8403/mental/releases/tag/v0.4.0
 [0.3.1]: https://github.com/afaraha8403/mental/releases/tag/v0.3.1
 [0.3.0]: https://github.com/afaraha8403/mental/releases/tag/v0.3.0

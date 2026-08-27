@@ -27,7 +27,7 @@ export function cmdList(args, io = {}) {
     write: false,
   });
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
   const type = typeof args.flags?.type === "string" ? args.flags.type : undefined;
@@ -43,7 +43,7 @@ export function cmdList(args, io = {}) {
     tag: tag ?? null,
     kind: kind ?? null,
   };
-  printResult(stdout, args.json, true, data, undefined, (d) => {
+  printResult(stdout, args, true, data, undefined, (d) => {
     if (d.items.length === 0) return "(none)";
     return d.items.map((i) => `[${i.type}] ${i.title} (${i.path})`).join("\n");
   });

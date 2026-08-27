@@ -13,9 +13,9 @@ export function cmdHeartbeat(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const collected = collectHeartbeat(args);
   if (!collected.ok) {
-    printResult(stdout, args.json, false, undefined, collected.error);
+    printResult(stdout, args, false, undefined, collected.error);
     return 1;
   }
-  printResult(stdout, args.json, true, collected.data, undefined, formatHeartbeat);
+  printResult(stdout, args, true, collected.data, undefined, formatHeartbeat);
   return 0;
 }

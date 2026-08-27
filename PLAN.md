@@ -345,7 +345,7 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 | `mental reindex`                               | Rebuild sqlite from files                                                                                                                               |
 
 
-**Agent JSON shape (stable):** always `{ "ok": true, "data": … }` or `{ "ok": false, "error": { "code", "message" } }`. `where` data: `{ root, id, mode, reason, gitRoot }`.
+**Agent JSON shape (stable):** always `{ "ok": true, "data": … }` or `{ "ok": false, "error": { "code", "message" } }`. Optional sibling `update` (`current`, `latest`, `hint`) when npm is ahead — from a 7-day cache, not a live check on every command. `where` data: `{ root, id, mode, reason, gitRoot }`.
 
 **Exit codes:** 0 ok, 1 usage/resolve error, 2 no TTY help, 3 doctor found problems (still print JSON).
 

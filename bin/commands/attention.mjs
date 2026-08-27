@@ -26,7 +26,7 @@ export function cmdAttention(args, io = {}) {
   const title = flagString(args.flags, "title");
   const path = flagString(args.flags, "path");
   if (!title && !path) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental attention requires --title (or --path to update)",
     });
@@ -35,7 +35,7 @@ export function cmdAttention(args, io = {}) {
 
   const statusFlag = flagString(args.flags, "status");
   if (statusFlag && !ATTENTION_STATUSES.has(statusFlag)) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: `status must be ${[...ATTENTION_STATUSES].join("|")}`,
     });
@@ -45,7 +45,7 @@ export function cmdAttention(args, io = {}) {
 
   const kindFlag = flagString(args.flags, "kind");
   if (kindFlag && !ATTENTION_KINDS.has(kindFlag)) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: `kind must be ${[...ATTENTION_KINDS].join("|")}`,
     });
@@ -55,7 +55,7 @@ export function cmdAttention(args, io = {}) {
   const againstRaw = flagString(args.flags, "against");
   const against = againstRaw != null ? repoRelativePath(againstRaw) : undefined;
   if (againstRaw != null && against === null) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "--against must be a repo-relative path (no ..)",
     });
@@ -70,7 +70,7 @@ export function cmdAttention(args, io = {}) {
     write: true,
   });
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
   ensureSkeleton(resolved.data.root, {
@@ -83,7 +83,7 @@ export function cmdAttention(args, io = {}) {
   });
 
   if (path && !existing) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "not-found",
       message: `no attention file at ${path}`,
     });
@@ -92,12 +92,12 @@ export function cmdAttention(args, io = {}) {
 
   const viaParsed = viaFromFlags(args.flags);
   if (!viaParsed.ok) {
-    printResult(stdout, args.json, false, undefined, { code: "usage", message: VIA_USAGE });
+    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE });
     return 1;
   }
 
   if (!existing && !kindFlag) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental attention create requires --kind direction|concern|thread|verify",
     });
@@ -132,7 +132,7 @@ export function cmdAttention(args, io = {}) {
     const verb = written.updated ? "updated" : "wrote";
     printResult(
       stdout,
-      args.json,
+      args,
       true,
       { ...resolved.data, ...written, indexed },
       undefined,
@@ -142,7 +142,7 @@ export function cmdAttention(args, io = {}) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const code = /** @type {{ code?: string }} */ (err).code || "write";
-    printResult(stdout, args.json, false, undefined, { code, message });
+    printResult(stdout, args, false, undefined, { code, message });
     return 1;
   }
 }

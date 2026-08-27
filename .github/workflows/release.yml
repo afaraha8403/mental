@@ -1,7 +1,7 @@
 # Publishes @balacode/mental when a GitHub Release is published.
-# First-ever npm version cannot use OIDC (package must exist to attach a
-# trusted publisher). Publish 0.2.0 locally, then connect GitHub Actions on
-# npmjs.com. Later tags are published by this workflow with no token.
+# OIDC trusted publishing (`id-token: write`). No NPM_TOKEN.
+# Do NOT set setup-node `registry-url` — it writes `_authToken=${NODE_AUTH_TOKEN}`
+# into .npmrc and npm skips OIDC (ENEEDAUTH / E404). See npm/cli#8730.
 name: Release
 
 on:
@@ -21,7 +21,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: https://registry.npmjs.org
 
       - run: npm ci
 
@@ -38,7 +37,6 @@ jobs:
         env:
           PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
-          npm install -g npm@latest
           NAME=$(node -p "require('./package.json').name")
           VERSION=$(node -p "require('./package.json').version")
           if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then

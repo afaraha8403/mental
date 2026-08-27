@@ -13,7 +13,7 @@ export function cmdSplit(args, io = {}) {
   const cwd = args.cwd ?? process.cwd();
   const env = args.env ?? process.env;
   if (!home) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "no-home",
       message: "HOME is unset; Mental will not write.",
     });
@@ -22,7 +22,7 @@ export function cmdSplit(args, io = {}) {
 
   const gitRoot = findGitRoot(cwd, { env });
   if (!gitRoot) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "not-git",
       message: "mental split needs a git repository.",
     });
@@ -32,7 +32,7 @@ export function cmdSplit(args, io = {}) {
   const copy = Boolean(args.flags?.copy);
   const prior = resolveBundle({ cwd, home, env, dir: args.dir ?? null, write: true });
   if (!prior.ok) {
-    printResult(stdout, args.json, false, undefined, prior.error);
+    printResult(stdout, args, false, undefined, prior.error);
     return 1;
   }
   const fromId = prior.data.id;
@@ -46,7 +46,7 @@ export function cmdSplit(args, io = {}) {
 
   printResult(
     stdout,
-    args.json,
+    args,
     true,
     { id: split.id, fromId, gitRoot, copied: copy, root: dest, dest: projectSliceDir(home, split.id) },
     undefined,

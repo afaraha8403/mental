@@ -8,7 +8,7 @@ export function cmdHooks(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   if (!home) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "no-home",
       message: "HOME is unset; Mental will not write hooks.",
     });
@@ -17,7 +17,7 @@ export function cmdHooks(args, io = {}) {
 
   const action = (args.rest[0] || "").toLowerCase();
   if (action !== "on" && action !== "off") {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental hooks on|off  (default off; install does not enable hooks)",
     });
@@ -26,12 +26,12 @@ export function cmdHooks(args, io = {}) {
 
   const result = action === "on" ? enableHooks(home) : disableHooks(home);
   if (!result.ok) {
-    printResult(stdout, args.json, false, undefined, result.error);
+    printResult(stdout, args, false, undefined, result.error);
     return 1;
   }
   printResult(
     stdout,
-    args.json,
+    args,
     true,
     { action, ...result },
     undefined,

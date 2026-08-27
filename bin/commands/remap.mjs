@@ -29,7 +29,7 @@ export function cmdRemap(args, io = {}) {
   const cwd = args.cwd ?? process.cwd();
   const env = args.env ?? process.env;
   if (!home) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "no-home",
       message: "HOME is unset; Mental will not write.",
     });
@@ -43,7 +43,7 @@ export function cmdRemap(args, io = {}) {
 
   if (!to) {
     const list = formatBindings(home);
-    printResult(stdout, args.json, true, { bindings: loadBindings(home).bindings }, undefined, () =>
+    printResult(stdout, args, true, { bindings: loadBindings(home).bindings }, undefined, () =>
       `${list}\n\nPoint this clone: mental remap --to <id>`,
     );
     return 0;
@@ -51,7 +51,7 @@ export function cmdRemap(args, io = {}) {
 
   const gitRoot = findGitRoot(cwd, { env });
   if (!gitRoot) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "not-git",
       message: "mental remap needs a git repository.",
     });
@@ -61,12 +61,12 @@ export function cmdRemap(args, io = {}) {
   const origin = getRemoteUrl(gitRoot, "origin", { env });
   const result = remapToBinding({ home, gitRoot, toId: to, origin });
   if (!result.ok) {
-    printResult(stdout, args.json, false, undefined, { code: result.code, message: result.message });
+    printResult(stdout, args, false, undefined, { code: result.code, message: result.message });
     return 1;
   }
   printResult(
     stdout,
-    args.json,
+    args,
     true,
     { id: result.id, gitRoot, origin },
     undefined,

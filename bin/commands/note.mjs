@@ -12,7 +12,7 @@ export function cmdNote(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const title = typeof args.flags?.title === "string" ? args.flags.title : null;
   if (!title) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental note requires --title",
     });
@@ -20,7 +20,7 @@ export function cmdNote(args, io = {}) {
   }
   const status = typeof args.flags?.status === "string" ? args.flags.status : "active";
   if (!STATUSES.has(status)) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: `status must be ${[...STATUSES].join("|")}`,
     });
@@ -34,7 +34,7 @@ export function cmdNote(args, io = {}) {
     write: true,
   });
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
   ensureSkeleton(resolved.data.root, {
@@ -50,12 +50,12 @@ export function cmdNote(args, io = {}) {
     });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
-    printResult(stdout, args.json, true, { ...resolved.data, ...written, indexed }, undefined, () => kindLine("note", `wrote ${written.path}`));
+    printResult(stdout, args, true, { ...resolved.data, ...written, indexed }, undefined, () => kindLine("note", `wrote ${written.path}`));
     return 0;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const code = /** @type {{ code?: string }} */ (err).code || "write";
-    printResult(stdout, args.json, false, undefined, { code, message });
+    printResult(stdout, args, false, undefined, { code, message });
     return 1;
   }
 }

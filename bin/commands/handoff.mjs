@@ -23,14 +23,14 @@ export function cmdHandoff(args, io = {}) {
   const title = flagString(args.flags, "title");
   const resume = flagString(args.flags, "resume");
   if (!title) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental handoff requires --title",
     });
     return 1;
   }
   if (!resume) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental handoff requires --resume",
     });
@@ -39,14 +39,14 @@ export function cmdHandoff(args, io = {}) {
 
   const viaParsed = viaFromFlags(args.flags);
   if (!viaParsed.ok) {
-    printResult(stdout, args.json, false, undefined, { code: "usage", message: VIA_USAGE });
+    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE });
     return 1;
   }
 
   const againstRaw = flagString(args.flags, "against");
   const against = againstRaw != null ? repoRelativePath(againstRaw) : undefined;
   if (againstRaw != null && against === null) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "--against must be a repo-relative path (no ..)",
     });
@@ -61,7 +61,7 @@ export function cmdHandoff(args, io = {}) {
     write: true,
   });
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
 
@@ -79,7 +79,7 @@ export function cmdHandoff(args, io = {}) {
   if (resolved.data.id) writeWatermark(home, resolved.data.id, env);
 
   const data = { path: written.path, heartbeat };
-  printResult(stdout, args.json, true, data, undefined, () => {
+  printResult(stdout, args, true, data, undefined, () => {
     const mark = kindLine("journal", `handoff ${written.path}`);
     return heartbeat ? `${mark}\n${formatHeartbeat(heartbeat)}` : mark;
   });

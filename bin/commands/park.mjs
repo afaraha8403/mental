@@ -51,7 +51,7 @@ export function cmdPark(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const resume = flagString(args.flags, "resume");
   if (!resume) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental park requires --resume",
     });
@@ -61,14 +61,14 @@ export function cmdPark(args, io = {}) {
   const attentionTitle = flagString(args.flags, "attention");
   const kind = flagString(args.flags, "kind");
   if (attentionTitle && !kind) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental park --attention requires --kind",
     });
     return 1;
   }
   if (kind && !ATTENTION_KINDS.has(kind)) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: `kind must be ${[...ATTENTION_KINDS].join("|")}`,
     });
@@ -77,14 +77,14 @@ export function cmdPark(args, io = {}) {
 
   const viaParsed = viaFromFlags(args.flags);
   if (!viaParsed.ok) {
-    printResult(stdout, args.json, false, undefined, { code: "usage", message: VIA_USAGE });
+    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE });
     return 1;
   }
 
   const againstRaw = flagString(args.flags, "against");
   const against = againstRaw != null ? repoRelativePath(againstRaw) : undefined;
   if (againstRaw != null && against === null) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "--against must be a repo-relative path (no ..)",
     });
@@ -99,7 +99,7 @@ export function cmdPark(args, io = {}) {
     write: true,
   });
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
 
@@ -124,7 +124,7 @@ export function cmdPark(args, io = {}) {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const code = /** @type {{ code?: string }} */ (err).code || "write";
-      printResult(stdout, args.json, false, undefined, { code, message });
+      printResult(stdout, args, false, undefined, { code, message });
       return 1;
     }
   }
@@ -138,7 +138,7 @@ export function cmdPark(args, io = {}) {
   if (resolved.data.id) writeWatermark(home, resolved.data.id, env);
 
   const data = { path: written.path, ...(attention ? { attention } : {}), heartbeat };
-  printResult(stdout, args.json, true, data, undefined, () => {
+  printResult(stdout, args, true, data, undefined, () => {
     const mark = kindLine("journal", `parked ${written.path}`);
     return heartbeat ? `${mark}\n${formatHeartbeat(heartbeat)}` : mark;
   });

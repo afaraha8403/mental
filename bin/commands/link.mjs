@@ -8,7 +8,7 @@ export function cmdLink(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const to = typeof args.flags?.to === "string" ? args.flags.to : null;
   if (!to) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental link requires --to <uuid> (or run mental remap --to <uuid>)",
     });

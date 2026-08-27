@@ -72,7 +72,7 @@ export function cmdStatus(args, io = {}) {
     write: true,
   });
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
 
@@ -131,6 +131,6 @@ export function cmdStatus(args, io = {}) {
     notes,
     statusFile: "status/current.md",
   };
-  printResult(stdout, args.json, true, payload, undefined, formatHuman);
+  printResult(stdout, args, true, payload, undefined, formatHuman);
   return 0;
 }

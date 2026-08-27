@@ -213,7 +213,7 @@ export function cmdDoctor(args, io = {}) {
   };
   printResult(
     stdout,
-    args.json,
+    args,
     true,
     data,
     undefined,

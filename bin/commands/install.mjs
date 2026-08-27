@@ -19,7 +19,7 @@ export function cmdInstall(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   if (!home) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "no-home",
       message: "HOME is unset; refusing to install. Mental fails open — continue coding.",
     });
@@ -120,7 +120,7 @@ export function cmdInstall(args, io = {}) {
       : "";
   printResult(
     stdout,
-    args.json,
+    args,
     true,
     data,
     undefined,

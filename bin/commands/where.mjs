@@ -20,10 +20,10 @@ export function cmdWhere(args, io = {}) {
   });
 
   if (!resolved.ok) {
-    printResult(stdout, args.json, false, undefined, resolved.error);
+    printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
 
-  printResult(stdout, args.json, true, resolved.data, undefined, formatWhere);
+  printResult(stdout, args, true, resolved.data, undefined, formatWhere);
   return 0;
 }

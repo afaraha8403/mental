@@ -18,7 +18,7 @@ export function cmdPulse(args, io = {}) {
   const cwd = args.cwd ?? process.cwd();
 
   if (!home) {
-    printResult(stdout, args.json, false, undefined, {
+    printResult(stdout, args, false, undefined, {
       code: "home",
       message: "HOME unset; no bindings",
     });
@@ -42,6 +42,6 @@ export function cmdPulse(args, io = {}) {
   }
 
   const data = { projects, ...(delta ? { delta } : {}) };
-  printResult(stdout, args.json, true, data, undefined, () => formatPulse(projects));
+  printResult(stdout, args, true, data, undefined, () => formatPulse(projects));
   return 0;
 }

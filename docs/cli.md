@@ -14,12 +14,12 @@ Non-TTY (pipes, agents) with no args prints help and exits 2.
 
 | Flag | Meaning |
 | --- | --- |
-| `--json` | `{ "ok": true, "data": … }` or `{ "ok": false, "error": { "code", "message" } }` |
+| `--json` | `{ "ok": true, "data": … }` or `{ "ok": false, "error": { "code", "message" } }`. Optional sibling `update` when npm is ahead |
 | `--dir <path>` | Override resolve (same as `MENTAL_DIR`) |
 | `-h`, `--help` | Usage |
 | `-v`, `--version` | Print version |
 
-`MENTAL_ASCII=1` strips emoji from TTY output. `--json` is always ASCII. `MENTAL_SKIP_UPDATE_CHECK=1` skips the npm newest-version check (`doctor` / `install` only — heartbeat never checks).
+`MENTAL_ASCII=1` strips emoji from TTY output. `--json` is always ASCII. `MENTAL_SKIP_UPDATE_CHECK=1` skips the npm newest-version check. When npm is ahead, every `--json` envelope includes a sibling `update` (`current`, `latest`, `hint`) from a 7-day cache — ordinary commands never `npm view` on every call. TTY prints the same hint. `doctor` / `install` still check live.
 
 ## Commands
 

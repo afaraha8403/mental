@@ -1,7 +1,9 @@
 /**
  * Stable agent JSON envelope + human printers.
  * Emoji is TTY-only. `--json` never includes a brand mark.
+ * Optional envelope sibling `update` (behind npm only) so agents can nag once.
  */
+import { peekUpdateNotice } from "./update.mjs";
 
 /**
  * `MENTAL_ASCII=1` for consoles that cannot render emoji (legacy cmd.exe).
@@ -67,29 +69,37 @@ export function brandLine(text, env = process.env) {
  * @param {boolean} ok
  * @param {object} [data]
  * @param {{ code: string, message: string }} [error]
+ * @param {{ current: string, latest: string, hint: string } | null} [update]
  */
-export function envelope(ok, data, error) {
-  return ok ? { ok: true, data } : { ok: false, error };
+export function envelope(ok, data, error, update) {
+  const body = ok ? { ok: true, data } : { ok: false, error };
+  if (update) body.update = update;
+  return body;
 }
 
 /**
  * @param {NodeJS.WritableStream} out
- * @param {boolean} json
+ * @param {{ json?: boolean, env?: NodeJS.ProcessEnv }} args
  * @param {boolean} ok
  * @param {object} [data]
  * @param {{ code: string, message: string }} [error]
  * @param {(data: object) => string} [format]
  */
-export function printResult(out, json, ok, data, error, format) {
+export function printResult(out, args, ok, data, error, format) {
+  const json = Boolean(args?.json);
+  const env = args?.env ?? process.env;
+  const update = peekUpdateNotice({ env });
   if (json) {
-    out.write(`${JSON.stringify(envelope(ok, data, error))}\n`);
+    out.write(`${JSON.stringify(envelope(ok, data, error, update))}\n`);
     return;
   }
   if (!ok) {
     out.write(`${error?.message || "error"}\n`);
+    if (update?.hint) out.write(`${brandLine(update.hint, env)}\n`);
     return;
   }
   out.write(`${format ? format(data) : JSON.stringify(data, null, 2)}\n`);
+  if (update?.hint) out.write(`${brandLine(update.hint, env)}\n`);
 }
 
 /** @param {import('./resolve.mjs').WhereData} data */
