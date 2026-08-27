@@ -10,6 +10,8 @@ export const CONCEPT_DIRS = ["journal", "decisions", "notes", "attention", "stat
 export const ATTENTION_STATUSES = new Set(["open", "later", "resolved"]);
 export const ATTENTION_KINDS = new Set(["direction", "concern", "thread"]);
 export const ATTENTION_HEARTBEAT_CAP = 7;
+/** Mirror attention: heartbeat TTY + JSON lists cap here; extras via `list`. */
+export const DECISION_HEARTBEAT_CAP = 7;
 export const DECISION_STATUSES = new Set(["open", "deferred", "decided", "superseded"]);
 
 /**
@@ -306,6 +308,7 @@ export function listOpenDecisions(root) {
         title: String(data.title || basename(file, ".md")),
         status,
         description: data.description ? String(data.description) : "",
+        timestamp: data.timestamp ? String(data.timestamp) : "",
       });
     }
   }
@@ -415,6 +418,7 @@ export function listOpenAttention(root) {
       from: data.from ? String(data.from) : "",
       against: data.against ? String(data.against) : "",
       description: noteBlurb(data, body),
+      timestamp: data.timestamp ? String(data.timestamp) : "",
     });
   }
   return out;

@@ -83,6 +83,8 @@ export function parseArgv(argv) {
     "--type",
     "--tag",
     "--confirm",
+    "--attention",
+    "--days",
   ]);
 
   for (let i = 0; i < argv.length; i++) {

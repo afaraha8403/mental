@@ -29,6 +29,9 @@ import { cmdLink } from "./commands/link.mjs";
 import { cmdUninstall } from "./commands/uninstall.mjs";
 import { cmdHooks } from "./commands/hooks.mjs";
 import { cmdServe } from "./commands/serve.mjs";
+import { cmdPark } from "./commands/park.mjs";
+import { cmdHandoff } from "./commands/handoff.mjs";
+import { cmdPulse } from "./commands/pulse.mjs";
 
 export { parseArgv } from "./lib/args.mjs";
 export { normalizeOrigin, findGitRoot } from "./lib/git.mjs";
@@ -59,6 +62,9 @@ const COMMANDS = {
   uninstall: cmdUninstall,
   hooks: cmdHooks,
   serve: cmdServe,
+  park: cmdPark,
+  handoff: cmdHandoff,
+  pulse: cmdPulse,
 };
 
 /**
