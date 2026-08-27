@@ -8,6 +8,7 @@ import { refreshIndex } from "../lib/index.mjs";
 import { collectHeartbeat, formatHeartbeat } from "../lib/heartbeat.mjs";
 import { writeWatermark } from "../lib/watermark.mjs";
 import { printResult, kindLine } from "../lib/output.mjs";
+import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
@@ -33,6 +34,12 @@ export function cmdHandoff(args, io = {}) {
       code: "usage",
       message: "mental handoff requires --resume",
     });
+    return 1;
+  }
+
+  const viaParsed = viaFromFlags(args.flags);
+  if (!viaParsed.ok) {
+    printResult(stdout, args.json, false, undefined, { code: "usage", message: VIA_USAGE });
     return 1;
   }
 
@@ -62,7 +69,7 @@ export function cmdHandoff(args, io = {}) {
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
-  const written = appendJournal(resolved.data.root, { title, body, resume, against });
+  const written = appendJournal(resolved.data.root, { title, body, resume, against, via: viaParsed.via });
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const env = args.env ?? process.env;
   refreshIndex(resolved.data, home, env);

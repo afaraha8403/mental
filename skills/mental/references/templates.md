@@ -156,9 +156,10 @@ description: <one-line summary>
 tags: []
 timestamp: <ISO-8601>
 status: open        # open | later | resolved
-kind: direction     # direction | concern | thread
+kind: direction     # direction | concern | thread | verify
 from: <optional person>
 against: <optional repo-relative path, e.g. PLAN.md>
+via: <optional short client token, e.g. cursor>
 ---
 
 # <short residue>

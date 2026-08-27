@@ -38,7 +38,7 @@ const TOOLS = [
         type: { type: "string", description: "Concept type (Decision, Attention, Note, Journal)" },
         status: { type: "string" },
         tag: { type: "string" },
-        kind: { type: "string", description: "Attention kind: direction | concern | thread" },
+        kind: { type: "string", description: "Attention kind: direction | concern | thread | verify" },
       },
       required: ["q"],
     },
@@ -52,7 +52,7 @@ const TOOLS = [
         type: { type: "string" },
         status: { type: "string" },
         tag: { type: "string" },
-        kind: { type: "string", description: "Attention kind: direction | concern | thread" },
+        kind: { type: "string", description: "Attention kind: direction | concern | thread | verify" },
       },
     },
   },
@@ -74,6 +74,7 @@ const TOOLS = [
         title: { type: "string" },
         body: { type: "string" },
         resume: { type: "string" },
+        via: { type: "string", description: "Short client token (cursor, claude-code, copilot, codex, mcp, cli). Not a session id." },
       },
       required: ["title"],
     },
@@ -85,9 +86,10 @@ const TOOLS = [
       type: "object",
       properties: {
         title: { type: "string" },
-        kind: { type: "string", enum: ["direction", "concern", "thread"] },
+        kind: { type: "string", enum: ["direction", "concern", "thread", "verify"] },
         status: { type: "string", enum: ["open", "later", "resolved"] },
         from: { type: "string", description: "Who raised it (e.g. Tom)" },
+        via: { type: "string", description: "Short client token (cursor, claude-code, …). Not a session id." },
         body: { type: "string" },
         path: { type: "string", description: "Bundle-relative path of an existing item to update" },
       },
@@ -103,6 +105,7 @@ const TOOLS = [
         status: { type: "string", enum: ["open", "deferred", "decided", "superseded"] },
         description: { type: "string" },
         body: { type: "string" },
+        via: { type: "string", description: "Short client token (cursor, claude-code, …). Not a session id." },
         path: { type: "string", description: "Bundle-relative path of an existing decision to update" },
       },
     },
@@ -131,9 +134,10 @@ const TOOLS = [
         title: { type: "string" },
         body: { type: "string" },
         attention: { type: "string", description: "Residue title to record with this park" },
-        kind: { type: "string", enum: ["direction", "concern", "thread"] },
+        kind: { type: "string", enum: ["direction", "concern", "thread", "verify"] },
         from: { type: "string" },
         against: { type: "string" },
+        via: { type: "string", description: "Short client token (cursor, claude-code, …). Not a session id." },
       },
       required: ["resume"],
     },
@@ -148,6 +152,7 @@ const TOOLS = [
         resume: { type: "string" },
         body: { type: "string" },
         against: { type: "string" },
+        via: { type: "string", description: "Short client token (cursor, claude-code, …). Not a session id." },
       },
       required: ["title", "resume"],
     },
@@ -228,6 +233,7 @@ function runTool(name, args, ctx) {
         title: args.title,
         body: args.body || "",
         resume: args.resume || "Continue. — open loops: none",
+        via: args.via,
       },
     });
   }
@@ -240,6 +246,7 @@ function runTool(name, args, ctx) {
         kind: args.kind,
         status: args.status,
         from: args.from,
+        via: args.via,
         body: args.body,
       },
     });
@@ -253,6 +260,7 @@ function runTool(name, args, ctx) {
         status: args.status,
         description: args.description,
         body: args.body,
+        via: args.via,
       },
     });
   }
@@ -273,6 +281,7 @@ function runTool(name, args, ctx) {
         kind: args.kind,
         from: args.from,
         against: args.against,
+        via: args.via,
       },
     });
   }
@@ -284,6 +293,7 @@ function runTool(name, args, ctx) {
         resume: args.resume,
         body: args.body,
         against: args.against,
+        via: args.via,
       },
     });
   }

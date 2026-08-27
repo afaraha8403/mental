@@ -5,6 +5,7 @@ import { resolveBundle } from "../lib/resolve.mjs";
 import { appendJournal, bundleName, ensureSkeleton, repoRelativePath } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine } from "../lib/output.mjs";
+import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
 
 /**
  * @param {{ json: boolean, dir?: string, flags?: Record<string, string | boolean>, cwd?: string, home?: string, env?: NodeJS.ProcessEnv }} args
@@ -31,6 +32,11 @@ export function cmdJournal(args, io = {}) {
     printResult(stdout, args.json, false, undefined, resolved.error);
     return 1;
   }
+  const viaParsed = viaFromFlags(args.flags);
+  if (!viaParsed.ok) {
+    printResult(stdout, args.json, false, undefined, { code: "usage", message: VIA_USAGE });
+    return 1;
+  }
   const body = typeof args.flags?.body === "string" ? args.flags.body : "";
   const resume = typeof args.flags?.resume === "string" ? args.flags.resume : "Continue. — open loops: none";
   const againstRaw = typeof args.flags?.against === "string" ? args.flags.against : undefined;
@@ -45,7 +51,7 @@ export function cmdJournal(args, io = {}) {
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
-  const written = appendJournal(resolved.data.root, { title, body, resume, against });
+  const written = appendJournal(resolved.data.root, { title, body, resume, against, via: viaParsed.via });
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
   const data = { ...resolved.data, ...written, indexed };

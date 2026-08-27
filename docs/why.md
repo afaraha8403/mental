@@ -2,7 +2,7 @@
 
 You should not have to reconstruct a project from chat history.
 
-That reconstruction is the fatigue: decision fatigue and brain fatigue from orchestrating several projects and several agents. The literature calls the mechanisms **resumption lag** and **attention residue**. Mental is the external cue those papers asked for.
+That reconstruction is the fatigue: mental fry from orchestrating several projects and several agents. The 2024–2026 literature calls the mechanisms **supervisory engineering work**, **verification load**, and **stealth context switching**. Mental is the external cue that hop needs — the control surface git cannot see.
 
 Git already records **what** changed. The expensive part of a hop — a weekend, a new agent, a second clone — is the rest: where you left off, why a decision was made, what is still in the air, and the next exact action. That is the only thing Mental stores.
 
@@ -58,10 +58,10 @@ Layers never invert: files → resolver → CLI → index → skill / rule / hoo
 | --- | --- | --- |
 | Journal | `journal/YYYY-MM-DD.md` | One section per real task boundary |
 | Decision | `decisions/YYYY-MM-DD-slug.md` | A choice that constrains the future |
-| Attention | `attention/YYYY-MM-DD-slug.md` | Residue in the air (direction, concern, thread) |
+| Attention | `attention/YYYY-MM-DD-slug.md` | Residue in the air (direction, concern, thread, verify) |
 | Note | `notes/slug.md` | A durable fact that saves future investigation |
 | Status | `status/current.md` | Disposable cache. Not SoT. |
 
-Heartbeat shows at most **7** open or later attention items. Residue that cannot close is a graveyard — resolve it.
+Heartbeat shows at most **7** open or later attention items (`verify` first, as Needs eyes). Residue that cannot close is a graveyard — resolve it. Settled lists newest decided titles (cap 7). `Hops` is parks today.
 
 See [identity](./identity.md) for how a repo finds its brain, and the [CLI reference](./cli.md) for the write commands.

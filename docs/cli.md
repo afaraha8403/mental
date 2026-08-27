@@ -25,8 +25,8 @@ Non-TTY (pipes, agents) with no args prints help and exits 2.
 
 | Command | What it does |
 | --- | --- |
-| `mental` | Heartbeat (TTY): resume, last outcome, git, residue, unsettled decisions; then exit |
-| `mental heartbeat` | Same cheap reload; agents pass `--json`. Read-only — does not write the pulse watermark. Delta is counts only |
+| `mental` | Heartbeat (TTY): resume, last outcome, git, hops today, residue, unsettled + settled; then exit |
+| `mental heartbeat` | Same cheap reload; agents pass `--json`. Read-only — does not write the pulse watermark. Delta is counts only. `hopsToday` is parks since local midnight |
 | `mental pulse` | Cross-project compact rows from `bindings.json` (id, name, resume, attentionCount, openDecisionCount). No journal bodies. Writes watermark for the active bundle |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only; does not create identity) |
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
@@ -34,11 +34,11 @@ Non-TTY (pipes, agents) with no args prints help and exits 2.
 | `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`) |
 | `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`) |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
-| `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`). Requires `--resume`. Then heartbeat; writes watermark |
-| `mental handoff --title --resume` | Planned boundary: journal then heartbeat. Both flags required. JSON `{ path, heartbeat }`. Writes watermark |
-| `mental journal --title --body --resume [--against]` | Append today’s journal section |
-| `mental attention --title --kind` | Create or update residue (`--status resolved` closes it) |
-| `mental decide --title` | Create or update a decision (`--status decided` closes by title; `--path` targets a file) |
+| `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`, `--via`). Requires `--resume`. Then heartbeat; writes watermark |
+| `mental handoff --title --resume` | Planned boundary: journal then heartbeat. Both flags required. JSON `{ path, heartbeat }`. Writes watermark. `--via` optional |
+| `mental journal --title --body --resume [--against] [--via]` | Append today’s journal section |
+| `mental attention --title --kind` | Create or update residue (`direction` \| `concern` \| `thread` \| `verify`; `--status resolved` closes it). `--via` optional |
+| `mental decide --title` | Create or update a decision (`--status decided` closes by title; `--path` targets a file). `--via` optional |
 | `mental note --title` | Scaffold a note |
 | `mental local [--import \| --move]` | Project `./.mental` after ignore check |
 | `mental remap [--to id]` | List or retarget this clone’s UUID |
@@ -55,9 +55,10 @@ Non-TTY (pipes, agents) with no args prints help and exits 2.
 Same `--title` updates the existing decision or attention file (paths are identities). `--path` targets a specific file.
 
 ```bash
-mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none" --against PLAN.md
-mental decide --title "Heartbeat only, no standing TUI" --status decided
-mental attention --title "Tom said ship the pointer not the dump" --kind direction --from Tom
+mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none" --against PLAN.md --via cursor
+mental decide --title "Heartbeat only, no standing TUI" --status decided --via cursor
+mental attention --title "Tom said ship the pointer not the dump" --kind direction --from Tom --via cursor
+mental attention --title "Resolver tests not reviewed" --kind verify --via cursor
 mental attention --title "Tom said ship the pointer not the dump" --status resolved
 mental note --title "Identity is a UUID in bindings.json"
 ```

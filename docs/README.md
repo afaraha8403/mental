@@ -5,7 +5,7 @@ Mental is a local-first continuity layer for you and your coding agents. This hu
 | Doc | Start here if you want… |
 | --- | --- |
 | [Why Mental](./why.md) | The problem, the contract, and what we refuse to be |
-| [The research](./research.md) | Resumption lag, attention residue, interrupted-work stress |
+| [The research](./research.md) | Verification load, supervisory work, stealth switching (2024–2026) |
 | [Install](./install.md) | npm, Agent Plugins, Cursor, Claude Code, Copilot, a git clone |
 | [CLI reference](./cli.md) | Every command, flag, and exit code |
 | [Agents](./agents.md) | Skill, rule, `--json`, MCP, receipts, fail-open |

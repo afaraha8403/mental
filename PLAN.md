@@ -210,7 +210,7 @@ Port templates from [skills/mental/references/templates.md](skills/mental/refere
 | Status            | `status/current.md`            | regenerated cache, not SoT                     |
 
 
-Frontmatter: `type` required; recommend `title`, `description`, `timestamp`, `tags`. Attention also has `kind` (`direction` | `concern` | `thread`) and optional `from` / `against`. Paths are identities (don’t rename to “archive”). Links are relative markdown links. Attention is residue, not a todo list — heartbeat shows at most 7 open+later items.
+Frontmatter: `type` required; recommend `title`, `description`, `timestamp`, `tags`. Attention also has `kind` (`direction` | `concern` | `thread` | `verify`) and optional `from` / `against` / `via`. Paths are identities (don’t rename to “archive”). Links are relative markdown links. Attention is residue, not a todo list — heartbeat shows at most 7 open+later items (`verify` first).
 
 **Journal section contract** (keep):
 
@@ -332,7 +332,7 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 | `mental park --resume`                         | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind`. Then heartbeat; writes watermark. |
 | `mental handoff --title --resume`              | Planned boundary sugar: journal then heartbeat. Both flags required. Writes watermark. |
 | `mental journal [--title] [--resume] [--against]` | Append today’s journal section. `--against` binds resume to a repo-relative plan path. Missing `--title` prints usage. Agents pass `--title` `--body` `--resume` `--json`. |
-| `mental attention`                             | Create or update residue (`--kind direction\|concern\|thread`, `--status open\|later\|resolved`). Update by `--title` or `--path`. |
+| `mental attention`                             | Create or update residue (`--kind direction\|concern\|thread\|verify`, `--status open\|later\|resolved`, optional `--via`). Update by `--title` or `--path`. |
 | `mental decide`                                | Create or update a decision (`--title` or `--path`; `--status decided` closes)                                                                          |
 | `mental note`                                  | Scaffold a note                                                                                                                                         |
 | `mental local [--import | --move]`             | Create `./.mental/`. `--import` copies home slice. `--move` copies and stops using home for this uuid (keep files in home unless user confirms delete). |

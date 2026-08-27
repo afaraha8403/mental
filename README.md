@@ -36,10 +36,15 @@ Against PLAN.md
 Now     Resolver landed  (today)
 Git     main (dirty)
         feat: UUID bindings survive a repo move
+Hops    2
+Needs eyes
+  [verify] Resolver tests not reviewed
 In the air
   [direction] Tom said ship the pointer
 Unsettled
   [open] Heartbeat only, no standing TUI
+Settled
+  UUID bindings survive a repo move
 ```
 
 One shot. Then exit. Not a menu. Not a todo app.
@@ -108,7 +113,7 @@ Same CLI if you ever type it yourself. Same files.
 
 ## Why this exists
 
-A new agent, another repo, Monday morning — someone reconstructs intent from chat and `git log`. That reconstruction is the tax. It is what developers feel as decision fatigue and brain fatigue. Mental removes it.
+A new agent, another repo, Monday morning — someone reconstructs intent from chat and `git log`. That reconstruction is the tax. It is what developers feel as mental fry: verifying what the last agent did, deciding what the next one may touch, and holding residue across hops. Mental removes it.
 
 | You already have | Mental adds |
 | --- | --- |
@@ -116,7 +121,7 @@ A new agent, another repo, Monday morning — someone reconstructs intent from c
 | `PLAN.md` / issues | Decisions git cannot explain |
 | Chat (gone next session) | Attention residue, written down (capped at 7) |
 
-The literature already measured the tax. [Parnin and Rugaber (2011)](https://doi.org/10.1007/s11219-010-9104-9): 10,000 sessions, only **10%** of programmers start coding again within a minute. [Leroy (2009)](https://doi.org/10.1016/j.obhdp.2009.04.002) named **attention residue** — unfinished Task A stays loaded on Task B. [An explicit cue doubled resumption success](https://doi.org/10.1145/1753326.1753342) versus notes alone. `mental` is that cue.
+The last two years measured the tax. Experienced developers using Cursor believed they were **20% faster** and were **19% slower** ([METR 2025](https://arxiv.org/abs/2507.09089)). Productivity ratings held while flow and cognitive load eroded ([Vella and Blincoe 2026](https://arxiv.org/abs/2605.23135)). AI users switched windows more over two years — **74% did not notice** ([ICSE 2026](https://doi.org/10.1145/3744916.3787811)). `mental` is the cue that hop needs.
 
 Citations and what we do not claim: [docs/research.md](docs/research.md).
 
@@ -162,7 +167,7 @@ Agents try `npx @balacode/mental`. If that fails they continue the coding task a
 | | |
 | --- | --- |
 | [Why Mental](docs/why.md) | Contract, non-goals, architecture |
-| [The research](docs/research.md) | Resumption lag, attention residue, citations |
+| [The research](docs/research.md) | Verification load, supervisory work, 2024–2026 citations |
 | [Install](docs/install.md) | npm, plugins, clone, doctor, uninstall |
 | [CLI reference](docs/cli.md) | Commands, flags, exit codes |
 | [Agents](docs/agents.md) | `--json`, skill, MCP, receipts |

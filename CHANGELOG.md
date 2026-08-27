@@ -7,9 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Attention kind `verify` — “agent produced this, human has not looked.” Heartbeat lists it first under **Needs eyes**. Cap still 7. Not a review queue.
+- `Hops` on the TTY pulse = parks today (`hopsToday`). `delta.parks` stays since-last-pulse. Makes stealth switching visible without analytics.
+- **Settled** on heartbeat: newest decided titles (cap 7, no bodies) so the next agent does not re-litigate.
+- `--via <token>` on journal / park / handoff / attention / decide — short client token (`cursor`, `claude-code`, `copilot`, `codex`, `mcp`, `cli`). Rejects emails, URLs, paths, and session ids.
+
 ### Changed
 
 - Ship a 256×256 PNG mark (`assets/logo.png`, ~29KB) instead of the 262KB traced SVG. README and Cursor plugin point at the PNG; the SVG is not in the package.
+- README “Why this exists” and [docs/research.md](docs/research.md) now cite 2024–2026 agent-era studies (verification load, supervisory engineering, stealth context switching, the productivity–experience paradox) instead of 1998–2011 interruption papers as the primary proof. The ready-to-resume mechanism still maps to `park` / `handoff`.
 
 ## [0.3.1] - 2026-08-27
 

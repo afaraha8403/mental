@@ -72,7 +72,7 @@ export function pulseDeltaFor(root, home, id, env = process.env) {
   const wm = home && id ? readWatermark(home, id, env) : null;
   const since = wm?.at ?? now;
   if (!root || !wm) {
-    return { since, writes: 0, attention: 0, decisions: 0, titles: [] };
+    return { since, writes: 0, attention: 0, decisions: 0, parks: 0, titles: [] };
   }
   return collectDelta(root, wm.at, { titleLimit: PULSE_TITLE_CAP });
 }

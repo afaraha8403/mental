@@ -7,7 +7,7 @@ export function usage() {
   return `${CMD} v${VERSION} — local-first OKF continuity
 
 Usage:
-  ${CMD}                       Heartbeat (TTY): resume, last outcome, git, residue, open decisions
+  ${CMD}                       Heartbeat (TTY): resume, git, hops, residue, unsettled + settled decisions
   ${CMD} heartbeat             Same cheap reload (agents: --json). Not a notes dump; does not write watermark
   ${CMD} pulse                 Cross-project compact rows (id, name, resume, counts) — no journal bodies
   ${CMD} where                 Active bundle (root, id, mode) — read-only
@@ -85,6 +85,7 @@ export function parseArgv(argv) {
     "--confirm",
     "--attention",
     "--days",
+    "--via",
   ]);
 
   for (let i = 0; i < argv.length; i++) {

@@ -15,6 +15,7 @@ import {
 } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine } from "../lib/output.mjs";
+import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
@@ -89,10 +90,16 @@ export function cmdAttention(args, io = {}) {
     return 1;
   }
 
+  const viaParsed = viaFromFlags(args.flags);
+  if (!viaParsed.ok) {
+    printResult(stdout, args.json, false, undefined, { code: "usage", message: VIA_USAGE });
+    return 1;
+  }
+
   if (!existing && !kindFlag) {
     printResult(stdout, args.json, false, undefined, {
       code: "usage",
-      message: "mental attention create requires --kind direction|concern|thread",
+      message: "mental attention create requires --kind direction|concern|thread|verify",
     });
     return 1;
   }
@@ -105,6 +112,7 @@ export function cmdAttention(args, io = {}) {
           kind: kindFlag || undefined,
           from: flagString(args.flags, "from") || undefined,
           against: against || undefined,
+          via: viaParsed.via,
           description: flagString(args.flags, "description") || undefined,
           body: flagString(args.flags, "body") || undefined,
         })
@@ -114,6 +122,7 @@ export function cmdAttention(args, io = {}) {
           kind: kindFlag,
           from: flagString(args.flags, "from") || undefined,
           against: against || undefined,
+          via: viaParsed.via,
           description: flagString(args.flags, "description") || "",
           body: flagString(args.flags, "body") || "",
           slug: flagString(args.flags, "slug") || undefined,

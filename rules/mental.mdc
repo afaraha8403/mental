@@ -7,7 +7,7 @@ Continuity is Mental. On start/finish of real work, or orientation questions, us
 
 Run `mental where` then `mental heartbeat --json` (or `mental status --json` when notes are needed). Do not grep `.mental` or `~/.mental`. Do not parse YAML frontmatter yourself.
 
-Mid-chat, not just start/finish: before changing an approach, `mental search "…" --json` for prior decisions. When residue surfaces ("X said…", a concern, "park this"), record `mental attention … --json` immediately — do not wait for the handoff. Interrupted mid-hop: `mental park --resume … --json`. Cross-project overview: `mental pulse --json` (compact rows, no journal dump). Cheap mid-chat reload stays `mental heartbeat --json`.
+Mid-chat, not just start/finish: before changing an approach, `mental search "…" --json` for prior decisions. When residue surfaces ("X said…", a concern, "park this", unverified agent output), record `mental attention … --json` immediately — do not wait for the handoff. Interrupted mid-hop: `mental park --resume … --json`. Cross-project overview: `mental pulse --json` (compact rows, no journal dump). Cheap mid-chat reload stays `mental heartbeat --json`. Writes pass `--via cursor` (short client token, never a session id).
 
 If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, continue the user's coding task and mention install. Missing Mental must not block work.
 

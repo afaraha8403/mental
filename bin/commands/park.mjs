@@ -17,6 +17,7 @@ import { refreshIndex } from "../lib/index.mjs";
 import { collectHeartbeat, formatHeartbeat } from "../lib/heartbeat.mjs";
 import { writeWatermark } from "../lib/watermark.mjs";
 import { printResult, kindLine } from "../lib/output.mjs";
+import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
@@ -26,17 +27,17 @@ function flagString(flags, key) {
  * Same title identity as `mental attention`: update if a file exists, else create.
  * Same-day retry must not throw after the journal is already appended.
  */
-function upsertParkAttention(root, { title, kind, from, against }) {
+function upsertParkAttention(root, { title, kind, from, against, via }) {
   const existing = findAttention(root, { title });
   if (existing) {
-    return updateAttention(root, existing.path, { kind, from, against });
+    return updateAttention(root, existing.path, { kind, from, against, via });
   }
   try {
-    return writeAttention(root, { title, kind, from, against });
+    return writeAttention(root, { title, kind, from, against, via });
   } catch (err) {
     if (/** @type {{ code?: string }} */ (err).code === "exists") {
       const raced = findAttention(root, { title });
-      if (raced) return updateAttention(root, raced.path, { kind, from, against });
+      if (raced) return updateAttention(root, raced.path, { kind, from, against, via });
     }
     throw err;
   }
@@ -74,6 +75,12 @@ export function cmdPark(args, io = {}) {
     return 1;
   }
 
+  const viaParsed = viaFromFlags(args.flags);
+  if (!viaParsed.ok) {
+    printResult(stdout, args.json, false, undefined, { code: "usage", message: VIA_USAGE });
+    return 1;
+  }
+
   const againstRaw = flagString(args.flags, "against");
   const against = againstRaw != null ? repoRelativePath(againstRaw) : undefined;
   if (againstRaw != null && against === null) {
@@ -101,7 +108,7 @@ export function cmdPark(args, io = {}) {
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
-  const written = appendJournal(resolved.data.root, { title, body, resume, against });
+  const written = appendJournal(resolved.data.root, { title, body, resume, against, via: viaParsed.via, hop: true });
 
   /** @type {{ path: string, updated: boolean } | null} */
   let attention = null;
@@ -112,6 +119,7 @@ export function cmdPark(args, io = {}) {
         kind,
         from: flagString(args.flags, "from") || undefined,
         against,
+        via: viaParsed.via,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

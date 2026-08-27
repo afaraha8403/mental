@@ -15,7 +15,7 @@ mental where --json
 mental heartbeat --json
 ```
 
-`heartbeat` is the cheap mid-chat reload: resume, last outcome, git, residue, unsettled decisions (lists capped at 7; counts via `attentionCount` / `openDecisionCount`). Use `mental status --json` when you also need notes. Do not call `pulse` every turn.
+`heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue, unsettled + settled (lists capped at 7; counts via `attentionCount` / `openDecisionCount` / `needsEyesCount` / `guardrailCount` / `hopsToday`). Use `mental status --json` when you also need notes. Do not call `pulse` every turn.
 
 ### Park vs handoff vs heartbeat vs pulse
 
@@ -29,12 +29,13 @@ mental heartbeat --json
 `park` encodes at an interruption (default title `"Parked"`; optional `--attention` + `--kind`). `handoff` is sugar for journal then heartbeat — both `--title` and `--resume` required. `pulse` returns compact rows from bindings (id, name, resume, counts) — no journal bodies, no merged dump. Heartbeat stays read-only for the pulse watermark; park / handoff / pulse write it after computing since-last-pulse counts.
 
 ```bash
-mental park --resume "…" --json
-mental handoff --title "…" --resume "…" --json
+mental park --resume "…" --via cursor --json
+mental handoff --title "…" --resume "…" --via cursor --json
 mental pulse --json
-mental journal --title "…" --body "…" --resume "…" --against PLAN.md --json
-mental attention --title "…" --kind concern --status open --json
-mental decide --title "…" --status open --json
+mental journal --title "…" --body "…" --resume "…" --against PLAN.md --via cursor --json
+mental attention --title "…" --kind concern --status open --via cursor --json
+mental attention --title "…" --kind verify --status open --via cursor --json
+mental decide --title "…" --status open --via cursor --json
 mental decide --title "…" --status decided --json
 mental search "…" --json
 mental list --type Decision --status open --json

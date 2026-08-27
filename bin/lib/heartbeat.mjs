@@ -7,13 +7,15 @@ import { gitSnapshot } from "./git.mjs";
 import {
   ATTENTION_HEARTBEAT_CAP,
   DECISION_HEARTBEAT_CAP,
+  capHeartbeatAttention,
   latestJournalHandoff,
+  listDecidedGuardrails,
   listOpenAttention,
   listOpenDecisions,
   localDate,
 } from "./okf.mjs";
 import { brandMark } from "./output.mjs";
-import { heartbeatDelta } from "./delta.mjs";
+import { heartbeatDelta, countParkHopsSinceMs, localDayStartMs } from "./delta.mjs";
 import { readWatermark } from "./watermark.mjs";
 
 export { ATTENTION_HEARTBEAT_CAP, DECISION_HEARTBEAT_CAP };
@@ -62,13 +64,17 @@ export function collectHeartbeat(args) {
   const root = isBundleRoot(where) ? where.root : null;
   const handoff = root
     ? latestJournalHandoff(root)
-    : { resume: null, outcome: null, file: null, when: null, against: null };
+    : { resume: null, outcome: null, file: null, when: null, against: null, via: null };
   const openDecisions = root ? listOpenDecisions(root) : [];
-  const attention = root ? listOpenAttention(root) : [];
+  const attentionAll = root ? listOpenAttention(root) : [];
+  const attention = capHeartbeatAttention(attentionAll);
+  const needsEyesAll = attentionAll.filter((a) => a.kind === "verify");
+  const guardrailsAll = root ? listDecidedGuardrails(root) : [];
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const env = args.env ?? process.env;
   const wm = where.id && home ? readWatermark(home, where.id, env) : null;
   const delta = heartbeatDelta(root, wm?.at ?? null);
+  const hopsToday = root ? countParkHopsSinceMs(root, localDayStartMs()) : 0;
 
   return {
     ok: true,
@@ -77,10 +83,15 @@ export function collectHeartbeat(args) {
       gitRoot: where.gitRoot,
       handoff,
       against: handoff.against ?? null,
-      attention: attention.slice(0, ATTENTION_HEARTBEAT_CAP),
+      attention,
       openDecisions: openDecisions.slice(0, DECISION_HEARTBEAT_CAP),
-      attentionCount: attention.length,
+      attentionCount: attentionAll.length,
       openDecisionCount: openDecisions.length,
+      needsEyes: attention.filter((a) => a.kind === "verify"),
+      needsEyesCount: needsEyesAll.length,
+      guardrails: guardrailsAll.slice(0, DECISION_HEARTBEAT_CAP),
+      guardrailCount: guardrailsAll.length,
+      hopsToday,
       delta,
     },
   };
@@ -89,6 +100,11 @@ export function collectHeartbeat(args) {
 function formatAirItem(a) {
   const tag = a.status === "later" ? "later" : a.kind || a.status || "open";
   return `  [${tag}] ${a.title}`;
+}
+
+function extraLine(shown, total) {
+  if (total <= shown) return "";
+  return `\n  (+${total - shown} more)`;
 }
 
 /**
@@ -111,26 +127,36 @@ export function formatHeartbeat(data, now = new Date(), env = process.env) {
   const attention = data.attention ?? [];
   const attentionTotal = data.attentionCount ?? attention.length;
   const shown = attention.slice(0, ATTENTION_HEARTBEAT_CAP);
+  const eyes = shown.filter((a) => a.kind === "verify");
+  const rest = shown.filter((a) => a.kind !== "verify");
+  const eyesTotal = data.needsEyesCount ?? eyes.length;
+  const extraEyes = eyes.length && rest.length === 0 ? extraLine(eyes.length, attentionTotal) : "";
   const extraAir =
-    attentionTotal > ATTENTION_HEARTBEAT_CAP
-      ? `\n  (+${attentionTotal - ATTENTION_HEARTBEAT_CAP} more)`
-      : "";
-  const air =
-    attentionTotal === 0 ? "  none" : shown.map(formatAirItem).join("\n") + extraAir;
+    rest.length || eyes.length === 0 ? extraLine(shown.length, attentionTotal) : "";
+  const eyesBlock =
+    eyesTotal > 0
+      ? ["Needs eyes", eyes.length === 0 ? "  none" : eyes.map(formatAirItem).join("\n") + extraEyes]
+      : [];
+  const air = attentionTotal === 0 ? "  none" : rest.map(formatAirItem).join("\n") + extraAir || "  none";
   const decisions = data.openDecisions ?? [];
   const decisionTotal = data.openDecisionCount ?? decisions.length;
   const shownDecisions = decisions.slice(0, DECISION_HEARTBEAT_CAP);
-  const extraDec =
-    decisionTotal > DECISION_HEARTBEAT_CAP
-      ? `\n  (+${decisionTotal - DECISION_HEARTBEAT_CAP} more)`
-      : "";
+  const extraDec = extraLine(shownDecisions.length, decisionTotal);
   const open =
     decisionTotal === 0
       ? "  none"
       : shownDecisions.map((d) => `  [${d.status}] ${d.title}`).join("\n") + extraDec;
+  const guardrails = data.guardrails ?? [];
+  const guardTotal = data.guardrailCount ?? guardrails.length;
+  const shownGuard = guardrails.slice(0, DECISION_HEARTBEAT_CAP);
+  const settled =
+    guardTotal === 0
+      ? []
+      : ["Settled", shownGuard.map((g) => `  ${g.title}`).join("\n") + extraLine(shownGuard.length, guardTotal)];
+  const parks = data.hopsToday ?? data.delta?.parks ?? 0;
 
   const lines = [`${brandMark(env)} ${resume}`];
   if (against) lines.push(`Against ${against}`);
-  lines.push("", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, "In the air", air, "Unsettled", open);
+  lines.push("", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, `Hops    ${parks}`, ...eyesBlock, "In the air", air, "Unsettled", open, ...settled);
   return lines.join("\n");
 }

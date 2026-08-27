@@ -13,6 +13,7 @@ import {
 } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine } from "../lib/output.mjs";
+import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
@@ -39,6 +40,12 @@ export function cmdDecide(args, io = {}) {
     return 1;
   }
   const status = statusFlag || "open";
+
+  const viaParsed = viaFromFlags(args.flags);
+  if (!viaParsed.ok) {
+    printResult(stdout, args.json, false, undefined, { code: "usage", message: VIA_USAGE });
+    return 1;
+  }
 
   const resolved = resolveBundle({
     cwd: args.cwd ?? process.cwd(),
@@ -75,12 +82,14 @@ export function cmdDecide(args, io = {}) {
           status: statusFlag || undefined,
           description: flagString(args.flags, "description") || undefined,
           body: flagString(args.flags, "body") || undefined,
+          via: viaParsed.via,
         })
       : writeDecision(resolved.data.root, {
           title,
           status,
           description: flagString(args.flags, "description") || "",
           body: flagString(args.flags, "body") || "",
+          via: viaParsed.via,
           slug: flagString(args.flags, "slug") || undefined,
         });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;

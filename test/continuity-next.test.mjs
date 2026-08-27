@@ -310,6 +310,7 @@ test("heartbeat --json has counts, no notes dump", () => {
   assert.equal(typeof hb.delta.writes, "number");
   assert.equal(typeof hb.delta.attention, "number");
   assert.equal(typeof hb.delta.decisions, "number");
+  assert.equal(typeof hb.delta.parks, "number");
   assert.equal(hb.delta.titles, undefined);
   assert.doesNotMatch(JSON.stringify(hb), /NOTE_BODY_MUST_NOT_APPEAR/);
 });

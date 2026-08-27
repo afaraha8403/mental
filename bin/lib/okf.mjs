@@ -8,7 +8,7 @@ import { basename, dirname, join, relative, resolve as resolvePath, sep } from "
 export const CONCEPT_DIRS = ["journal", "decisions", "notes", "attention", "status"];
 
 export const ATTENTION_STATUSES = new Set(["open", "later", "resolved"]);
-export const ATTENTION_KINDS = new Set(["direction", "concern", "thread"]);
+export const ATTENTION_KINDS = new Set(["direction", "concern", "thread", "verify"]);
 export const ATTENTION_HEARTBEAT_CAP = 7;
 /** Mirror attention: heartbeat TTY + JSON lists cap here; extras via `list`. */
 export const DECISION_HEARTBEAT_CAP = 7;
@@ -225,7 +225,7 @@ ${resume}
  * @param {string} root
  */
 export function latestJournalHandoff(root) {
-  const empty = { resume: null, outcome: null, file: null, when: null, against: null };
+  const empty = { resume: null, outcome: null, file: null, when: null, against: null, via: null };
   const dir = join(root, "journal");
   if (!existsSync(dir)) return empty;
   const all = readdirSync(dir).filter((f) => f.endsWith(".md"));
@@ -239,6 +239,7 @@ export function latestJournalHandoff(root) {
   const last = sections[sections.length - 1] || body;
   const resumeM = last.match(/^Resume:\s*(.+)$/m) || body.match(/^Resume:\s*(.+)$/m);
   const againstM = last.match(/^Against:\s*(.+)$/m) || last.match(/^Plan:\s*(.+)$/m);
+  const viaM = last.match(/^Via:\s*(.+)$/m);
   const headingM = last.match(/^([^\n]+)/);
   const heading = headingM ? headingM[1] : "";
   const outcome = heading.replace(/^\d{1,2}:\d{2}\s+—\s+/, "").trim() || null;
@@ -250,6 +251,7 @@ export function latestJournalHandoff(root) {
     file: `journal/${file}`,
     when: date ? { date, time: timeM ? timeM[1] : null } : null,
     against: againstM ? againstM[1].trim() : null,
+    via: viaM ? viaM[1].trim() : null,
   };
 }
 
@@ -288,6 +290,40 @@ export function recentJournalSections(root, limit = 8) {
     }
   }
   return out;
+}
+
+/**
+ * Decided constraints, newest filename first. Titles only on the pulse.
+ * @param {string} root
+ */
+export function listDecidedGuardrails(root) {
+  const dir = join(root, "decisions");
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md")).sort().reverse()) {
+    const text = readFileSync(join(dir, file), "utf8");
+    const { data } = parseFrontmatter(text);
+    if (String(data.status || "") !== "decided") continue;
+    out.push({
+      path: `decisions/${file}`,
+      file,
+      title: String(data.title || basename(file, ".md")),
+      status: "decided",
+      timestamp: data.timestamp ? String(data.timestamp) : "",
+    });
+  }
+  return out;
+}
+
+/**
+ * Verify remainder first, then other residue. Newest-first order preserved in each group.
+ * @param {Array<{ kind?: string }>} items
+ * @param {number} [cap]
+ */
+export function capHeartbeatAttention(items, cap = ATTENTION_HEARTBEAT_CAP) {
+  const verify = items.filter((a) => a.kind === "verify");
+  const rest = items.filter((a) => a.kind !== "verify");
+  return [...verify, ...rest].slice(0, cap);
 }
 
 /**
@@ -477,9 +513,9 @@ export function findAttention(root, { path, title } = {}) {
 
 /**
  * @param {string} root
- * @param {{ title: string, status?: string, kind: string, from?: string, against?: string, description?: string, body?: string, slug?: string, now?: Date }} opts
+ * @param {{ title: string, status?: string, kind: string, from?: string, against?: string, via?: string, description?: string, body?: string, slug?: string, now?: Date }} opts
  */
-export function writeAttention(root, { title, status = "open", kind, from, against, description = "", body = "", slug, now = new Date() }) {
+export function writeAttention(root, { title, status = "open", kind, from, against, via, description = "", body = "", slug, now = new Date() }) {
   ensureSkeleton(root);
   const day = localDate(now);
   const s = slug || slugify(title);
@@ -502,6 +538,7 @@ export function writeAttention(root, { title, status = "open", kind, from, again
         kind,
         from: from || undefined,
         against: against || undefined,
+        via: via || undefined,
       },
       `# ${title}
 
@@ -515,9 +552,9 @@ ${text}
 /**
  * @param {string} root
  * @param {string} rel
- * @param {{ title?: string, status?: string, kind?: string, from?: string, against?: string, description?: string, body?: string, now?: Date }} opts
+ * @param {{ title?: string, status?: string, kind?: string, from?: string, against?: string, via?: string, description?: string, body?: string, now?: Date }} opts
  */
-export function updateAttention(root, rel, { title, status, kind, from, against, description, body, now = new Date() }) {
+export function updateAttention(root, rel, { title, status, kind, from, against, via, description, body, now = new Date() }) {
   const got = readBundleFile(root, rel);
   if (!got.ok) {
     throw Object.assign(new Error(got.error.message), { code: got.error.code });
@@ -528,6 +565,7 @@ export function updateAttention(root, rel, { title, status, kind, from, against,
   if (kind) data.kind = kind;
   if (from != null && from !== "") data.from = from;
   if (against != null && against !== "") data.against = against;
+  if (via != null && via !== "") data.via = via;
   if (description) data.description = description;
   data.timestamp = now.toISOString();
   data.type = "Attention";
@@ -544,17 +582,19 @@ export function updateAttention(root, rel, { title, status, kind, from, against,
 
 /**
  * @param {string} root
- * @param {{ title: string, body?: string, resume?: string, against?: string, now?: Date }} opts
+ * @param {{ title: string, body?: string, resume?: string, against?: string, via?: string, hop?: boolean, now?: Date }} opts
  */
-export function appendJournal(root, { title, body = "", resume = "Continue. — open loops: none", against, now = new Date() }) {
+export function appendJournal(root, { title, body = "", resume = "Continue. — open loops: none", against, via, hop = false, now = new Date() }) {
   ensureSkeleton(root);
   const day = localDate(now);
   const file = join(root, "journal", `${day}.md`);
   const ts = now.toISOString();
   const time = localTime(now);
+  const hopLine = hop ? "Hop: park\n" : "";
+  const viaLine = via ? `Via: ${via}\n` : "";
   const againstLine = against ? `\nAgainst: ${against}\n` : "";
   const section = `## ${time} — ${title}
-${body.trim()}
+${hopLine}${viaLine}${body.trim()}
 ${againstLine}
 Resume: ${resume}
 `;
@@ -587,9 +627,9 @@ ${section}`,
 
 /**
  * @param {string} root
- * @param {{ title: string, status?: string, description?: string, body?: string, slug?: string, now?: Date }} opts
+ * @param {{ title: string, status?: string, description?: string, body?: string, via?: string, slug?: string, now?: Date }} opts
  */
-export function writeDecision(root, { title, status = "open", description = "", body = "", slug, now = new Date() }) {
+export function writeDecision(root, { title, status = "open", description = "", body = "", via, slug, now = new Date() }) {
   ensureSkeleton(root);
   const day = localDate(now);
   const s = slug || slugify(title);
@@ -618,6 +658,7 @@ ${body.trim() || "<why this choice matters>"}
         tags: [],
         timestamp: ts,
         status,
+        via: via || undefined,
       },
       `# ${title}
 
@@ -630,9 +671,9 @@ ${defaultBody}`,
 /**
  * @param {string} root
  * @param {string} rel
- * @param {{ title?: string, status?: string, description?: string, body?: string, now?: Date }} opts
+ * @param {{ title?: string, status?: string, description?: string, body?: string, via?: string, now?: Date }} opts
  */
-export function updateDecision(root, rel, { title, status, description, body, now = new Date() }) {
+export function updateDecision(root, rel, { title, status, description, body, via, now = new Date() }) {
   const got = readBundleFile(root, rel);
   if (!got.ok) {
     throw Object.assign(new Error(got.error.message), { code: got.error.code });
@@ -641,6 +682,7 @@ export function updateDecision(root, rel, { title, status, description, body, no
   if (title) data.title = title;
   if (status) data.status = status;
   if (description) data.description = description;
+  if (via != null && via !== "") data.via = via;
   data.timestamp = now.toISOString();
   data.type = "Decision";
   let nextBody = got.data.body;

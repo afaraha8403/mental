@@ -1,54 +1,82 @@
 # The research Mental is built on
 
-Mental exists because orchestrating several repos and several agents is a **resumption problem** with extra hops. Developers already feel it as decision fatigue and brain fatigue. The HCI and organizational-behavior literature named the mechanisms years before coding agents arrived.
+Mental exists because **agentic development is a continuity problem**, not a typing-speed problem.
 
-This page is the citation trail. The README keeps the short version.
+Since late 2022, coding agents became the normal way many developers work. Git still records what changed. Chat still evaporates at the session boundary. The human is now the supervisor of one or several agents, across one or several repos: directing, verifying, correcting, then hopping. That hop — a new agent, Monday morning, a second clone — is what people feel as mental fry, decision exhaustion, and brain fatigue.
 
-Mental has not been run as a lab study. The claim is narrower and honest: the papers describe the tax, ask for an external cue, and Mental is that cue — a resume line, the decisions git cannot see, and the residue still in the air — shared with the next human or agent.
+This page is the citation trail (2024–2026, peer-reviewed first). The README keeps the short version.
 
-## Resumption is slow
+Mental has not been run as a lab study. The claim is narrower and honest: the papers describe a tax the speed studies never measured, and Mental is the external cue that hop needs — a resume line, the decisions git cannot see, and the residue still in the air — shared with the next human or agent.
 
-[Parnin and Rugaber (2011)](https://doi.org/10.1007/s11219-010-9104-9), *Software Quality Journal* — 10,000 recorded sessions from 86 programmers, plus a survey of 414 — found that **only 10% of sessions start coding again within a minute** after an interruption, and **only 7% edit without first navigating elsewhere** to remember. Developers already cope with rehearsal, serialization, and cue priming (sticky notes, TODOs, compile errors left as roadblocks). IDEs still lack an explicit representation of goals, plans, and intermediate knowledge.
+## The work shifted: you write less, you supervise more
 
-[Parnin and DeLine (CHI 2010)](https://doi.org/10.1145/1753326.1753342) surveyed 371 programmers: they rely heavily on note-taking across several media. In the lab, an explicit resumption cue **doubled task-completion success** versus notes alone.
+[Vella and Blincoe (2026)](https://arxiv.org/abs/2605.23135) followed professional engineers for six months (158 → 95 matched). **82%** reported spending less time writing code. Effort moved toward **verification**. They name the new category **supervisory engineering work**: directing AI, evaluating its output, and correcting it.
 
-[LaToza, Venolia, and DeLine (ICSE 2006)](https://doi.org/10.1145/1134285.1134355) — a Microsoft developer survey cited throughout this literature — found **62%** believed recovering from interruptions was a serious problem.
+They also named the **productivity–experience paradox**: **84%** still said productivity improved, at both time points, while the share reporting a worse developer experience in at least one dimension nearly doubled (**14% → 27%**). Flow and cognitive load eroded. Feedback loops improved. Feeling faster and feeling fried can be the same week.
 
-[van Solingen, Berghout, and van Latum (IEEE Software 1998)](https://doi.org/10.1109/52.714427) observed industrial software teams spending about **an hour a day** managing interruptions, with roughly **15 minutes** to recover from one.
+[Chen, Talwalkar, Brennan, and Neubig (2025)](https://arxiv.org/abs/2507.08149) ran the first controlled comparison of copilots vs coding agents. Agents raised task correctness about **35%** and cut user effort roughly in half versus copilots, with lower reported cognitive load — and participants still wanted better **understanding of agent outputs**. Autonomy does not remove the supervisor. It moves the bottleneck to “did I actually understand what just landed?”
 
-Mental’s `heartbeat` is the explicit cue those papers asked for: one resume line, last outcome, git, residue, unsettled decisions. Agents call it instead of reconstructing from chat.
+[Huang, Moreno Reyna, Lerner, Xia, and Hempel (2025)](https://arxiv.org/abs/2512.14012) observed professional developers using agents in 2025: they do not “vibe.” They **control** design and implementation — plan first, review or monitor every change, reject what does not fit. The expensive artifact is the control surface (constraints, next action, what is still unverified), not the chat transcript.
 
-## Unfinished work leaks (attention residue)
+Mental stores that control surface. Git cannot.
 
-[Leroy (2009)](https://doi.org/10.1016/j.obhdp.2009.04.002), *Organizational Behavior and Human Decision Processes*, named **attention residue**: cognitions about Task A persist after you have switched to Task B, and subsequent performance drops — especially when Task A is unfinished.
+## Speed is not the same as continuity
 
-That is Mental’s `attention` type, in the product’s own words (“in the air”). Write the residue down the moment it surfaces. Cap seven on the heartbeat. Resolve it. Working memory can drop what the file is holding.
+Early Copilot labs reported large speedups on narrow tasks. Later field evidence split.
 
-[Trafton, Altmann, Brock, and Mintz (2003)](https://doi.org/10.1016/S1071-5819(03)00023-5) showed that **prospective goal encoding** at the interruption — “what I will do when I come back” — shortens resumption lag. Mental’s journal `Resume:` line is that encoding.
+[Paradis et al. (ICSE-SEIP 2025)](https://doi.org/10.1109/icse-seip66354.2025.00060) — Google RCT, 96 full-time engineers, complex enterprise task — estimated about **21%** shorter time on task with internal AI features (wide confidence interval; summer 2024 tooling).
 
-## You pay in stress even when you “keep up”
+[Becker et al. / METR (2025)](https://arxiv.org/abs/2507.09089) — RCT of **16** experienced open-source developers, **246** real issues, primarily Cursor Pro with Claude 3.5/3.7 Sonnet (Feb–Jun 2025). Developers forecast a **24%** speedup and, after the fact, still believed they had been **20%** faster. Measured completion time was **19% longer**. Screen labels: less time writing and searching; more time **prompting, waiting, and reviewing**. They accepted **under 44%** of AI generations; about **9%** of time went to reviewing and cleaning AI output.
 
-[Mark, Gudith, and Klocke (CHI 2008)](https://doi.org/10.1145/1357054.1357072) found interrupted people finished **faster**, with no quality drop in that study — and with **more stress, frustration, time pressure, and effort**. After about 20 minutes of interrupted work, the workload ratings were already significantly higher.
+That gap — felt faster, often not — is the reconstruction and verification tax. Mental does not make the model smarter. It stops the next session from paying the tax a second time.
 
-[Mark, Gonzalez, and Harris (CHI 2005)](https://doi.org/10.1145/1054972.1055017) observed information workers switching about every **three minutes**, with **57% of tasks interrupted** and work fragmented into many small sessions.
+[DORA 2025](https://dora.dev/dora-report-2025/) surveyed nearly 5,000 professionals: **90%** use AI at work, a median of **two hours a day**. More than **80%** say it increased productivity. **30%** report little or no trust in AI-generated code. High adoption plus low trust is not a contradiction. It is a standing verification load.
 
-The popular “23 minutes to refocus” figure comes from Mark’s later interviews about time-to-return, not from the 2008 CHI paper. We do not repeat it as a paper result.
+## Verification load is the fatigue you can measure
 
-Mental does not stop the hop. It stops you from paying a second tax: reconstructing intent from `git log` and yesterday’s agent chat.
+[Fan, Liu, Pan, and Zhang (CHI 2026)](https://doi.org/10.1145/3772318.3791176) held the model fixed and varied the interface (inline, chat, structured; N = 60). AI cut NASA-TLX workload by **18.2** points and time by **22%** versus no AI — and still, a **verification-load index** (failures, time-to-first-compile, churn, pauses, context switches) **partially mediated rising stress and fatigue across tasks**. Help can hurt when the leftover work is checking.
+
+Their design guidance is the product brief: report verification load alongside outcomes; package work so it is **verification-aware**. Mental’s journal `Resume:` line and open-loop list are that package for the *next* hop. They are not a compile-failure metric. They are the human-readable remainder: what still needs eyes, what was decided, what is still in the air.
+
+## Switching got quieter, not cheaper
+
+[Sergeyuk, Huang, Karaeva, Serova, Golubev, and Ahmed (ICSE 2026)](https://doi.org/10.1145/3744916.3787811) — JetBrains + UC Irvine — analyzed **151,904,543** IDE events from **800** developers (Oct 2022–Oct 2024, ChatGPT’s public life through mainstream in-IDE assistants). AI users wrote more and deleted more. Window switching trended **up** for AI users and not for non-users. In the survey arm, **74%** of AI-assisted developers said switching had **not** increased.
+
+The hop no longer feels like an interruption. It feels like using the tool. Telemetry still looks like fragmentation. `mental park --resume` is the ready-to-resume plan for a hop you might not notice you took.
+
+## Strain is a job-demand problem, not a character problem
+
+[Feng, Afroz, and Sarma (ICSE-SEIS 2026)](https://doi.org/10.1145/3786581.3786934) surveyed **442** developers and modeled burnout with the Job Demands–Resources lens. GenAI adoption heightens burnout **through elevated organizational pressure and workload**. Autonomy and learning resources mitigate it. They cite the same redistribution others measured: time saved on generation reappears as debugging, security review, and oversight ([Harness 2025](https://www.harness.io/state-of-software-delivery) reported **67%** spending more time debugging AI-generated code).
+
+Mental is a **job resource** in that model: an external store for open loops so working memory is not the backlog. It is not a wellness app and it does not claim to prevent burnout.
+
+## The intervention (ready-to-resume)
+
+The mechanism is older than agents. [Leroy and Glomb (2018)](https://doi.org/10.1287/orsc.2017.1184), *Organization Science*, showed that a brief **ready-to-resume plan** — where you left off, what you will do when you return — reduces attention residue and improves performance on the interrupting task. Mental’s `park` / `handoff` `Resume:` line is that plan, written by the agent, for a hop that is now an agent session or a second repo rather than a hallway tap.
+
+We do not lead the product story with 1998–2011 interruption studies. Those papers described human resumption before agents existed. The hop they measured is real; the *source* of the hop changed.
 
 ## What this is not
 
-- Not a claim that Mental was validated in those labs.
-- Not Baumeister-style “ego depletion” / decision-fatigue as a glucose effect (that literature did not replicate cleanly). The fatigue developers describe is real; the mechanisms we cite are **resumption lag**, **attention residue**, and **interrupted-work stress**.
-- Not a todo app. The papers warn that notes without a prospective cue fail. Mental stores the cue, not a backlog.
+- Not a claim that Mental was validated in those labs or surveys.
+- Not a claim that AI always slows you down (Google’s RCT found a speedup; METR found a slowdown in a different setting). The consistent finding is **redistribution**: generation gets cheaper, verification and continuity do not.
+- Not Baumeister-style “ego depletion” as a glucose effect (that literature did not replicate cleanly). The fatigue developers describe is real; the mechanisms we cite are **supervisory load**, **verification load**, **stealth context switching**, and **unfinished-work residue**.
+- Not a todo app. Notes without a prospective cue fail. Mental stores the cue, not a backlog.
+- Not a productivity scoreboard. We refuse to turn the pulse into analytics theater.
 
-## Map to the product
+## Map to the product (what already ships)
 
 | Finding | Mental |
 | --- | --- |
-| Resumption needs an explicit cue (Parnin, DeLine) | `mental` / `mental heartbeat --json` |
-| Prospective goal encoding (Trafton) | Journal `Resume:` — one exact next action |
-| Attention residue (Leroy) | `mental attention`, heartbeat “In the air”, cap 7 |
-| Decisions that constrain the future | `mental decide` — git cannot see the why |
-| Notes scattered across media (Parnin & DeLine survey) | One CLI, UUID identity, agents use `--json` |
-| Next session / next agent is another interruption | Shared home slice; fail open if Mental is missing |
+| Supervisory engineering / control surface (Vella, Huang) | `mental decide`, `--against PLAN.md`, journal body = only what git cannot explain |
+| Session boundary = the new interruption (DORA 2h/day with AI; chat gone next session) | `mental` / `heartbeat --json` — one resume line, last outcome, git, residue, unsettled decisions |
+| Ready-to-resume plan (Leroy & Glomb) | `park --resume` (mid-hop) and `handoff --resume` (planned close) |
+| Verification remainder (Fan; METR review time) | `kind: verify` → heartbeat **Needs eyes** (cap 7, verify first). Resolve when reviewed. |
+| Stealth switching (Sergeyuk et al.) | Agents `park` at a hop; TTY **Hops** = parks today (`hopsToday`). Not a scoreboard. |
+| Several repos, several agents (orchestration load) | `pulse` — compact rows; `--via` names the client; re-heartbeat if another agent may have written |
+| Control, don’t vibe (Huang) | **Settled** = newest decided titles on the pulse (cap 7, titles only) |
+| Job resource vs demand dump (Feng) | Fail open; never auto-journal every turn; hooks off by default |
+
+Demoted (not shipped): episodic git cue, `mental why`. The four research-shaped items above shipped in [Unreleased]; trail: [issue #5](https://github.com/afaraha8403/mental/issues/5).
+
+Citations stay on this page so the README can stay a landing page.

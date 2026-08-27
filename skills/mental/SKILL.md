@@ -76,12 +76,13 @@ mental status --json
 mental search "…" --json
 mental list --type Decision --json
 mental show <path> --json
-mental park --resume "…" --json
-mental handoff --title "…" --resume "…" --json
-mental journal --title "…" --body "…" --resume "…" --against PLAN.md --json
-mental attention --title "…" --kind direction --status open --json
-mental decide --title "…" --status open --json
-mental decide --title "…" --status decided --json
+mental park --resume "…" --via cursor --json
+mental handoff --title "…" --resume "…" --via cursor --json
+mental journal --title "…" --body "…" --resume "…" --against PLAN.md --via cursor --json
+mental attention --title "…" --kind direction --status open --via cursor --json
+mental attention --title "…" --kind verify --status open --via cursor --json
+mental decide --title "…" --status open --via cursor --json
+mental decide --title "…" --status decided --via cursor --json
 mental note --title "…" --json
 ```
 
@@ -159,10 +160,11 @@ mental where --json
 mental heartbeat --json
 ```
 
-`heartbeat` is the cheap mid-chat reload (resume, last outcome, git, residue,
-unsettled decisions — lists capped at 7; counts via `attentionCount` /
-`openDecisionCount`). Extra open decisions: `mental list --type Decision
---status open --json`. Use `mental status --json` when you also need notes.
+Heartbeat shows hops today, Needs eyes (`verify`), In the air, Unsettled, and
+Settled (newest decided titles, cap 7). Lists capped at 7; counts via
+`attentionCount` / `openDecisionCount` / `needsEyesCount` / `guardrailCount` /
+`hopsToday`. Extra open decisions: `mental list --type Decision --status open
+--json`. Use `mental status --json` when you also need notes.
 `status` refreshes `status/current.md` as a disposable cache — not SoT. Never
 block work if Mental errors; mention it and continue.
 
@@ -200,11 +202,19 @@ working memory after a hop but is not a choice-fork and not a durable fact:
 - `kind: direction` — "Tom said X" (optional `--from Tom`)
 - `kind: concern` — a worry that would cost a reload if forgotten
 - `kind: thread` — an unfinished thread of attention
+- `kind: verify` — agent produced this; human has not looked. Resolve when
+  reviewed (accepted or rejected). Not a review queue. Cap still 7; verify
+  sorts first on the heartbeat ("Needs eyes").
 - `status: open` | `later` | `resolved` — **must resolve**; residue that cannot
   close is a graveyard. Cap ≤7 on the heartbeat. Merge duplicates.
 
+On every write, pass `--via cursor` (or `claude-code`, `copilot`, `codex`,
+`mcp`, `cli`). Short client token only. Never a session id, email, URL, path,
+or machine name.
+
 ```text
-mental attention --title "…" --kind direction --status open --from "Tom" --json
+mental attention --title "…" --kind direction --status open --from "Tom" --via cursor --json
+mental attention --title "…" --kind verify --status open --via cursor --json
 mental attention --title "…" --status resolved --json
 ```
 
