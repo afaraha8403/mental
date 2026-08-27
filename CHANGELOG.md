@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-27
+
+### Changed
+
+- New Mental mark (`assets/logo.svg`) on the README and Cursor plugin. Editor chrome stripped; portable `plugin.json` still has no `logo` field (schema is closed).
+
 ## [0.3.0] - 2026-08-27
 
 ### Added
@@ -93,7 +99,8 @@ First public release of the Mental CLI.
 - `install --mcp` registers `serve`; `decide` updates by title so an open decision can close.
 - Install, doctor, uninstall; hooks stay off by default.
 
-[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/afaraha8403/mental/releases/tag/v0.3.1
 [0.3.0]: https://github.com/afaraha8403/mental/releases/tag/v0.3.0
 [0.2.3]: https://github.com/afaraha8403/mental/releases/tag/v0.2.3
 [0.2.2]: https://github.com/afaraha8403/mental/releases/tag/v0.2.2
