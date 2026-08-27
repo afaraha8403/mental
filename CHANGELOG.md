@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `mental park --resume` — encode continuity at an interruption (default journal title `"Parked"`), optional attention in the same call, then heartbeat. For mid-hop context switches, not only planned closes.
+- `mental handoff --title --resume` — planned task-boundary sugar: journal then heartbeat in one shot.
+- `mental pulse` — compact cross-project rows from `bindings.json` (resume + residue/decision counts, no journal bodies) for multi-repo orchestration.
+- Since-last-pulse delta counts on heartbeat / pulse / park / handoff (`${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json`). Heartbeat stays read-only for the watermark; writers refresh it after computing the delta.
+- Open-decision budget mirrors attention (cap 7 on heartbeat TTY and JSON; `attentionCount` / `openDecisionCount`; doctor warns when over).
+- Doctor warns (exit still 0 if only warns) for attention and decisions left open/later/deferred longer than 14 days (`--days` override).
 - First-class README: landing-page promise, measured numbers, and a docs hub (`docs/why.md`, `install.md`, `cli.md`, `agents.md`, `identity.md`, `benchmarks.md`, `research.md`).
 - README research section + [docs/research.md](docs/research.md): Parnin/Rugaber resumption lag, Leroy attention residue, Mark interrupted-work stress — mapped to heartbeat, `Resume:`, and attention.
 - Reproducible micro-benchmarks via `npm run bench` (`scripts/bench.mjs`) — CLI vs in-process heartbeat and search at 100 / 500 / 2,000 notes.

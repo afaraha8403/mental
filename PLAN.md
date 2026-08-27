@@ -322,19 +322,22 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 | Command                                        | Behavior                                                                                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `mental` (no args, TTY)                    | Print heartbeat (resume, last outcome, git, residue, unsettled decisions) and exit                                                                                    |
-| `mental heartbeat`                             | Same pulse as TTY no-args; agents pass `--json`                                                                                                          |
+| `mental heartbeat`                             | Same cheap reload as TTY no-args; agents pass `--json`. Read-only for pulse watermark; delta is counts only. Lists capped at 7. |
+| `mental pulse`                                 | Cross-project compact rows from bindings (id, name, resume, counts). No journal bodies. Writes pulse watermark for the active bundle. |
 | `mental where`                                 | Active root, uuid, mode, reason. Read-only: does not create a binding or ingest leftover.                                                                 |
 | `mental status`                                | Regenerated view: git snapshot + latest Resume + residue + open/deferred decisions + notes. Writes `status/current.md` as cache. Creates identity + leftover ingest on first write. |
 | `mental search <q>`                            | Index or file scan; `--type`, `--status`, `--tag`, `--kind`. Hits include `description` + `snippet`; FTS ordered by bm25. |
 | `mental list`                                  | Concepts with filters (`--type`, `--status`, `--tag`, `--kind`); includes `description`. |
 | `mental show <path>`                           | One file, relative to bundle root. JSON includes `backlinks`. |
+| `mental park --resume`                         | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind`. Then heartbeat; writes watermark. |
+| `mental handoff --title --resume`              | Planned boundary sugar: journal then heartbeat. Both flags required. Writes watermark. |
 | `mental journal [--title] [--resume] [--against]` | Append today’s journal section. `--against` binds resume to a repo-relative plan path. Missing `--title` prints usage. Agents pass `--title` `--body` `--resume` `--json`. |
 | `mental attention`                             | Create or update residue (`--kind direction\|concern\|thread`, `--status open\|later\|resolved`). Update by `--title` or `--path`. |
 | `mental decide`                                | Create or update a decision (`--title` or `--path`; `--status decided` closes)                                                                          |
 | `mental note`                                  | Scaffold a note                                                                                                                                         |
 | `mental local [--import | --move]`             | Create `./.mental/`. `--import` copies home slice. `--move` copies and stops using home for this uuid (keep files in home unless user confirms delete). |
 | `mental remap` / `split` / `link`              | Identity                                                                                                                                                |
-| `mental doctor`                                | One writer, ignore policy, index age, PATH, skill install presence                                                                                      |
+| `mental doctor`                                | One writer, ignore policy, index age, PATH, skill install presence; warn on decision budget + stale residue (`--days`)                                   |
 | `mental install [--project] [--hooks] [--mcp]` | Copy skill+rule to user agent dirs; optional project vendor; optional hooks; optional MCP config snippet                                                |
 | `mental hooks on|off`                          | User-level Claude/Cursor hook snippets calling `mental status --json`                                                                                   |
 | `mental serve`                                 | Optional MCP stdio wrapping the same commands                                                                                                           |
@@ -413,7 +416,7 @@ Never Stop auto-journal.
 
 ### 8.5 MCP (optional)
 
-`mental serve`: tools `heartbeat`, `where`, `status`, `search`, `list`, `show`, `journal`, `attention`, `decide`, `note` wrapping CLI functions in-process (don’t spawn a nested CLI if you can import lib). Search/list accept `type`/`status`/`tag`/`kind`. Tool JSON is compact (not pretty-printed). `mental install --mcp` registers `mental serve` in user-level MCP configs (`~/.cursor/mcp.json`, `~/.claude.json`); `mental uninstall` removes only Mental’s entry. MCP exists so tool-only agents (parallel sessions, orchestrators) can re-pulse and record mid-chat; still keep CLI for everyone else.
+`mental serve`: tools `heartbeat`, `pulse`, `where`, `status`, `search`, `list`, `show`, `park`, `handoff`, `journal`, `attention`, `decide`, `note` wrapping CLI functions in-process (don’t spawn a nested CLI if you can import lib). Search/list accept `type`/`status`/`tag`/`kind`. Tool JSON is compact (not pretty-printed). `mental install --mcp` registers `mental serve` in user-level MCP configs (`~/.cursor/mcp.json`, `~/.claude.json`); `mental uninstall` removes only Mental’s entry. MCP exists so tool-only agents (parallel sessions, orchestrators) can re-pulse and record mid-chat; still keep CLI for everyone else.
 
 ### 8.6 Agent Plugins package (portable)
 

@@ -53,7 +53,7 @@ Write for the user returning in two weeks. Be concise, factual, and explicit
 about observed versus inferred information.
 
 **OKF markdown is the source of truth.** Agents must call the CLI with `--json`.
-Do not grep `.mental`, `~/.mental`, or YAML frontmatter. Humans on a TTY can run `mental` with no args for a one-shot heartbeat (resume, last outcome, git, residue, open decisions). Agents use `mental heartbeat --json` for the same cheap pulse — not `status` unless they need notes.
+Do not grep `.mental`, `~/.mental`, or YAML frontmatter. Humans on a TTY can run `mental` with no args for a one-shot heartbeat (resume, last outcome, git, residue, open decisions). Agents use `mental heartbeat --json` for the same cheap reload — not `status` unless they need notes. Do not call `pulse` every turn or dump journals into context.
 
 ## Non-goals
 
@@ -71,10 +71,13 @@ Do not grep `.mental`, `~/.mental`, or YAML frontmatter. Humans on a TTY can run
 ```text
 mental where --json
 mental heartbeat --json
+mental pulse --json
 mental status --json
 mental search "…" --json
 mental list --type Decision --json
 mental show <path> --json
+mental park --resume "…" --json
+mental handoff --title "…" --resume "…" --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --json
 mental attention --title "…" --kind direction --status open --json
 mental decide --title "…" --status open --json
@@ -114,7 +117,7 @@ not this repo, so links would 404. The CLI tool card already has the path.
 ────────
 ```
 
-**Read-only (heartbeat / search / show / list):**
+**Read-only (heartbeat / pulse / search / show / list):**
 
 ```text
 ────────
@@ -129,7 +132,7 @@ not this repo, so links would 404. The CLI tool card already has the path.
 | 🚦 | Attention | `  🚦 Attention: Recorded  “<title>”` or `  🚦 Attention: Resolved  “<title>”` |
 | 🎯 | Decision | `  🎯 Decision: Decided  “<title>”` or `  🎯 Decision: Opened  “<title>”` |
 | 📝 | Note | `  📝 Note: Recorded  “<title>”` |
-| 🔍 | Read | `  🔍 Read: Heartbeat` / `Searched` / `Showed` / `Listed` |
+| 🔍 | Read | `  🔍 Read: Heartbeat` / `Pulse` / `Searched` / `Showed` / `Listed` |
 
 Mix writes and a read in one block if both happened. Never invent Mental activity.
 
@@ -161,10 +164,23 @@ mental where --json
 mental heartbeat --json
 ```
 
-`heartbeat` is the cheap reload (resume, last outcome, git, residue, unsettled
-decisions). Use `mental status --json` when you also need notes. `status`
-refreshes `status/current.md` as a disposable cache — not SoT. Never block
-work if Mental errors; mention it and continue.
+`heartbeat` is the cheap mid-chat reload (resume, last outcome, git, residue,
+unsettled decisions — lists capped at 7; counts via `attentionCount` /
+`openDecisionCount`). Extra open decisions: `mental list --type Decision
+--status open --json`. Use `mental status --json` when you also need notes.
+`status` refreshes `status/current.md` as a disposable cache — not SoT. Never
+block work if Mental errors; mention it and continue.
+
+**Continuity commands (when, not every turn):**
+
+- **`park --resume`** — mid-hop / switching context. Encodes at an interruption
+  (default journal title `"Parked"`). Optional `--attention` + `--kind` (and
+  `--from`, `--against`). Requires `--resume`. Not a planned close.
+- **`handoff --title --resume`** — planned task boundary: journal then
+  heartbeat. Both flags required. Sugar for journal + heartbeat.
+- **`pulse`** — multi-repo orchestration: compact rows from bindings (id, name,
+  resume, attentionCount, openDecisionCount). No journal bodies, no merged
+  dump. Not a per-turn reload — that stays `heartbeat`.
 
 ### 2. Record selectively
 
@@ -229,14 +245,20 @@ Mental is not only a start/finish ritual. Step back in cheaply whenever:
   `mental attention` **now**, not at handoff. Chat memory fades; the OKF file
   does not.
 - **Parallel agents** — other sessions share the same home slice. If time
-  passed or another agent may have written, re-pulse `mental heartbeat --json`
+  passed or another agent may have written, re-call `mental heartbeat --json`
   before acting on stale assumptions. It derives git live and costs little.
+- **Switching / interruption** — context hop mid-task: `mental park --resume
+  "…" --json` (optional `--attention` + `--kind`). Planned close is `handoff`,
+  not park.
+- **Cross-project** — orchestrating several repos: `mental pulse --json` once
+  for compact rows. Do not dump journals. Stay on `heartbeat` inside one repo.
 - **"Why is it like this?"** — `mental search "…" --json`, then `show` the
   path; a decision or note may already hold the answer. Follow `backlinks`
   instead of grepping.
 
 Reads are always safe. Writes stay selective: mid-chat re-entry does not change
-what deserves a decision, attention item, or note.
+what deserves a decision, attention item, or note. Never auto-journal every
+turn; hooks stay off by default.
 
 ### 3. Close at a deterministic task boundary
 
@@ -247,15 +269,23 @@ A task boundary occurs when any of these is true:
 - The user changes topic, pauses, or explicitly asks to stop.
 - A consequential decision is made or deliberately deferred.
 
-At the boundary, append **one** journal section (not one per chat turn). If
-work was against a plan file, pass `--against`:
+At the boundary, append **one** journal section (not one per chat turn). Prefer
+the sugar when you only need title + resume:
+
+```text
+mental handoff --title "<outcome>" --resume "<one exact next action> — open loops: <none or list>" --json
+```
+
+Or journal then heartbeat (same idea; use `--against` when work pointed at a
+plan):
 
 ```text
 mental journal --title "<outcome>" --body "<what changed; evidence; only what git cannot explain>" --resume "<one exact next action> — open loops: <none or list>" --against PLAN.md --json
 mental heartbeat --json
 ```
 
-Skip trivial or read-only turns.
+Interrupted mid-hop (topic change, pause, switch) without a planned close:
+`mental park --resume "…" --json`. Skip trivial or read-only turns.
 
 ## Orientation responses
 

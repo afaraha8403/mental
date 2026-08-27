@@ -15,15 +15,29 @@ mental where --json
 mental heartbeat --json
 ```
 
-`heartbeat` is the cheap reload: resume, last outcome, git, residue, unsettled decisions. Use `mental status --json` when you also need notes.
+`heartbeat` is the cheap mid-chat reload: resume, last outcome, git, residue, unsettled decisions (lists capped at 7; counts via `attentionCount` / `openDecisionCount`). Use `mental status --json` when you also need notes. Do not call `pulse` every turn.
+
+### Park vs handoff vs heartbeat vs pulse
+
+| When | Command |
+| --- | --- |
+| Cheap reload / other agents may have written | `mental heartbeat --json` |
+| Interrupted mid-hop / switching context | `mental park --resume "…" --json` |
+| Planned task boundary (journal + heartbeat) | `mental handoff --title "…" --resume "…" --json` |
+| Cross-project compact overview | `mental pulse --json` |
+
+`park` encodes at an interruption (default title `"Parked"`; optional `--attention` + `--kind`). `handoff` is sugar for journal then heartbeat — both `--title` and `--resume` required. `pulse` returns compact rows from bindings (id, name, resume, counts) — no journal bodies, no merged dump. Heartbeat stays read-only for the pulse watermark; park / handoff / pulse write it after computing since-last-pulse counts.
 
 ```bash
+mental park --resume "…" --json
+mental handoff --title "…" --resume "…" --json
+mental pulse --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --json
 mental attention --title "…" --kind concern --status open --json
 mental decide --title "…" --status open --json
 mental decide --title "…" --status decided --json
 mental search "…" --json
-mental list --type Decision --json
+mental list --type Decision --status open --json
 mental show notes/some-fact.md --json
 mental status --json
 ```
@@ -32,7 +46,9 @@ Mid-chat, not just start/finish:
 
 - Search decisions before changing an approach
 - Record attention the moment residue surfaces
-- Re-pulse `mental heartbeat --json` whenever other agents may have written — it derives git live. On this repo’s bench machine a CLI pulse is **51 ms** p50; in-process (MCP) it is **11 ms**. See [benchmarks](./benchmarks.md).
+- Park when interrupted mid-hop; handoff only at a planned close
+- Re-call `mental heartbeat --json` whenever other agents may have written — it derives git live. On this repo’s bench machine a CLI heartbeat is **51 ms** p50; in-process (MCP) it is **11 ms**. See [benchmarks](./benchmarks.md).
+- Use `pulse` for multi-repo orchestration, not as a per-turn dump
 
 ## Skill + rule
 
@@ -74,7 +90,7 @@ Compatible clients (Cursor, VS Code, GitHub Copilot, ChatGPT/Codex, Kiro) load t
 Default **off**. Skill + rule are enough for agents that can shell.
 
 ```bash
-mental serve            # stdio: heartbeat, where, status, search, list, show, journal, attention, decide, note
+mental serve            # stdio: heartbeat, pulse, where, status, search, list, show, park, handoff, journal, attention, decide, note
 mental install --mcp    # register in ~/.cursor/mcp.json + ~/.claude.json
 ```
 

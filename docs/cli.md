@@ -26,13 +26,16 @@ Non-TTY (pipes, agents) with no args prints help and exits 2.
 | Command | What it does |
 | --- | --- |
 | `mental` | Heartbeat (TTY): resume, last outcome, git, residue, unsettled decisions; then exit |
-| `mental heartbeat` | Same pulse; agents pass `--json` |
+| `mental heartbeat` | Same cheap reload; agents pass `--json`. Read-only — does not write the pulse watermark. Delta is counts only |
+| `mental pulse` | Cross-project compact rows from `bindings.json` (id, name, resume, attentionCount, openDecisionCount). No journal bodies. Writes watermark for the active bundle |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only; does not create identity) |
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
 | `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`); hits include `description` + `snippet` |
 | `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`) |
 | `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`) |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
+| `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`). Requires `--resume`. Then heartbeat; writes watermark |
+| `mental handoff --title --resume` | Planned boundary: journal then heartbeat. Both flags required. JSON `{ path, heartbeat }`. Writes watermark |
 | `mental journal --title --body --resume [--against]` | Append today’s journal section |
 | `mental attention --title --kind` | Create or update residue (`--status resolved` closes it) |
 | `mental decide --title` | Create or update a decision (`--status decided` closes by title; `--path` targets a file) |
@@ -45,7 +48,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2.
 | `mental uninstall` | Remove installed skill / rule / hooks / MCP entries |
 | `mental hooks on\|off` | Optional session hooks (default off) |
 | `mental serve` | Optional MCP stdio (full command surface) |
-| `mental doctor` | PATH, bindings, ignore, skills, npm update. `--fix-ignore` adds `.mental/` to global excludes |
+| `mental doctor` | PATH, bindings, ignore, skills, npm update, decision budget, stale residue. `--fix-ignore` adds `.mental/` to global excludes. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns) |
 
 ## Writes
 
@@ -104,5 +107,8 @@ status/current.md          # disposable cache, not SoT
 ```
 
 Index: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` (rebuildable).
+Pulse watermark: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json` (`{ at: iso }` — rebuildable, not SoT). Written after delta by `pulse` / `park` / `handoff`; **heartbeat never writes it**.
+
+Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount`. Extra open decisions: `mental list --type Decision --status open`.
 
 See [identity](./identity.md) for UUID / local / leftover import, and [agents](./agents.md) for the `--json` contract.
