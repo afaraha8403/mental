@@ -6,7 +6,7 @@ That reconstruction is the fatigue: decision fatigue and brain fatigue from orch
 
 Git already records **what** changed. The expensive part of a hop — a weekend, a new agent, a second clone — is the rest: where you left off, why a decision was made, what is still in the air, and the next exact action. That is the only thing Mental stores.
 
-Write for the human who comes back in two weeks. The agent is a scribe.
+Write for the human who comes back in two weeks. **The agent is the scribe** — after install, agents call the CLI while you work. You do not have to journal by hand. You can still type `mental` for the pulse.
 
 Citations: [The research](./research.md).
 

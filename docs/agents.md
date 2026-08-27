@@ -1,6 +1,10 @@
 # Agents
 
+**Agents write Mental on the user's behalf.** After `mental install`, the skill plus the always-on rule tell them when to journal, decide, and record residue. The human does not keep a second journal. They may still type `mental` for the pulse.
+
 The CLI is the contract. Humans type `mental`. Agents call `mental … --json`. They do not grep `.mental`, `~/.mental`, or YAML frontmatter.
+
+This is not a hidden hook and not every chat turn. Hooks stay off until the user asks. Write at a task boundary, when a decision constrains the future, or the moment residue surfaces. Fail open if Mental is missing.
 
 If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task (fail open) and mention `npm i -g @balacode/mental` then `mental install`.
 

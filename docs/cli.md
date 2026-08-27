@@ -1,6 +1,6 @@
 # CLI reference
 
-Humans on a TTY type `mental`. Agents always pass `--json`. Named commands are one-shot: print or write, then exit.
+After `mental install`, **agents write on your behalf** (journal, decisions, residue). You type `mental` when you want the pulse yourself. Agents always pass `--json`. Named commands are one-shot: print or write, then exit.
 
 ```bash
 mental                 # heartbeat on a TTY; help + exit 2 otherwise

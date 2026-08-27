@@ -16,7 +16,7 @@ mental doctor
 
 `mental install` puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill and a tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton.
 
-It does **not** turn on hooks or MCP, and it does not delete journals.
+That skill is what makes agents journal, decide, and record residue **for you**. You do not keep the log by hand. It does **not** turn on hooks or MCP, and it does not delete journals.
 
 ## Paste this into your agent
 
