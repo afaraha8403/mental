@@ -374,6 +374,7 @@ function doctorCheck(data, id) {
 test("doctor warns stale attention; exit 0 if only warns", () => {
   const home = tempHome();
   const { root } = initRepo(home);
+  parseOk(mental(home, root, ["install", "--json"]), "install");
   const where = seedBundle(home, root, "Stale air");
   writeOkf(
     where.root,
@@ -401,6 +402,7 @@ test("doctor warns stale attention; exit 0 if only warns", () => {
 test("doctor warns stale decision; exit 0 if only warns", () => {
   const home = tempHome();
   const { root } = initRepo(home);
+  parseOk(mental(home, root, ["install", "--json"]), "install");
   const where = seedBundle(home, root, "Stale fork");
   writeOkf(
     where.root,
@@ -427,6 +429,7 @@ test("doctor warns stale decision; exit 0 if only warns", () => {
 test("doctor warns decision budget; exit 0 if only warns", () => {
   const home = tempHome();
   const { root } = initRepo(home);
+  parseOk(mental(home, root, ["install", "--json"]), "install");
   const where = seedBundle(home, root, "Budget");
   for (let i = 1; i <= 8; i++) {
     writeOkf(
