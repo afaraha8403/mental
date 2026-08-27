@@ -426,7 +426,7 @@ The repo root **is** the plugin root ([Agent Plugins 1.0.0](https://agent-plugin
 - `skills/mental/SKILL.md` — discovered as the immediate child of `skills/`.
 - `mcp.json` — stdio `mental` → `./bin/cli.mjs serve` (plugin-relative command; `cwd` `${PLUGIN_ROOT}`).
 
-Rules and hooks stay client-specific (`rules/mental.mdc`, `hooks/session-start.sh`) and install via `mental install` / `mental hooks on`. They are not portable v1 components. Cursor-facing extras live in `.cursor-plugin/plugin.json` (`logo: assets/logo.svg`). Claude Code extras live in `.claude-plugin/plugin.json` (`displayName: Mental`, `mcpServers: ./mcp.json`). Do not put `logo` on the portable `plugin.json` — the schema is closed.
+Rules and hooks stay client-specific (`rules/mental.mdc`, `hooks/session-start.sh`) and install via `mental install` / `mental hooks on`. They are not portable v1 components. Cursor-facing extras live in `.cursor-plugin/plugin.json` (`logo: assets/logo.png`). Claude Code extras live in `.claude-plugin/plugin.json` (`displayName: Mental`, `mcpServers: ./mcp.json`). Do not put `logo` on the portable `plugin.json` — the schema is closed.
 
 ---
 

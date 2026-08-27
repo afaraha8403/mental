@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Ship a 256×256 PNG mark (`assets/logo.png`, ~29KB) instead of the 262KB traced SVG. README and Cursor plugin point at the PNG; the SVG is not in the package.
+
 ## [0.3.1] - 2026-08-27
 
 ### Changed

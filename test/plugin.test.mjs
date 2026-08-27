@@ -227,16 +227,16 @@ test("plugin package paths stay inside the plugin root", () => {
   }
 });
 
-test("Cursor shim points at the SVG logo; Claude shim has displayName", () => {
-  const logo = join(ROOT, "assets", "logo.svg");
+test("Cursor shim points at the PNG logo; Claude shim has displayName", () => {
+  const logo = join(ROOT, "assets", "logo.png");
   assert.equal(statSync(logo).isFile(), true);
-  assert.match(readFileSync(logo, "utf8"), /<svg[\s\S]*<\/svg>/);
+  assert.equal(readFileSync(logo).subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), true);
   const plugin = loadJson(join(ROOT, "plugin.json"));
   assert.equal("logo" in plugin, false, "portable plugin.json must not grow a logo field");
 
   const cursor = loadJson(join(ROOT, ".cursor-plugin", "plugin.json"));
   assert.equal(cursor.name, "mental");
-  assert.equal(cursor.logo, "assets/logo.svg");
+  assert.equal(cursor.logo, "assets/logo.png");
   assert.equal(cursor.description, plugin.description);
   assert.equal(cursor.version, plugin.version);
   assert.equal(existsSync(join(ROOT, cursor.logo)), true);
