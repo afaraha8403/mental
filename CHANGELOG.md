@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- First-class README: landing-page promise, measured numbers, and a docs hub (`docs/why.md`, `install.md`, `cli.md`, `agents.md`, `identity.md`, `benchmarks.md`).
+- Reproducible micro-benchmarks via `npm run bench` (`scripts/bench.mjs`) — CLI vs in-process heartbeat and search at 100 / 500 / 2,000 notes.
+
+### Changed
+
+- README is a landing page. Depth (install edge cases, full command table, Agent Plugins, remap) lives in `docs/`.
+- SQLite index still writes `concepts` + `links` when Node’s `node:sqlite` has no FTS5 module. Search uses LIKE with title-first ranking; FTS5 + bm25 remains the path when the module exists. `INDEX_VERSION` is 3 so older caches rebuild.
+
 ## [0.2.3] - 2026-08-26
 
 ### Added

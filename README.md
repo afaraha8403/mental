@@ -2,26 +2,91 @@
   <img src="assets/logo.svg" alt="Mental" width="128" height="128">
 </p>
 
-# Mental
+<h1 align="center">Mental</h1>
 
-[![npm](https://img.shields.io/npm/v/@balacode/mental.svg)](https://www.npmjs.com/package/@balacode/mental)
+<p align="center">
+  <strong>Never reconstruct where you left off.</strong>
+</p>
 
-Local-first continuity layer for you and your coding agents.
+<p align="center">
+  Local-first continuity for you and your coding agents.
+</p>
 
-Git records **what** changed. Mental records the small amount git cannot explain: where you left off, why a decision was made, what is still in the air after a hop, and the next exact action. **OKF markdown is the source of truth.** SQLite is a derived cache. Agents call `mental … --json` — they do not grep YAML.
+<p align="center">
+  <a href="https://www.npmjs.com/package/@balacode/mental"><img src="https://img.shields.io/npm/v/@balacode/mental.svg" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/@balacode/mental"><img src="https://img.shields.io/node/v/@balacode/mental.svg" alt="node >=18"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+  <a href="./package.json"><img src="https://img.shields.io/badge/deps-0-brightgreen.svg" alt="zero runtime dependencies"></a>
+  <a href="https://agent-plugins.org/specification"><img src="https://img.shields.io/badge/Agent%20Plugins-1.0.0-111111.svg" alt="Agent Plugins 1.0.0"></a>
+</p>
 
-- **npm:** [@balacode/mental](https://www.npmjs.com/package/@balacode/mental) — install this; the CLI binary is `mental`
-- **Repo:** https://github.com/afaraha8403/mental
-- **Spec:** [PLAN.md](./PLAN.md)
-- **Plugin standard:** [Agent Plugins 1.0.0](https://agent-plugins.org/specification)
+Git records **what** changed. Mental records the small amount git cannot: where you left off, why a decision was made, what is still in the air after a hop, and the next exact action.
 
-Mental is **not** a Balakit plugin. Default data lives in `~/.mental` (UUID bindings). Project `./.mental` only after `mental local`. The unscoped npm package [`mental`](https://www.npmjs.com/package/mental) is a different project.
+**OKF markdown is the source of truth.** SQLite is a derived cache. Agents call `mental … --json` — they do not grep YAML.
 
-## Install
+```text
+$ mental
+🧠 Ship the pointer, not the dump — open loops: none
+Against PLAN.md
+
+Now     Resolver landed  (today)
+Git     main (dirty)
+        feat: UUID bindings survive a repo move
+In the air
+  [direction] Tom said ship the pointer
+Unsettled
+  [open] Heartbeat only, no standing TUI
+```
+
+One shot. Then exit. Not a menu.
+
+## Why this exists
+
+A new agent, a second clone, Monday morning — someone has to reconstruct intent from chat and `git log`. That reconstruction is the tax. Mental removes it.
+
+| You already have | Mental adds |
+| --- | --- |
+| Git history | Exact resume line |
+| `PLAN.md` / issues | Decisions git cannot explain |
+| Chat (gone next session) | Residue still in the air (capped at 7) |
+
+It is not a todo app. It is not a transcript store. It does not replace the plan file — `--against PLAN.md` points at it.
+
+[Why Mental →](docs/why.md)
+
+## Numbers we measured
+
+Reproducible. Not marketing.
+
+| | | |
+| ---: | --- | --- |
+| **0** | runtime npm dependencies | Node `>=18`, MIT |
+| **96** | automated tests | identity, search, install, MCP |
+| **51 ms** | `mental heartbeat --json` | p50, fresh process |
+| **11 ms** | same pulse in-process | what MCP does after `mental serve` |
+| **46 ms** | search over **2,000** notes | p50 CLI; **1.2 ms** in-process |
+
+Host: Node v22.14.0, linux/x64, 4 CPUs. 21 runs, 3 warmup. This Node build has no FTS5 — search uses SQLite LIKE with title-first ranking. When FTS5 is present, ranking is bm25.
+
+```bash
+npm test
+npm run bench
+```
+
+Full table and method: [docs/benchmarks.md](docs/benchmarks.md).
+
+## Start in 30 seconds
+
+```bash
+npm i -g @balacode/mental
+mental install
+cd your-repo
+mental
+```
+
+The unscoped npm package [`mental`](https://www.npmjs.com/package/mental) is a different project. Install **`@balacode/mental`**. The binary is `mental`.
 
 ### Paste this into your agent
-
-Copy the block into Cursor, Claude Code, Copilot, Codex, or any other coding agent:
 
 ```text
 Install Mental from https://github.com/afaraha8403/mental.
@@ -39,84 +104,9 @@ Use this client's native plugin install if you have one, then put the CLI on PAT
 Do not enable hooks unless I ask. Optional MCP is `mental install --mcp`. After doctor, tell me what it reports.
 ```
 
-### Client one-liners
+Client one-liners (Cursor, Claude Code, VS Code, Copilot) and what `install` actually copies: [docs/install.md](docs/install.md).
 
-**Cursor** — paste in Agent chat:
-
-```text
-/add-plugin https://github.com/afaraha8403/mental
-```
-
-**Claude Code:**
-
-```text
-/plugin marketplace add afaraha8403/mental
-/plugin install mental@mental
-```
-
-**VS Code** — Command Palette → **Chat: Install Plugin From Source**, then:
-
-```text
-https://github.com/afaraha8403/mental
-```
-
-**GitHub Copilot CLI:**
-
-```bash
-copilot plugin marketplace add afaraha8403/mental
-copilot plugin install mental@mental
-```
-
-Plugin install loads the skill and MCP. Still run `mental install` so the CLI, skill, and tiny always-on rule land on this machine.
-
-### CLI
-
-```bash
-npm i -g @balacode/mental
-mental install
-```
-
-Last install wins: an existing global `mental` bin is overwritten (npm 11 no longer fails with EEXIST). That puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill + tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton. From a published install it also **upgrades** the CLI when npm has a newer version, then re-runs so skills match. It **removes leftover Balakit Mental skill/rule copies** (the old `npx balakit doctor` pointer) so they cannot fight the new rule. It does **not** turn on hooks or MCP, and it does not delete journals. A git checkout installs that tree and does not clobber it with the registry.
-
-From a clone, without npm:
-
-```bash
-cd /path/to/mental
-node bin/cli.mjs install --json
-```
-
-```bash
-mental doctor          # PATH, bindings, ignore, skills, npm update
-mental doctor --fix-ignore   # add .mental/ and .mental-id to your global git excludes
-```
-
-## Agent Plugins 1.0.0
-
-Mental is packaged as a portable [Agent Plugins](https://agent-plugins.org/) 1.0.0 plugin — the vendor-neutral format maintained by Amazon, Cursor, Microsoft, OpenAI, and Vercel. Compatible clients (Cursor, VS Code, GitHub Copilot, ChatGPT/Codex, Kiro) load the same directory: no per-client rewrite of the skill or MCP server.
-
-The spec's interoperability floor is small and closed:
-
-| Piece | Where | Role |
-| --- | --- | --- |
-| `plugin.json` | repo root | Manifest (`$schema` + `name`). The portable schema has no icon field. |
-| `skills/mental/` | Agent Skills | Procedure: when to journal, CLI contract, privacy. |
-| `mcp.json` | repo root | stdio MCP → `./bin/cli.mjs serve` (`cwd` `${PLUGIN_ROOT}`) |
-
-Cursor extras live in `.cursor-plugin/plugin.json` (logo). Claude Code extras live in `.claude-plugin/plugin.json` (`displayName: Mental`) and `.claude-plugin/marketplace.json`. Rules and hooks are **not** portable v1 components — they still come from `mental install` / `mental hooks on`.
-
-Plugin install loads the skill and MCP. The CLI remains the contract: humans type `mental`; agents call `mental … --json`.
-
-## How you use it (human)
-
-On a TTY, in any git repo:
-
-```bash
-mental
-```
-
-Prints a one-shot **heartbeat** and exits — resume, last outcome, git, residue in the air, unsettled decisions. Not a menu. UUID / root / index live on `where` and `doctor`.
-
-Daily loop:
+## Daily loop
 
 1. `mental` — where did I leave off?
 2. Do the work.
@@ -126,31 +116,22 @@ Daily loop:
 mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none" --against PLAN.md
 ```
 
-Lookup:
-
-```bash
-mental status          # git + resume + residue + open decisions + notes (writes status/current.md cache)
-mental heartbeat --json  # same pulse as `mental` on a TTY; agents use this
-mental where           # root, uuid, mode — read-only, does not create identity
-mental search overlay
-mental list --type Decision --kind direction
-mental show notes/some-fact.md
-```
-
-Write a decision only when it constrains the future. Write attention for residue that is not a choice (Tom said X, a concern, later):
+Write a decision only when it constrains the future. Write attention for residue that is not a choice:
 
 ```bash
 mental decide --title "Heartbeat only, no standing TUI" --status decided
 mental attention --title "Tom said ship the pointer not the dump" --kind direction --from Tom
-mental attention --title "Tom said ship the pointer not the dump" --status resolved
 mental note --title "Identity is a UUID in bindings.json"
 ```
 
-Same `--title` updates the existing decision (paths are identities). `--path` targets a specific file.
+Same `--title` updates the existing file. Paths are identities.
 
-Mental is **not** a todo app. Do not store transcripts. Do not duplicate PLAN.md.
-
-Non-TTY (pipes, agents) always pass `--json`. No args + not a TTY prints help and exits 2.
+```bash
+mental status              # git + resume + residue + open decisions + notes
+mental heartbeat --json    # same pulse agents use
+mental search overlay
+mental list --type Decision --kind direction
+```
 
 ## How agents use it
 
@@ -161,120 +142,56 @@ mental where --json
 mental heartbeat --json
 ```
 
-```bash
-mental journal --title "…" --body "…" --resume "…" --against PLAN.md --json
-mental attention --title "…" --kind concern --status open --json
-mental decide --title "…" --status open --json
-mental decide --title "…" --status decided --json
-mental search "…" --json
-mental list --type Decision --json
-mental show notes/some-fact.md --json
-mental status --json
-```
+Mid-chat, not just start/finish: search before you change an approach, record attention the moment residue surfaces, re-pulse when other agents may have written. The pulse is cheap.
 
-Mid-chat, not just start/finish: search decisions before changing an approach, record attention the moment residue surfaces, and re-pulse `mental heartbeat --json` whenever other agents may have written — it is cheap and derives git live.
+If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task and mention install. Missing Mental must not block work.
 
-Do not grep `.mental` or parse YAML. If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task (fail open) and mention `npm i -g @balacode/mental` then `mental install`.
+Turns that invoked `mental` end with a `────────` / `🧠 Mental` receipt — see the [agent guide](docs/agents.md).
 
-Turns that invoked `mental` end with a separator line (`────────`), title `🧠 Mental  ` (two trailing spaces so chat markdown does not join lines), indented `Kind: Verb` items, then `────────` (see the skill). Do not emit `</br>` — it prints as literal tags.
+Mental is an [Agent Plugins 1.0.0](https://agent-plugins.org/specification) package: `plugin.json` + `skills/mental/` + `mcp.json`. Compatible clients load one directory. Hooks and MCP stay **off** until you ask.
 
-## Identity (UUID, not the folder)
+## Docs
 
-Identity lives in `~/.mental/bindings.json`. Origin is a hint (SSH ≡ HTTPS). Two clones of the same origin share one brain until you split.
+| | |
+| --- | --- |
+| [Why Mental](docs/why.md) | Contract, non-goals, architecture |
+| [Install](docs/install.md) | npm, plugins, clone, doctor, uninstall |
+| [CLI reference](docs/cli.md) | Commands, flags, exit codes, layout |
+| [Agents](docs/agents.md) | `--json`, skill, MCP, receipts |
+| [Identity](docs/identity.md) | UUID bindings, remap / split / local |
+| [Benchmarks](docs/benchmarks.md) | Measured p50/p95 and how to reproduce |
+| [Skill](skills/mental/SKILL.md) | The procedure agents load |
+| [Spec](PLAN.md) | Full product spec |
+
+## Identity, in one table
+
+Identity lives in `~/.mental/bindings.json`. Two clones of the same origin share one brain until you split. `where` does not create a UUID — first write does.
 
 | Situation | Command |
 | --- | --- |
-| This clone should use an existing UUID | `mental remap --to <uuid>` (or `mental link --to <uuid>`) |
-| This clone should diverge | `mental split` (`--copy` keeps OKF files) |
-| List bindings | `mental remap` |
-| Opt in to `./.mental` in this repo | `mental doctor --fix-ignore` then `mental local` |
-| Copy home slice into `./.mental` | `mental local --import` |
-| Same, and mark store=local | `mental local --move` |
+| Use an existing UUID | `mental remap --to <uuid>` |
+| This clone should diverge | `mental split` |
+| Opt in to `./.mental` | `mental doctor --fix-ignore` then `mental local` |
 
-`where` does **not** create a UUID. First write (`status`, `journal`, `install`, …) does. Leftover Balakit `./.mental` (no `.mental-local` marker) is ingested into `~/.mental/projects/<uuid>/` on that write; the leftover folder is not deleted.
-
-## Optional: hooks and MCP
-
-Default **off**. Skill + rule are the contract.
-
-```bash
-mental hooks on        # Cursor sessionStart + Claude SessionStart/PreCompact → mental status --json
-mental hooks off
-mental serve           # MCP stdio: heartbeat, where, status, search, list, show, journal, attention, decide, note
-mental install --mcp   # register `mental serve` in ~/.cursor/mcp.json + ~/.claude.json; does not enable hooks
-```
-
-MCP is how tool-only agents (parallel sessions, orchestrators) re-pulse and record mid-chat. `mental uninstall` removes the MCP entries too.
-
-```bash
-mental uninstall                 # remove skill/rule/hooks copies; ~/.mental stays
-mental uninstall --delete-data --confirm DELETE   # wipe ~/.mental too
-```
-
-## Commands
-
-| Command | What it does |
-| --- | --- |
-| `mental` | Heartbeat (TTY): resume, last outcome, git, residue, unsettled decisions; then exit. Non-TTY → help, exit 2 |
-| `mental heartbeat` | Same pulse; agents pass `--json` |
-| `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only) |
-| `mental status` | Git + Resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
-| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`); hits include `description` + `snippet` |
-| `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`) |
-| `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`) |
-| `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
-| `mental journal --title --body --resume [--against]` | Append today’s journal section |
-| `mental attention --title --kind` | Create or update residue (`--status resolved` closes it) |
-| `mental decide --title` | Create or update a decision (`--status decided` closes by title; `--path` targets a file) |
-| `mental note --title` | Scaffold a note |
-| `mental local [--import \| --move]` | Project `./.mental` after ignore check |
-| `mental remap [--to id]` | List or retarget this clone’s UUID |
-| `mental split [--copy]` | New UUID for this clone |
-| `mental link --to <id>` | Point this clone at an existing UUID |
-| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH (overwrites existing bin; upgrades if npm is newer); `--mcp` registers MCP config |
-| `mental uninstall` | Remove installed skill/rule/hooks/MCP entries |
-| `mental hooks on\|off` | Optional session hooks |
-| `mental serve` | Optional MCP stdio (full command surface) |
-| `mental doctor` | PATH, bindings, ignore, skills, npm update. `--fix-ignore` adds `.mental/` to global excludes |
-
-Global flags: `--json`, `--dir <path>` (same as `MENTAL_DIR`).
+[Identity →](docs/identity.md)
 
 ## Privacy
 
-- Default store: `~/.mental/` (never commit).
-- Project `.mental/` is opt-in and must be gitignored (`mental doctor --fix-ignore`). Agents must not edit `.gitignore`.
-- Never store secrets, tokens, or private keys in Mental files.
-- Uninstall does not delete OKF unless you type `DELETE`.
+- Default store: `~/.mental/` (never commit)
+- Project `.mental/` is opt-in and must be gitignored (`mental doctor --fix-ignore`). Agents must not edit `.gitignore`
+- Never store secrets, tokens, or private keys
+- `mental uninstall` does not delete OKF unless you type `DELETE`
 
-## Tests
+## Optional: hooks and MCP
 
 ```bash
-npm test
+mental hooks on
+mental install --mcp
+mental serve
 ```
 
-## Layout
+Default off. Skill + rule are the contract. [Agents →](docs/agents.md)
 
-OKF files under `~/.mental/projects/<uuid>/` (or `./.mental` after `mental local`):
+---
 
-```text
-journal/YYYY-MM-DD.md
-decisions/YYYY-MM-DD-slug.md
-attention/YYYY-MM-DD-slug.md
-notes/slug.md
-status/current.md          # disposable cache, not SoT
-```
-
-Index: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` (rebuildable).
-
-Agent Plugin (this repo):
-
-```text
-plugin.json                # Agent Plugins 1.0.0 manifest
-mcp.json                   # stdio MCP → ./bin/cli.mjs serve
-assets/logo.svg            # Cursor logo (portable spec has no icon field)
-.cursor-plugin/plugin.json
-.claude-plugin/plugin.json # displayName: Mental
-skills/mental/SKILL.md
-rules/mental.mdc           # Cursor always-on pointer (install copies it)
-hooks/session-start.sh     # optional; mental hooks on
-```
+**npm:** [@balacode/mental](https://www.npmjs.com/package/@balacode/mental) · **repo:** [afaraha8403/mental](https://github.com/afaraha8403/mental) · **license:** [MIT](./LICENSE)
