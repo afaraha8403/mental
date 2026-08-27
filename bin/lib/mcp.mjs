@@ -17,6 +17,9 @@ import { cmdJournal } from "../commands/journal.mjs";
 import { cmdAttention } from "../commands/attention.mjs";
 import { cmdDecide } from "../commands/decide.mjs";
 import { cmdNote } from "../commands/note.mjs";
+import { cmdPark } from "../commands/park.mjs";
+import { cmdHandoff } from "../commands/handoff.mjs";
+import { cmdPulse } from "../commands/pulse.mjs";
 import { VERSION, CMD } from "./pkg.mjs";
 
 const PROTOCOL = "2024-11-05";
@@ -118,6 +121,42 @@ const TOOLS = [
       required: ["title"],
     },
   },
+  {
+    name: "park",
+    description: "Encode at an interruption (default title Parked). Requires resume. Optional attention+kind. Then heartbeat.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        resume: { type: "string" },
+        title: { type: "string" },
+        body: { type: "string" },
+        attention: { type: "string", description: "Residue title to record with this park" },
+        kind: { type: "string", enum: ["direction", "concern", "thread"] },
+        from: { type: "string" },
+        against: { type: "string" },
+      },
+      required: ["resume"],
+    },
+  },
+  {
+    name: "handoff",
+    description: "Planned close: journal then heartbeat. Requires title and resume.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        resume: { type: "string" },
+        body: { type: "string" },
+        against: { type: "string" },
+      },
+      required: ["title", "resume"],
+    },
+  },
+  {
+    name: "pulse",
+    description: "Cross-project compact rows (id, name, resume, counts). No journal bodies. Writes pulse watermark for the active bundle.",
+    inputSchema: { type: "object", properties: {} },
+  },
 ];
 
 function capture(handler, args) {
@@ -128,7 +167,14 @@ function capture(handler, args) {
       return true;
     },
   };
-  const code = handler({ ...args, json: true }, { stdout });
+  let code;
+  try {
+    code = handler({ ...args, json: true }, { stdout });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const errCode = /** @type {{ code?: string }} */ (err).code || "write";
+    return { code: 1, body: { ok: false, error: { code: String(errCode), message } } };
+  }
   let body;
   try {
     body = JSON.parse(buf);
@@ -216,6 +262,32 @@ function runTool(name, args, ctx) {
       flags: { title: args.title, status: args.status, description: args.description, body: args.body },
     });
   }
+  if (name === "park") {
+    return capture(cmdPark, {
+      ...base,
+      flags: {
+        resume: args.resume,
+        title: args.title,
+        body: args.body,
+        attention: args.attention,
+        kind: args.kind,
+        from: args.from,
+        against: args.against,
+      },
+    });
+  }
+  if (name === "handoff") {
+    return capture(cmdHandoff, {
+      ...base,
+      flags: {
+        title: args.title,
+        resume: args.resume,
+        body: args.body,
+        against: args.against,
+      },
+    });
+  }
+  if (name === "pulse") return capture(cmdPulse, base);
   return { code: 1, body: { ok: false, error: { code: "unknown-tool", message: name } } };
 }
 

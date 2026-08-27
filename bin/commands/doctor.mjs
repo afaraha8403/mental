@@ -15,6 +15,9 @@ import { findGitRoot } from "../lib/git.mjs";
 import { indexPath } from "../lib/index.mjs";
 import { leftoverBalakitMentalCount, findBalakitMental } from "../lib/legacy-balakit.mjs";
 import { checkForUpdate, cmpSemver, updateHint } from "../lib/update.mjs";
+import { DECISION_HEARTBEAT_CAP, listOpenDecisions } from "../lib/okf.mjs";
+import { parseDays, scanStale } from "../lib/stale.mjs";
+import { isBundleRoot } from "../lib/heartbeat.mjs";
 
 function check(id, ok, message, level = "error") {
   return { id, ok, level, message };
@@ -145,6 +148,44 @@ export function cmdDoctor(args, io = {}) {
           "legacy-balakit",
           false,
           `Balakit Mental skill/rule still present (${sample}). Run \`${CMD} install\` to remove it.`,
+          "warn",
+        ),
+      );
+    }
+  }
+
+  if (resolved.ok && isBundleRoot(resolved.data) && resolved.data.root) {
+    const days = parseDays(args.flags?.days);
+    const stale = scanStale(resolved.data.root, { days });
+    if (stale.attention.length) {
+      const sample = stale.attention.map((a) => a.title).slice(0, 3).join(", ");
+      checks.push(
+        check(
+          "stale-attention",
+          false,
+          `${stale.attention.length} open/later attention older than ${days}d (${sample})`,
+          "warn",
+        ),
+      );
+    }
+    if (stale.decisions.length) {
+      const sample = stale.decisions.map((d) => d.title).slice(0, 3).join(", ");
+      checks.push(
+        check(
+          "stale-decision",
+          false,
+          `${stale.decisions.length} open/deferred decision(s) older than ${days}d (${sample})`,
+          "warn",
+        ),
+      );
+    }
+    const openN = listOpenDecisions(resolved.data.root).length;
+    if (openN > DECISION_HEARTBEAT_CAP) {
+      checks.push(
+        check(
+          "decision-budget",
+          false,
+          `${openN} open/deferred decisions (heartbeat cap ${DECISION_HEARTBEAT_CAP})`,
           "warn",
         ),
       );

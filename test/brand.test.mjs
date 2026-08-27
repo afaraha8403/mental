@@ -52,18 +52,18 @@ test("formatHeartbeat ASCII fallback", () => {
 
 test("skill shows a copy-paste receipt example; rule points at it", () => {
   const skill = readFileSync(join(ROOT, "skills", "mental", "SKILL.md"), "utf8");
-  assert.match(skill, /^────────$/m);
+  assert.doesNotMatch(skill, /^────────$/m);
   assert.doesNotMatch(skill, /^<\/br>$/m);
-  assert.match(skill, /^🧠 Mental  $/m);
-  assert.match(skill, /🚦 Attention: Recorded/);
-  assert.match(skill, /🎯 Decision: Decided/);
+  assert.match(skill, /🧠 \*\*Mental\*\*/);
+  assert.match(skill, /- 📓 \*\*Journal\*\* › \*recorded\* ›/);
+  assert.match(skill, /- 🔍 \*\*Read\*\* › \*heartbeat\*/);
+  assert.match(skill, /› \*decided\* ›/);
   assert.doesNotMatch(skill, /recorded attention/);
   assert.doesNotMatch(skill, /── 🧠 Mental/);
-  assert.match(skill, /two trailing spaces/);
   assert.match(skill, /Not a code fence/);
   const rule = readFileSync(join(ROOT, "rules", "mental.mdc"), "utf8");
-  assert.match(rule, /────────/);
+  assert.doesNotMatch(rule, /^────────$/m);
   assert.doesNotMatch(rule, /^<\/br>$/m);
-  assert.match(rule, /two trailing spaces/);
+  assert.match(rule, /\*\*Kind\*\* › \*action\*/);
   assert.match(rule, /Mental skill/);
 });

@@ -99,11 +99,9 @@ Client one-liners: [docs/install.md](docs/install.md).
 You will see this at the end of a turn that used Mental:
 
 ```text
-────────
-🧠 Mental  
-  📓 Journal: Recorded  “Resolver landed”
-  🚦 Attention: Recorded  “Tom said ship”
-────────
+🧠 **Mental**
+- 📓 **Journal** › *recorded* › Resolver landed
+- 🚦 **Attention** › *recorded* › Tom said ship
 ```
 
 Same CLI if you ever type it yourself. Same files.
@@ -149,6 +147,9 @@ No. Git still records what changed. `--against PLAN.md` points at the plan. Ment
 
 **Will it auto-journal every chat turn?**
 No. Task boundaries, real decisions, residue in the air. Hooks stay **off** until you run `mental hooks on`.
+
+**Park, handoff, pulse — when?**
+`park` encodes an interruption mid-hop. `handoff` is a planned close (journal + heartbeat). `pulse` is a compact cross-project overview. The cheap mid-chat reload is still `mental` / `heartbeat --json`.
 
 **What if `mental` is not installed?**
 Agents try `npx @balacode/mental`. If that fails they continue the coding task and mention install. Fail open.

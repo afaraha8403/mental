@@ -6,14 +6,17 @@ import { resolveBundle } from "./resolve.mjs";
 import { gitSnapshot } from "./git.mjs";
 import {
   ATTENTION_HEARTBEAT_CAP,
+  DECISION_HEARTBEAT_CAP,
   latestJournalHandoff,
   listOpenAttention,
   listOpenDecisions,
   localDate,
 } from "./okf.mjs";
 import { brandMark } from "./output.mjs";
+import { heartbeatDelta } from "./delta.mjs";
+import { readWatermark } from "./watermark.mjs";
 
-export { ATTENTION_HEARTBEAT_CAP };
+export { ATTENTION_HEARTBEAT_CAP, DECISION_HEARTBEAT_CAP };
 
 /**
  * Home mode without a UUID is `~/.mental/projects` (parent), not a bundle.
@@ -62,6 +65,10 @@ export function collectHeartbeat(args) {
     : { resume: null, outcome: null, file: null, when: null, against: null };
   const openDecisions = root ? listOpenDecisions(root) : [];
   const attention = root ? listOpenAttention(root) : [];
+  const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
+  const env = args.env ?? process.env;
+  const wm = where.id && home ? readWatermark(home, where.id, env) : null;
+  const delta = heartbeatDelta(root, wm?.at ?? null);
 
   return {
     ok: true,
@@ -70,8 +77,11 @@ export function collectHeartbeat(args) {
       gitRoot: where.gitRoot,
       handoff,
       against: handoff.against ?? null,
-      attention,
-      openDecisions,
+      attention: attention.slice(0, ATTENTION_HEARTBEAT_CAP),
+      openDecisions: openDecisions.slice(0, DECISION_HEARTBEAT_CAP),
+      attentionCount: attention.length,
+      openDecisionCount: openDecisions.length,
+      delta,
     },
   };
 }
@@ -99,17 +109,25 @@ export function formatHeartbeat(data, now = new Date(), env = process.env) {
   const recent = data.git.recent?.[0] ? `\n        ${data.git.recent[0]}` : "";
   const against = data.against || data.handoff?.against;
   const attention = data.attention ?? [];
+  const attentionTotal = data.attentionCount ?? attention.length;
   const shown = attention.slice(0, ATTENTION_HEARTBEAT_CAP);
-  const extra =
-    attention.length > ATTENTION_HEARTBEAT_CAP
-      ? `\n  (+${attention.length - ATTENTION_HEARTBEAT_CAP} more)`
+  const extraAir =
+    attentionTotal > ATTENTION_HEARTBEAT_CAP
+      ? `\n  (+${attentionTotal - ATTENTION_HEARTBEAT_CAP} more)`
       : "";
   const air =
-    attention.length === 0 ? "  none" : shown.map(formatAirItem).join("\n") + extra;
+    attentionTotal === 0 ? "  none" : shown.map(formatAirItem).join("\n") + extraAir;
+  const decisions = data.openDecisions ?? [];
+  const decisionTotal = data.openDecisionCount ?? decisions.length;
+  const shownDecisions = decisions.slice(0, DECISION_HEARTBEAT_CAP);
+  const extraDec =
+    decisionTotal > DECISION_HEARTBEAT_CAP
+      ? `\n  (+${decisionTotal - DECISION_HEARTBEAT_CAP} more)`
+      : "";
   const open =
-    (data.openDecisions ?? []).length === 0
+    decisionTotal === 0
       ? "  none"
-      : data.openDecisions.map((d) => `  [${d.status}] ${d.title}`).join("\n");
+      : shownDecisions.map((d) => `  [${d.status}] ${d.title}`).join("\n") + extraDec;
 
   const lines = [`${brandMark(env)} ${resume}`];
   if (against) lines.push(`Against ${against}`);

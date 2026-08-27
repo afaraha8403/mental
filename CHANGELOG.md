@@ -9,17 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `mental park --resume` — encode continuity at an interruption (default journal title `"Parked"`), optional attention in the same call, then heartbeat. For mid-hop context switches, not only planned closes.
+- `mental handoff --title --resume` — planned task-boundary sugar: journal then heartbeat in one shot.
+- `mental pulse` — compact cross-project rows from `bindings.json` (resume + residue/decision counts, no journal bodies) for multi-repo orchestration.
+- Since-last-pulse delta counts on heartbeat / pulse / park / handoff (`${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json`). Heartbeat stays read-only for the watermark; writers refresh it after computing the delta.
+- Open-decision budget mirrors attention (cap 7 on heartbeat TTY and JSON; `attentionCount` / `openDecisionCount`; doctor warns when over).
+- Doctor warns (exit still 0 if only warns) for attention and decisions left open/later/deferred longer than 14 days (`--days` override).
 - First-class README: landing-page promise, measured numbers, and a docs hub (`docs/why.md`, `install.md`, `cli.md`, `agents.md`, `identity.md`, `benchmarks.md`, `research.md`).
 - README research section + [docs/research.md](docs/research.md): Parnin/Rugaber resumption lag, Leroy attention residue, Mark interrupted-work stress — mapped to heartbeat, `Resume:`, and attention.
 - Reproducible micro-benchmarks via `npm run bench` (`scripts/bench.mjs`) — CLI vs in-process heartbeat and search at 100 / 500 / 2,000 notes.
 
 ### Changed
 
+- Agent Mental receipt is a markdown bullet list: `🧠 **Mental**` then `- emoji **Kind** › *action* › title`. No `────────` wrapper. Actions (italic, lowercase): Journal/Note `recorded`; Attention `recorded`/`resolved`; Decision `opened`/`decided`; Read `heartbeat`/`pulse`/`searched`/`showed`/`listed`.
 - README is a landing page. Depth (install edge cases, full command table, Agent Plugins, remap) lives in `docs/`.
 - SQLite index still writes `concepts` + `links` when Node’s `node:sqlite` has no FTS5 module. Search uses LIKE with title-first ranking; FTS5 + bm25 remains the path when the module exists. `INDEX_VERSION` is 3 so older caches rebuild.
 - Discovery metadata for AI-tooling developers: npm `keywords` + author, plugin/marketplace keywords, skill tags (`coding-agents`, `mcp`, `cursor`, `claude-code`, …), and a README subtitle / works-with row (Cursor, Claude Code, Copilot, MCP, Agent Skills).
 - README **Who writes** — agents journal / decide / record residue after `mental install`; humans are not expected to keep the log by hand. Same CLI if you want the pulse yourself. Not a hidden hook; not every chat turn.
 - README rebuilt on the award-style 3-tier layout used by uv / Aider / Goose / Mem0: pitch + demo + quick start above the fold; highlights; who-writes table; research as proof not a lecture; FAQ for agents and humans; depth stays in `docs/`.
+
+### Fixed
+
+- `mental park --attention` upserts by title like `mental attention` (same-day retry no longer crashes after the journal write).
+- `mental pulse` reads opted-in `./.mental` for `store=local` bindings instead of a stale home slice.
+- Heartbeat decision cap keeps the newest open/deferred decisions (same newest-first order as attention).
+- Pulse watermark writes fail open so an unwritable cache cannot fail park/handoff after a successful journal.
 
 ## [0.2.3] - 2026-08-26
 
