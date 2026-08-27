@@ -88,48 +88,46 @@ mental note --title "…" --json
 ## Mental receipt (end of turn)
 
 If you invoked `mental` this turn, end the **user-visible** reply with this block.
-Last thing in the message. Not a code fence (so emojis render).
+Last thing in the message. Not a code fence (so emojis and markdown render).
 Skip the whole block if you did not run `mental`.
 
-Cursor markdown joins adjacent lines into one paragraph. A lone `<br>`
-becomes a break *inside* that paragraph, so `🧠 Mental` and the item
-collapse to one line. Do **not** put the title and items on the same line.
-Do **not** put two items on the same line.
+Use a **markdown bullet list** so Cursor stacks items. Do not wrap with
+`────────`, markdown `---`, `<br>`, or `</br>`. Do not put two items on one
+line. At most four items; if more, keep the writes and end with `+N more`.
 
-Do not wrap with `────────`, markdown `---`, `<br>`, or `</br>`. Separators
-join into the same paragraph in Cursor chat. `</br>` prints as literal tags.
-`---` under an item can become a heading underline.
-Each receipt line except the last ends with **two trailing spaces** (markdown
-hard break). Items are flush left — no indent (indent still joins as one
-paragraph). Stacked, never inline.
-At most four item lines; if more, keep the writes and end with `+N more`.
+Shape: `🧠 **Mental**` then `- emoji **Kind** › *action* › title`.
+Read with no title omits the third slot: `- 🔍 **Read** › *heartbeat*`.
+
+Actions (lowercase, italic):
+
+| Kind | Action |
+| --- | --- |
+| Journal, Note | `recorded` |
+| Attention | `recorded` / `resolved` |
+| Decision | `opened` / `decided` |
+| Read | `heartbeat` / `pulse` / `searched` / `showed` / `listed` |
 
 Titles only — no `file://` or markdown links. Mental files live in `~/.mental`,
 not this repo, so links would 404. The CLI tool card already has the path.
 
-**Writes (copy this shape, including two trailing spaces on every line except the last):**
+**Writes (copy this shape):**
 
 ```text
-🧠 Mental  
-📓 Journal: Recorded  “Resolver landed”  
-🚦 Attention: Recorded  “Tom said ship”  
-🎯 Decision: Decided  “Keep the JSON envelope”
+🧠 **Mental**
+- 📓 **Journal** › *recorded* › Resolver landed
+- 🚦 **Attention** › *recorded* › Tom said ship
+- 🎯 **Decision** › *decided* › Keep the JSON envelope
 ```
 
 **Read-only (heartbeat / pulse / search / show / list):**
 
 ```text
-🧠 Mental  
-🔍 Read: Heartbeat
+🧠 **Mental**
+- 🔍 **Read** › *heartbeat*
 ```
 
-| Emoji | Kind | Item line |
-| --- | --- | --- |
-| 📓 | Journal | `📓 Journal: Recorded  “<title>”` |
-| 🚦 | Attention | `🚦 Attention: Recorded  “<title>”` or `🚦 Attention: Resolved  “<title>”` |
-| 🎯 | Decision | `🎯 Decision: Decided  “<title>”` or `🎯 Decision: Opened  “<title>”` |
-| 📝 | Note | `📝 Note: Recorded  “<title>”` |
-| 🔍 | Read | `🔍 Read: Heartbeat` / `Pulse` / `Searched` / `Showed` / `Listed` |
+**Read with a third slot:** `- 🔍 **Read** › *searched* › receipt type` or
+`- 🔍 **Read** › *showed* › decisions/…md` or `- 🔍 **Read** › *listed* › Decision`.
 
 Mix writes and a read in one block if both happened. Never invent Mental activity.
 

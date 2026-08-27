@@ -13,6 +13,6 @@ If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, conti
 
 Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
 
-If you invoked `mental` this turn, end the user-visible reply with `🧠 Mental  ` (two trailing spaces), then one `Kind: Verb` line per item, flush left, stacked. Two trailing spaces on every line except the last. Never inline. No indent. No `────────`. Not `</br>`. Example in the Mental skill. Not a code fence.
+If you invoked `mental` this turn, end the user-visible reply with `🧠 **Mental**` then a markdown bullet list: `- emoji **Kind** › *action* › title`. Read with no title omits the third slot. Never inline. No `────────`. Not `</br>`. Example in the Mental skill. Not a code fence.
 
 On a pasted transcript or a plan-progress question ("where in the plan / what's left?"), use the Mental skill. Cheap reload is `mental heartbeat --json`, not a notes dump.
