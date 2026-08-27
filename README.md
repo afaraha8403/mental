@@ -105,6 +105,8 @@ cd your-repo
 mental
 ```
 
+`mental install` puts the CLI on PATH **and** teaches your agents the skill. After that, they journal, decide, and record residue for you. You type `mental` when you want the pulse yourself.
+
 The unscoped npm package [`mental`](https://www.npmjs.com/package/mental) is a different project. Install **`@balacode/mental`**. The binary is `mental`.
 
 ### Paste this into your agent
@@ -127,25 +129,42 @@ Do not enable hooks unless I ask. Optional MCP is `mental install --mcp`. After 
 
 Client one-liners (Cursor, Claude Code, VS Code, Copilot) and what `install` actually copies: [docs/install.md](docs/install.md).
 
+## Who writes — you or the agent?
+
+**The agent writes it on your behalf.** After `mental install`, a skill plus a tiny always-on rule tell Cursor, Claude Code, Copilot, Codex, and the rest to call `mental … --json` while you work. You do not keep a journal by hand.
+
+They write when it matters, not on every chat turn:
+
+- Start or finish of real work → journal + exact resume
+- A choice that constrains the future → decision
+- Residue in the air (“Tom said…”, a concern, park this) → attention
+- Orientation (“where did we leave off?”) → heartbeat, then answer from that
+
+They do **not** dump the transcript. They do **not** clone `PLAN.md`. Missing Mental must not block coding (fail open). Session hooks stay **off** unless you turn them on — the skill is the contract, not a hidden logger.
+
+You will see a receipt at the end of a turn that used Mental:
+
+```text
+────────
+🧠 Mental  
+  📓 Journal: Recorded  “Resolver landed”
+  🚦 Attention: Recorded  “Tom said ship”
+────────
+```
+
+Want the pulse yourself? Type `mental`. Same CLI, same files. Humans and agents share one write path.
+
 ## Daily loop
 
-1. `mental` — where did I leave off? (the resumption cue)
-2. Do the work.
-3. At a real task boundary (the moment to externalize — not every chat turn):
+1. You (or the agent) run `mental` / `mental heartbeat --json` — where did we leave off?
+2. Do the work. The agent records residue and decisions as they happen.
+3. At a real task boundary the agent appends one journal section (you can type the same thing):
 
 ```bash
 mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none" --against PLAN.md
 ```
 
-Write a decision only when it constrains the future. Write attention for residue that is not a choice:
-
-```bash
-mental decide --title "Heartbeat only, no standing TUI" --status decided
-mental attention --title "Tom said ship the pointer not the dump" --kind direction --from Tom
-mental note --title "Identity is a UUID in bindings.json"
-```
-
-Same `--title` updates the existing file. Paths are identities.
+Same `--title` updates the existing decision or attention file. Paths are identities.
 
 ```bash
 mental status              # git + resume + residue + open decisions + notes
@@ -165,9 +184,9 @@ mental heartbeat --json
 
 Mid-chat, not just start/finish: search before you change an approach, record attention the moment residue surfaces (do not leave it in working memory), re-pulse when other agents may have written. The pulse is cheap. Shared home slice — the next agent should not reconstruct from chat.
 
-If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task and mention install. Missing Mental must not block work.
+If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task and mention install.
 
-Turns that invoked `mental` end with a `────────` / `🧠 Mental` receipt — see the [agent guide](docs/agents.md).
+Full procedure: [agent guide](docs/agents.md) and the [skill](skills/mental/SKILL.md).
 
 Mental is an [Agent Plugins 1.0.0](https://agent-plugins.org/specification) package: `plugin.json` + `skills/mental/` + `mcp.json`. Compatible clients load one directory. Hooks and MCP stay **off** until you ask.
 
