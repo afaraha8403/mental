@@ -10,7 +10,8 @@
 
 <p align="center">
   Local-first continuity for humans and coding agents.<br>
-  CLI, MCP, and Agent Skills — Cursor, Claude Code, Copilot, Codex.
+  Offload the resume, the residue, and the decisions git cannot see<br>
+  so working memory can do the work — not reconstruct it.
 </p>
 
 <p align="center">
@@ -32,6 +33,8 @@
 
 Git records **what** changed. Mental records the small amount git cannot: where you left off, why a decision was made, what is still in the air after a hop, and the next exact action.
 
+That hop — a new agent, another repo, Monday morning — is a known **resumption** problem. Developers feel it as decision fatigue and brain fatigue. The literature already measured the tax. Mental is the external cue those papers asked for.
+
 **OKF markdown is the source of truth.** SQLite is a derived cache. Agents call `mental … --json` — they do not grep YAML.
 
 ```text
@@ -52,17 +55,25 @@ One shot. Then exit. Not a menu.
 
 ## Why this exists
 
-A new agent, a second clone, Monday morning — someone has to reconstruct intent from chat and `git log`. That reconstruction is the tax. Mental removes it.
+A new agent, a second clone, Monday morning — someone has to reconstruct intent from chat and `git log`. That reconstruction is the tax. It burns working memory that should be spent on the work. Mental removes it.
 
 | You already have | Mental adds |
 | --- | --- |
-| Git history | Exact resume line |
+| Git history | Exact resume line (prospective cue) |
 | `PLAN.md` / issues | Decisions git cannot explain |
-| Chat (gone next session) | Residue still in the air (capped at 7) |
+| Chat (gone next session) | Attention residue, written down (capped at 7) |
 
 It is not a todo app. It is not a transcript store. It does not replace the plan file — `--against PLAN.md` points at it.
 
-[Why Mental →](docs/why.md)
+### The research
+
+Orchestrating several projects and several agents is the interruption problem with more hops. Three results, then we stop:
+
+- **Resumption is slow.** [Parnin and Rugaber (2011)](https://doi.org/10.1007/s11219-010-9104-9) — 10,000 sessions, 86 programmers. Only **10%** start coding again within a minute. Only **7%** edit without first wandering the codebase to remember. [62% of Microsoft developers](https://doi.org/10.1145/1134285.1134355) already called recovering from interruptions a serious problem. Developers leave sticky notes; [an explicit cue doubled success](https://doi.org/10.1145/1753326.1753342) versus notes alone. `mental` is that cue.
+- **Unfinished work leaks.** [Leroy (2009)](https://doi.org/10.1016/j.obhdp.2009.04.002) named **attention residue**: thoughts about Task A stay loaded on Task B, and performance drops. Mental’s “In the air” is that residue, written down so working memory can drop it. The journal `Resume:` line is [prospective goal encoding](https://doi.org/10.1016/S1071-5819(03)00023-5) — what you will do when you come back.
+- **You pay in stress even when you keep up.** [Mark, Gudith, and Klocke (CHI 2008)](https://doi.org/10.1145/1357054.1357072): interrupted people finished *faster*, with more stress, frustration, time pressure, and effort. Mental does not stop the hop. It stops the second tax: reconstructing intent on top of the first.
+
+Citations, what we do not claim, and the map to commands: [docs/research.md](docs/research.md). Product contract: [docs/why.md](docs/why.md).
 
 ## Numbers we measured
 
@@ -118,9 +129,9 @@ Client one-liners (Cursor, Claude Code, VS Code, Copilot) and what `install` act
 
 ## Daily loop
 
-1. `mental` — where did I leave off?
+1. `mental` — where did I leave off? (the resumption cue)
 2. Do the work.
-3. At a real task boundary (not every chat turn):
+3. At a real task boundary (the moment to externalize — not every chat turn):
 
 ```bash
 mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none" --against PLAN.md
@@ -152,7 +163,7 @@ mental where --json
 mental heartbeat --json
 ```
 
-Mid-chat, not just start/finish: search before you change an approach, record attention the moment residue surfaces, re-pulse when other agents may have written. The pulse is cheap.
+Mid-chat, not just start/finish: search before you change an approach, record attention the moment residue surfaces (do not leave it in working memory), re-pulse when other agents may have written. The pulse is cheap. Shared home slice — the next agent should not reconstruct from chat.
 
 If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task and mention install. Missing Mental must not block work.
 
@@ -165,6 +176,7 @@ Mental is an [Agent Plugins 1.0.0](https://agent-plugins.org/specification) pack
 | | |
 | --- | --- |
 | [Why Mental](docs/why.md) | Contract, non-goals, architecture |
+| [The research](docs/research.md) | Resumption lag, attention residue, citations |
 | [Install](docs/install.md) | npm, plugins, clone, doctor, uninstall |
 | [CLI reference](docs/cli.md) | Commands, flags, exit codes, layout |
 | [Agents](docs/agents.md) | `--json`, skill, MCP, receipts |
