@@ -8,7 +8,9 @@ import {
   appendJournal,
   bundleName,
   ensureSkeleton,
+  findAttention,
   repoRelativePath,
+  updateAttention,
   writeAttention,
 } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
@@ -18,6 +20,26 @@ import { printResult, kindLine } from "../lib/output.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
+}
+
+/**
+ * Same title identity as `mental attention`: update if a file exists, else create.
+ * Same-day retry must not throw after the journal is already appended.
+ */
+function upsertParkAttention(root, { title, kind, from, against }) {
+  const existing = findAttention(root, { title });
+  if (existing) {
+    return updateAttention(root, existing.path, { kind, from, against });
+  }
+  try {
+    return writeAttention(root, { title, kind, from, against });
+  } catch (err) {
+    if (/** @type {{ code?: string }} */ (err).code === "exists") {
+      const raced = findAttention(root, { title });
+      if (raced) return updateAttention(root, raced.path, { kind, from, against });
+    }
+    throw err;
+  }
 }
 
 /**
@@ -84,12 +106,19 @@ export function cmdPark(args, io = {}) {
   /** @type {{ path: string, updated: boolean } | null} */
   let attention = null;
   if (attentionTitle && kind) {
-    attention = writeAttention(resolved.data.root, {
-      title: attentionTitle,
-      kind,
-      from: flagString(args.flags, "from") || undefined,
-      against,
-    });
+    try {
+      attention = upsertParkAttention(resolved.data.root, {
+        title: attentionTitle,
+        kind,
+        from: flagString(args.flags, "from") || undefined,
+        against,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const code = /** @type {{ code?: string }} */ (err).code || "write";
+      printResult(stdout, args.json, false, undefined, { code, message });
+      return 1;
+    }
   }
 
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;

@@ -167,7 +167,14 @@ function capture(handler, args) {
       return true;
     },
   };
-  const code = handler({ ...args, json: true }, { stdout });
+  let code;
+  try {
+    code = handler({ ...args, json: true }, { stdout });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const errCode = /** @type {{ code?: string }} */ (err).code || "write";
+    return { code: 1, body: { ok: false, error: { code: String(errCode), message } } };
+  }
   let body;
   try {
     body = JSON.parse(buf);

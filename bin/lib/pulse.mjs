@@ -3,10 +3,32 @@
  * No journal bodies. Exclusive search stays exclusive — this is counts only.
  */
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { loadBindings, projectSliceDir } from "./bindings.mjs";
+import { isOptedInLocal } from "./import-legacy.mjs";
 import { latestJournalHandoff, listOpenAttention, listOpenDecisions } from "./okf.mjs";
 import { collectDelta, PULSE_TITLE_CAP } from "./delta.mjs";
 import { readWatermark } from "./watermark.mjs";
+
+/**
+ * Live OKF root for a binding. `store=local` → opted-in `./.mental` on a bound
+ * path. Otherwise the home UUID slice. Missing → null (empty counts).
+ * @param {string} home
+ * @param {{ id?: string, store?: string, paths?: string[] }} binding
+ * @returns {string | null}
+ */
+export function pulseRootForBinding(home, binding) {
+  if (!home || !binding?.id) return null;
+  if (binding.store === "local") {
+    for (const p of binding.paths || []) {
+      if (!p) continue;
+      const local = join(p, ".mental");
+      if (existsSync(local) && isOptedInLocal(local)) return local;
+    }
+  }
+  const slice = projectSliceDir(home, binding.id);
+  return existsSync(slice) ? slice : null;
+}
 
 /**
  * @param {string} home
@@ -21,8 +43,8 @@ export function collectPulseProjects(home) {
     return [];
   }
   return data.bindings.map((b) => {
-    const root = projectSliceDir(home, b.id);
-    const has = existsSync(root);
+    const root = pulseRootForBinding(home, b);
+    const has = Boolean(root);
     const handoff = has
       ? latestJournalHandoff(root)
       : { resume: null, outcome: null, file: null, when: null, against: null };

@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README **Who writes** — agents journal / decide / record residue after `mental install`; humans are not expected to keep the log by hand. Same CLI if you want the pulse yourself. Not a hidden hook; not every chat turn.
 - README rebuilt on the award-style 3-tier layout used by uv / Aider / Goose / Mem0: pitch + demo + quick start above the fold; highlights; who-writes table; research as proof not a lecture; FAQ for agents and humans; depth stays in `docs/`.
 
+### Fixed
+
+- `mental park --attention` upserts by title like `mental attention` (same-day retry no longer crashes after the journal write).
+- `mental pulse` reads opted-in `./.mental` for `store=local` bindings instead of a stale home slice.
+- Heartbeat decision cap keeps the newest open/deferred decisions (same newest-first order as attention).
+- Pulse watermark writes fail open so an unwritable cache cannot fail park/handoff after a successful journal.
+
 ## [0.2.3] - 2026-08-26
 
 ### Added

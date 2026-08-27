@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { formatHeartbeat } from "../bin/lib/heartbeat.mjs";
 import { DECISION_HEARTBEAT_CAP, stringifyFrontmatter } from "../bin/lib/okf.mjs";
@@ -102,6 +102,34 @@ test("park --attention --kind writes residue", () => {
   assert.match(data.attention.path, /^attention\//);
   assert.equal(data.heartbeat.attentionCount, 1);
   assert.equal(data.heartbeat.attention[0].title, "Tom said ship the pointer");
+});
+
+test("park --attention same title upserts; does not crash or duplicate", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const args = [
+    "park",
+    "--json",
+    "--resume",
+    "Retry the same residue — open loops: pointer",
+    "--attention",
+    "Tom said ship the pointer",
+    "--kind",
+    "direction",
+    "--from",
+    "Tom",
+  ];
+  const first = parseOk(mental(home, root, args), "park attention #1");
+  assert.equal(first.attention.updated, false);
+  const second = parseOk(mental(home, root, args), "park attention #2");
+  assert.equal(second.attention.updated, true);
+  assert.equal(second.attention.path, first.attention.path);
+
+  const where = whereOf(home, root);
+  const files = readdirSync(join(where.root, "attention")).filter((f) => f.endsWith(".md"));
+  assert.equal(files.length, 1);
+  const hb = parseOk(mental(home, root, ["heartbeat", "--json"]), "heartbeat after park upsert");
+  assert.equal(hb.attentionCount, 1);
 });
 
 test("park --attention without --kind is usage", () => {
@@ -215,6 +243,47 @@ test("pulse does not concatenate journals", () => {
   assert.doesNotMatch(raw, /One\s+Two|Two\s+One/);
 });
 
+test("pulse reads opted-in local store, not stale home slice", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  parseOk(
+    mental(home, root, [
+      "journal",
+      "--json",
+      "--title",
+      "Home slice",
+      "--resume",
+      "STALE_HOME_RESUME — open loops: none",
+    ]),
+    "home journal",
+  );
+  const fix = mental(home, root, ["doctor", "--fix-ignore", "--json"]);
+  assert.ok(fix.status === 0 || fix.status === 3, fix.stderr || fix.stdout);
+
+  const loc = mental(home, root, ["local", "--move", "--delete-home", "--json"]);
+  assert.equal(loc.status, 0, loc.stderr || loc.stdout);
+  const locBody = JSON.parse(loc.stdout);
+  assert.equal(locBody.ok, true, loc.stdout);
+  assert.equal(locBody.data.where.mode, "local");
+
+  parseOk(
+    mental(home, root, [
+      "journal",
+      "--json",
+      "--title",
+      "Local live",
+      "--resume",
+      "LOCAL_LIVE_RESUME — open loops: none",
+    ]),
+    "local journal",
+  );
+
+  const data = parseOk(mental(home, root, ["pulse", "--json"]), "pulse local");
+  assert.equal(data.projects.length, 1);
+  assert.match(data.projects[0].resume, /LOCAL_LIVE_RESUME/);
+  assert.doesNotMatch(data.projects[0].resume, /STALE_HOME_RESUME/);
+});
+
 test("heartbeat --json has counts, no notes dump", () => {
   const home = tempHome();
   const { root } = initRepo(home);
@@ -316,6 +385,11 @@ test("9 open attention → JSON length ≤ 7, attentionCount === 9", () => {
   assert.equal(hb.attentionCount, 9);
   assert.ok(hb.attention.length <= 7);
   assert.equal(hb.attention.length, 7);
+  const titles = hb.attention.map((a) => a.title);
+  assert.ok(titles.includes("Air 9"), JSON.stringify(titles));
+  assert.ok(titles.includes("Air 3"), JSON.stringify(titles));
+  assert.equal(titles.includes("Air 1"), false);
+  assert.equal(titles.includes("Air 2"), false);
 });
 
 test("9 open decisions → JSON length ≤ 7, openDecisionCount === 9", () => {
@@ -341,6 +415,11 @@ test("9 open decisions → JSON length ≤ 7, openDecisionCount === 9", () => {
   assert.equal(hb.openDecisionCount, 9);
   assert.ok(hb.openDecisions.length <= 7);
   assert.equal(hb.openDecisions.length, 7);
+  const titles = hb.openDecisions.map((d) => d.title);
+  assert.ok(titles.includes("Fork 9"), JSON.stringify(titles));
+  assert.ok(titles.includes("Fork 3"), JSON.stringify(titles));
+  assert.equal(titles.includes("Fork 1"), false);
+  assert.equal(titles.includes("Fork 2"), false);
 });
 
 test("formatHeartbeat (+N more) for decisions", () => {

@@ -291,13 +291,14 @@ export function recentJournalSections(root, limit = 8) {
 }
 
 /**
+ * Open or deferred decisions. Newest filename first (same cap order as attention).
  * @param {string} root
  */
 export function listOpenDecisions(root) {
   const dir = join(root, "decisions");
   if (!existsSync(dir)) return [];
   const out = [];
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md")).sort()) {
+  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md")).sort().reverse()) {
     const text = readFileSync(join(dir, file), "utf8");
     const { data } = parseFrontmatter(text);
     const status = String(data.status || "");

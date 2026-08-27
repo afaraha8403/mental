@@ -53,7 +53,11 @@ export function readWatermark(home, id, env = process.env) {
 export function writeWatermark(home, id, env = process.env, at = new Date().toISOString()) {
   if (!home || !id) return null;
   const file = watermarkPath(home, id, env);
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify({ at })}\n`);
-  return { at, path: file };
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${JSON.stringify({ at })}\n`);
+    return { at, path: file };
+  } catch {
+    return null;
+  }
 }
