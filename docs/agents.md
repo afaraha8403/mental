@@ -63,14 +63,12 @@ Mental is **not** a todo app. Do not store transcripts. Do not duplicate `PLAN.m
 
 ## Mental receipt
 
-Turns that invoked `mental` end with a separator line (`────────`), title `🧠 Mental  ` (two trailing spaces so chat markdown does not join lines), indented `Kind: Verb` items, then `────────`. Do not emit `</br>` — it prints as literal tags.
+Turns that invoked `mental` end with title `🧠 Mental  ` (two trailing spaces so chat markdown does not join lines), then indented `Kind: Verb` items. Do not wrap with `────────`. Do not emit `</br>` — it prints as literal tags.
 
 ```text
-────────
 🧠 Mental  
   🚦 Attention: Recorded  “Tom said ship”
   📓 Journal: Recorded  “Resolver landed”
-────────
 ```
 
 Full table and read-only shape: the skill.

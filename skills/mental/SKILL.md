@@ -95,10 +95,9 @@ Cursor markdown joins adjacent lines into one paragraph. A lone `<br>`
 becomes a break *inside* that paragraph, so `🧠 Mental` and the item
 collapse to one line. Do **not** put the title and items on the same line.
 
-Wrap with a separator line (`────────`) on its own line above and below.
-That is a visible rule even as plain text. Do not emit `<br>` or `</br>` —
-those print as literal tags in Claude Code and other agents. Do not use
-markdown `---` here: it can become a heading underline under the last item.
+Do not wrap with `────────`, markdown `---`, `<br>`, or `</br>`. Separators
+join into the same paragraph in Cursor chat. `</br>` prints as literal tags.
+`---` under an item can become a heading underline.
 Title line is `🧠 Mental` plus **two trailing spaces** (markdown hard break).
 Each item is indented two spaces: `emoji Kind: Verb  “title”`.
 At most four item lines; if more, keep the writes and end with `+N more`.
@@ -109,21 +108,17 @@ not this repo, so links would 404. The CLI tool card already has the path.
 **Writes (copy this shape, including the two spaces after `Mental`):**
 
 ```text
-────────
 🧠 Mental  
   🚦 Attention: Recorded  “Tom said ship”
   📓 Journal: Recorded  “Resolver landed”
   🎯 Decision: Decided  “Keep the JSON envelope”
-────────
 ```
 
 **Read-only (heartbeat / pulse / search / show / list):**
 
 ```text
-────────
 🧠 Mental  
   🔍 Read: Heartbeat
-────────
 ```
 
 | Emoji | Kind | Item line |
