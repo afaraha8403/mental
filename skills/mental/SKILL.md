@@ -94,40 +94,42 @@ Skip the whole block if you did not run `mental`.
 Cursor markdown joins adjacent lines into one paragraph. A lone `<br>`
 becomes a break *inside* that paragraph, so `🧠 Mental` and the item
 collapse to one line. Do **not** put the title and items on the same line.
+Do **not** put two items on the same line.
 
 Do not wrap with `────────`, markdown `---`, `<br>`, or `</br>`. Separators
 join into the same paragraph in Cursor chat. `</br>` prints as literal tags.
 `---` under an item can become a heading underline.
-Title line is `🧠 Mental` plus **two trailing spaces** (markdown hard break).
-Each item is indented two spaces: `emoji Kind: Verb  “title”`.
+Each receipt line except the last ends with **two trailing spaces** (markdown
+hard break). Items are flush left — no indent (indent still joins as one
+paragraph). Stacked, never inline.
 At most four item lines; if more, keep the writes and end with `+N more`.
 
 Titles only — no `file://` or markdown links. Mental files live in `~/.mental`,
 not this repo, so links would 404. The CLI tool card already has the path.
 
-**Writes (copy this shape, including the two spaces after `Mental`):**
+**Writes (copy this shape, including two trailing spaces on every line except the last):**
 
 ```text
 🧠 Mental  
-  🚦 Attention: Recorded  “Tom said ship”
-  📓 Journal: Recorded  “Resolver landed”
-  🎯 Decision: Decided  “Keep the JSON envelope”
+📓 Journal: Recorded  “Resolver landed”  
+🚦 Attention: Recorded  “Tom said ship”  
+🎯 Decision: Decided  “Keep the JSON envelope”
 ```
 
 **Read-only (heartbeat / pulse / search / show / list):**
 
 ```text
 🧠 Mental  
-  🔍 Read: Heartbeat
+🔍 Read: Heartbeat
 ```
 
 | Emoji | Kind | Item line |
 | --- | --- | --- |
-| 📓 | Journal | `  📓 Journal: Recorded  “<title>”` |
-| 🚦 | Attention | `  🚦 Attention: Recorded  “<title>”` or `  🚦 Attention: Resolved  “<title>”` |
-| 🎯 | Decision | `  🎯 Decision: Decided  “<title>”` or `  🎯 Decision: Opened  “<title>”` |
-| 📝 | Note | `  📝 Note: Recorded  “<title>”` |
-| 🔍 | Read | `  🔍 Read: Heartbeat` / `Pulse` / `Searched` / `Showed` / `Listed` |
+| 📓 | Journal | `📓 Journal: Recorded  “<title>”` |
+| 🚦 | Attention | `🚦 Attention: Recorded  “<title>”` or `🚦 Attention: Resolved  “<title>”` |
+| 🎯 | Decision | `🎯 Decision: Decided  “<title>”` or `🎯 Decision: Opened  “<title>”` |
+| 📝 | Note | `📝 Note: Recorded  “<title>”` |
+| 🔍 | Read | `🔍 Read: Heartbeat` / `Pulse` / `Searched` / `Showed` / `Listed` |
 
 Mix writes and a read in one block if both happened. Never invent Mental activity.
 

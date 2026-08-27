@@ -55,6 +55,10 @@ test("skill shows a copy-paste receipt example; rule points at it", () => {
   assert.doesNotMatch(skill, /^────────$/m);
   assert.doesNotMatch(skill, /^<\/br>$/m);
   assert.match(skill, /^🧠 Mental  $/m);
+  assert.match(skill, /^📓 Journal: Recorded/m);
+  assert.match(skill, /^🔍 Read: Heartbeat/m);
+  assert.doesNotMatch(skill, /^ {2}📓/m);
+  assert.doesNotMatch(skill, /Journal:.*🔍 Read/);
   assert.match(skill, /🚦 Attention: Recorded/);
   assert.match(skill, /🎯 Decision: Decided/);
   assert.doesNotMatch(skill, /recorded attention/);
@@ -65,5 +69,6 @@ test("skill shows a copy-paste receipt example; rule points at it", () => {
   assert.doesNotMatch(rule, /^────────$/m);
   assert.doesNotMatch(rule, /^<\/br>$/m);
   assert.match(rule, /two trailing spaces/);
+  assert.match(rule, /stacked/);
   assert.match(rule, /Mental skill/);
 });

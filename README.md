@@ -100,8 +100,8 @@ You will see this at the end of a turn that used Mental:
 
 ```text
 🧠 Mental  
-  📓 Journal: Recorded  “Resolver landed”
-  🚦 Attention: Recorded  “Tom said ship”
+📓 Journal: Recorded  “Resolver landed”  
+🚦 Attention: Recorded  “Tom said ship”
 ```
 
 Same CLI if you ever type it yourself. Same files.
