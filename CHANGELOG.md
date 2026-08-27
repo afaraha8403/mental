@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite index still writes `concepts` + `links` when Node’s `node:sqlite` has no FTS5 module. Search uses LIKE with title-first ranking; FTS5 + bm25 remains the path when the module exists. `INDEX_VERSION` is 3 so older caches rebuild.
 - Discovery metadata for AI-tooling developers: npm `keywords` + author, plugin/marketplace keywords, skill tags (`coding-agents`, `mcp`, `cursor`, `claude-code`, …), and a README subtitle / works-with row (Cursor, Claude Code, Copilot, MCP, Agent Skills).
 - README **Who writes** — agents journal / decide / record residue after `mental install`; humans are not expected to keep the log by hand. Same CLI if you want the pulse yourself. Not a hidden hook; not every chat turn.
+- README rebuilt on the award-style 3-tier layout used by uv / Aider / Goose / Mem0: pitch + demo + quick start above the fold; highlights; who-writes table; research as proof not a lecture; FAQ for agents and humans; depth stays in `docs/`.
 
 ## [0.2.3] - 2026-08-26
 
