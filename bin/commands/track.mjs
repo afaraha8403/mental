@@ -1,0 +1,365 @@
+/**
+ * `mental track` — optional wall/user timers. Isolated add-on; default off.
+ * Glance is not a focus ping. Hours never go to git.
+ */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { resolveBundle } from "../lib/resolve.mjs";
+import { TRACK_OFF_USAGE, isFeatureOn, loadConfig } from "../lib/config.mjs";
+import { assertLocalIgnorable } from "../lib/ignore.mjs";
+import { bundleName, repoRelativePath } from "../lib/okf.mjs";
+import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
+import { printResult, kindLine } from "../lib/output.mjs";
+import { isBundleRoot } from "../lib/heartbeat.mjs";
+import { loadBindings, projectSliceDir } from "../lib/bindings.mjs";
+import { pulseRootForBinding } from "../lib/pulse.mjs";
+import {
+  amendInterval,
+  assertExportOutPath,
+  canWriteTime,
+  discardInterval,
+  focusInterval,
+  glanceTime,
+  renderExport,
+  reportTime,
+  startInterval,
+  stopIntervals,
+} from "../lib/time.mjs";
+
+function flagString(flags, key) {
+  return typeof flags?.[key] === "string" ? flags[key] : null;
+}
+
+function trackOffResult(stdout, args) {
+  printResult(stdout, args, false, undefined, { code: "usage", message: TRACK_OFF_USAGE });
+  return 1;
+}
+
+function resolveWhere(args, { write }) {
+  return resolveBundle({
+    cwd: args.cwd ?? process.cwd(),
+    home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
+    env: args.env ?? process.env,
+    dir: args.dir ?? null,
+    write,
+  });
+}
+
+function formatGlance(data) {
+  const lines = [];
+  if (!data.running.length && !data.stoppedToday.length) return "no running timers";
+  for (const t of data.tasks) {
+    lines.push(`${t.title_internal}  wall ${t.wall}  user ${t.user}`);
+    for (const i of t.intervals) {
+      const tag = i.neverStarted ? "never-started" : i.stale ? "stale" : i.status;
+      const extra = i.status === "running" ? ` suggested user ${i.suggested_user}` : "";
+      lines.push(`  ${tag} ${i.id.slice(0, 8)}  ${i.live_wall}${extra}`);
+    }
+  }
+  if (data.overlap?.length) lines.push("warn: overlapping running intervals (same clock twice)");
+  return lines.join("\n");
+}
+
+/**
+ * @param {object} args
+ * @param {{ stdout?: NodeJS.WritableStream, isTTY?: boolean }} [io]
+ */
+export function cmdTrack(args, io = {}) {
+  const stdout = io.stdout ?? process.stdout;
+  const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
+  const sub = (args.rest[0] || "glance").toLowerCase();
+  const json = Boolean(args.json);
+  const isTTY = Boolean(io.isTTY ?? stdout.isTTY);
+
+  const resolved = resolveWhere(args, { write: sub === "start" });
+  if (!resolved.ok) {
+    printResult(stdout, args, false, undefined, resolved.error);
+    return 1;
+  }
+  const where = resolved.data;
+  if (!canWriteTime(where) || !isBundleRoot(where)) {
+    printResult(stdout, args, false, undefined, {
+      code: "usage",
+      message: "Time tracking needs a project bundle (git repo after a write, or mental local).",
+    });
+    return 1;
+  }
+
+  const uuid = where.id || null;
+  if (!home || !isFeatureOn(home, "track", uuid)) {
+    return trackOffResult(stdout, args);
+  }
+
+  if (where.mode === "local") {
+    const gate = assertLocalIgnorable(where.gitRoot || args.cwd, { env: args.env ?? process.env });
+    if (!gate.ok) {
+      printResult(stdout, args, false, undefined, gate.error);
+      return 1;
+    }
+  }
+
+  const viaParsed = viaFromFlags(args.flags);
+  if (!viaParsed.ok) {
+    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE });
+    return 1;
+  }
+
+  if (sub === "glance" || sub === "track") {
+    const g = glanceTime(where.root);
+    if (!g.ok) {
+      printResult(stdout, args, false, undefined, g.error);
+      return 1;
+    }
+    printResult(stdout, args, true, g.data, undefined, formatGlance);
+    return 0;
+  }
+
+  if (sub === "start") {
+    const started = flagString(args.flags, "started");
+    if (started && (json || !isTTY)) {
+      printResult(stdout, args, false, undefined, {
+        code: "usage",
+        message: "--started is TTY-only (agents cannot backfill a clock)",
+      });
+      return 1;
+    }
+    const againstRaw = flagString(args.flags, "against");
+    const against = againstRaw != null ? repoRelativePath(againstRaw) : undefined;
+    if (againstRaw != null && against === null) {
+      printResult(stdout, args, false, undefined, {
+        code: "usage",
+        message: "--against must be a repo-relative path (no ..)",
+      });
+      return 1;
+    }
+    const defaultName = bundleName(where.root, where.id || "project");
+    const result = startInterval(where.root, {
+      titleInternal: flagString(args.flags, "title-internal") || "",
+      titleExternal: flagString(args.flags, "title-external") || undefined,
+      bodyInternal: flagString(args.flags, "body-internal") || undefined,
+      projectName: flagString(args.flags, "project-name") || defaultName,
+      against: against || "",
+      via: viaParsed.via || "",
+      taskId: flagString(args.flags, "task") || undefined,
+      started: started || undefined,
+    });
+    if (!result.ok) {
+      printResult(stdout, args, false, undefined, result.error);
+      return 1;
+    }
+    printResult(
+      stdout,
+      args,
+      true,
+      result.data,
+      undefined,
+      () => kindLine("note", `started ${result.data.title_internal}`),
+    );
+    return 0;
+  }
+
+  if (sub === "focus") {
+    const result = focusInterval(where.root, { id: flagString(args.flags, "id") || "" });
+    if (!result.ok) {
+      printResult(stdout, args, false, undefined, result.error);
+      return 1;
+    }
+    printResult(stdout, args, true, result.data, undefined, () => `focused ${result.data.id}`);
+    return 0;
+  }
+
+  if (sub === "stop") {
+    if (Boolean(args.flags?.["accept-stale"]) && json) {
+      printResult(stdout, args, false, undefined, {
+        code: "usage",
+        message: "--accept-stale is TTY-only",
+      });
+      return 1;
+    }
+    const result = stopIntervals(where.root, {
+      id: flagString(args.flags, "id") || undefined,
+      all: Boolean(args.flags?.all),
+      userHmm: flagString(args.flags, "user") || undefined,
+      acceptStale: Boolean(args.flags?.["accept-stale"]) && isTTY && !json,
+      json,
+      titleExternal: flagString(args.flags, "title-external") || undefined,
+      bodyExternal: flagString(args.flags, "body-external") || undefined,
+      projectName: flagString(args.flags, "project-name") || undefined,
+    });
+    if (!result.ok) {
+      printResult(stdout, args, false, undefined, result.error);
+      return 1;
+    }
+    const first = result.data.stopped[0];
+    printResult(
+      stdout,
+      args,
+      true,
+      result.data,
+      undefined,
+      () => kindLine("note", first ? `stopped ${first.title_internal}` : "stopped"),
+    );
+    return 0;
+  }
+
+  if (sub === "discard") {
+    const result = discardInterval(where.root, { id: flagString(args.flags, "id") || undefined });
+    if (!result.ok) {
+      printResult(stdout, args, false, undefined, result.error);
+      return 1;
+    }
+    printResult(
+      stdout,
+      args,
+      true,
+      result.data,
+      undefined,
+      () => kindLine("note", `discarded ${result.data.title_internal}`),
+    );
+    return 0;
+  }
+
+  if (sub === "amend") {
+    const result = amendInterval(where.root, {
+      id: flagString(args.flags, "id") || "",
+      titleExternal: flagString(args.flags, "title-external") || undefined,
+      bodyExternal: flagString(args.flags, "body-external") || undefined,
+      userHmm: flagString(args.flags, "user") || undefined,
+      projectName: flagString(args.flags, "project-name") || undefined,
+    });
+    if (!result.ok) {
+      printResult(stdout, args, false, undefined, result.error);
+      return 1;
+    }
+    printResult(stdout, args, true, result.data, undefined, () => `amended ${result.data.id}`);
+    return 0;
+  }
+
+  if (sub === "report" || sub === "export") {
+    const since = flagString(args.flags, "since") || undefined;
+    const until = flagString(args.flags, "until") || undefined;
+    const external = Boolean(args.flags?.external);
+    const project = flagString(args.flags, "project") || undefined;
+    const all = Boolean(args.flags?.all);
+
+    if (all) {
+      if (!home) {
+        printResult(stdout, args, false, undefined, { code: "no-home", message: "HOME is unset" });
+        return 1;
+      }
+      const cfg = loadConfig(home);
+      let bindings;
+      try {
+        bindings = loadBindings(home);
+      } catch (err) {
+        printResult(stdout, args, false, undefined, {
+          code: "bindings",
+          message: err instanceof Error ? err.message : String(err),
+        });
+        return 1;
+      }
+      const seen = new Set();
+      /** @type {Array<{ id: string, name?: string, report: object }>} */
+      const chunks = [];
+      for (const b of bindings.bindings) {
+        if (!b.id || seen.has(b.id)) continue;
+        seen.add(b.id);
+        const feat = cfg.features.track;
+        const on = feat
+          ? feat.off.includes(b.id)
+            ? false
+            : feat.on.includes(b.id) || feat.default === "on"
+          : false;
+        if (!on) continue;
+        const root = pulseRootForBinding(home, b) || projectSliceDir(home, b.id);
+        const rep = reportTime(root, { since, until, external, project, bundleId: b.id });
+        if (rep.ok) chunks.push({ id: b.id, name: b.name, report: rep.data });
+      }
+      if (sub === "export") {
+        return writeExport(stdout, args, chunks, {
+          external,
+          project,
+          all: true,
+          cwd: args.cwd ?? process.cwd(),
+          gitRoot: where.gitRoot,
+        });
+      }
+      printResult(stdout, args, true, { chunks }, undefined, () =>
+        chunks.map((c) => `${c.name || c.id}: wall ${c.report.wall} user ${c.report.user}`).join("\n"),
+      );
+      return 0;
+    }
+
+    const rep = reportTime(where.root, { since, until, external, project, bundleId: uuid });
+    if (!rep.ok) {
+      printResult(stdout, args, false, undefined, rep.error);
+      return 1;
+    }
+    if (sub === "export") {
+      return writeExport(stdout, args, [{ id: uuid, name: where.id, report: rep.data }], {
+        external,
+        project,
+        all: false,
+        cwd: args.cwd ?? process.cwd(),
+        gitRoot: where.gitRoot,
+      });
+    }
+    printResult(
+      stdout,
+      args,
+      true,
+      rep.data,
+      undefined,
+      (d) => `wall ${d.wall}  user ${d.user}${d.overlap?.length ? "\nwarn: overlapping intervals" : ""}`,
+    );
+    return 0;
+  }
+
+  printResult(stdout, args, false, undefined, {
+    code: "usage",
+    message: "mental track [glance|start|stop|focus|discard|amend|report|export]",
+  });
+  return 1;
+}
+
+function writeExport(stdout, args, chunks, { external, project, all, cwd, gitRoot }) {
+  const format = flagString(args.flags, "format") || "csv";
+  if (format !== "csv" && format !== "md") {
+    printResult(stdout, args, false, undefined, { code: "usage", message: "--format md|csv" });
+    return 1;
+  }
+  const out = flagString(args.flags, "out");
+  const dest = assertExportOutPath(out, { cwd, gitRoot });
+  if (!dest.ok) {
+    printResult(stdout, args, false, undefined, dest.error);
+    return 1;
+  }
+  if (all && external && format === "csv" && !project) {
+    printResult(stdout, args, false, undefined, {
+      code: "usage",
+      message:
+        "a single customer CSV requires --project <name>; without it print per-UUID banners and do not emit one mixed invoice",
+    });
+    return 1;
+  }
+  let body = "";
+  if (all && !project) {
+    body = chunks
+      .map((c) => renderExport({ rows: c.report.rows, external, format, banner: c.name || c.id }))
+      .join("\n");
+  } else {
+    const rows = chunks.flatMap((c) => c.report.rows);
+    body = renderExport({ rows, external, format });
+  }
+  mkdirSync(dirname(dest.abs), { recursive: true });
+  writeFileSync(dest.abs, body);
+  printResult(
+    stdout,
+    args,
+    true,
+    { out: dest.abs, rows: chunks.reduce((n, c) => n + c.report.rows.length, 0) },
+    undefined,
+    () => kindLine("note", "exported"),
+  );
+  return 0;
+}

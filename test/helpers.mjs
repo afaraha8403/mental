@@ -30,6 +30,7 @@ export function gitEnv(home) {
     npm_config_prefix: join(home, ".local"),
     npm_config_update_notifier: "false",
     MENTAL_SKIP_UPDATE_CHECK: "1",
+    MENTAL_SKIP_HOST_PLUGIN_CHECK: "1",
   };
 }
 

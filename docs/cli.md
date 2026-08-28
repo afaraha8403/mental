@@ -44,11 +44,13 @@ Non-TTY (pipes, agents) with no args prints help and exits 2.
 | `mental remap [--to id]` | List or retarget this clone’s UUID |
 | `mental split [--copy]` | New UUID for this clone (`mental new` is an alias) |
 | `mental link --to <id>` | Point this clone at an existing UUID |
-| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH; `--mcp` registers MCP |
-| `mental uninstall` | Remove installed skill / rule / hooks / MCP entries |
-| `mental hooks on\|off` | Optional session hooks (default off) |
-| `mental serve` | Optional MCP stdio (full command surface) |
-| `mental doctor` | PATH, bindings, ignore, skills, npm update, decision budget, stale residue. `--fix-ignore` adds `.mental/` to global excludes. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns) |
+| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH; `--mcp` registers MCP; `--hooks` / `--track` only if the user named that feature this turn. JSON includes `optionals[]` (`needsConsent: true`) |
+| `mental uninstall` | Remove installed skill / rule / hooks / MCP / mental-track copies |
+| `mental option` | List or set optional features (`track` per UUID; `mcp` / `hooks` user-global). `--all` sets track default on. `--this` before a UUID is usage |
+| `mental track` | Optional wall/user timers (off until `option track on`). `start` / `stop` / `focus` / `discard` / `report` / `export`. Export `--out` must be outside the git worktree |
+| `mental hooks on\|off` | Optional session hooks (default off; alias of `option hooks`) |
+| `mental serve` | Optional MCP stdio (full command surface, including track/option — handlers usage when off) |
+| `mental doctor` | PATH, bindings, ignore, skills, npm update, host plugin / skill-copy lag, decision budget, stale residue, `optionals[]`, `time.sqlite` never git-tracked (exit 3). `--fix-ignore` adds `.mental/` to global excludes. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns). `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips host CLIs. |
 
 ## Writes
 
@@ -105,9 +107,12 @@ decisions/YYYY-MM-DD-slug.md
 attention/YYYY-MM-DD-slug.md
 notes/slug.md
 status/current.md          # disposable cache, not SoT
+time.sqlite                # optional hours (off until `mental option track on`; never git)
 ```
 
-Index: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` (rebuildable).
+Index: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` (rebuildable). Hours are **not** in the index — they live in bundle `time.sqlite`.
+
+Optional timers: `mental option track on` then `mental track start --title-internal "…"`. Export `--out` must be outside the git worktree. TTY heartbeat and pulse never show hours.
 Pulse watermark: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json` (`{ at: iso }` — rebuildable, not SoT). Written after delta by `pulse` / `park` / `handoff`; **heartbeat never writes it**.
 
 Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount`. Extra open decisions: `mental list --type Decision --status open`.

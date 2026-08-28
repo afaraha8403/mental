@@ -2,6 +2,7 @@
  * `mental hooks on|off` — optional session-start snippets. Default off.
  */
 import { disableHooks, enableHooks } from "../lib/hooks.mjs";
+import { setFeature } from "../lib/config.mjs";
 import { printResult } from "../lib/output.mjs";
 
 export function cmdHooks(args, io = {}) {
@@ -29,6 +30,7 @@ export function cmdHooks(args, io = {}) {
     printResult(stdout, args, false, undefined, result.error);
     return 1;
   }
+  setFeature(home, "hooks", action, { all: true });
   printResult(
     stdout,
     args,

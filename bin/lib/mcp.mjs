@@ -3,11 +3,12 @@
  * Tools wrap the same command handlers as the CLI; agents should still prefer
  * `mental … --json` when they can shell. MCP exists so agents that only speak
  * tools (parallel sessions, orchestrators) can re-pulse and record mid-chat.
- * Also owns `enableMcp`/`disableMcp` — the `install --mcp` config writers.
+ * Host config writers live in mcp-hosts.mjs (`install --mcp` / `option mcp`).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import { cmdWhere } from "../commands/where.mjs";
+import { cmdOption } from "../commands/option.mjs";
+import { cmdTrack } from "../commands/track.mjs";
+import { enableMcp, disableMcp, cursorMcpPath, claudeMcpPath } from "./mcp-hosts.mjs";
 import { cmdHeartbeat } from "../commands/heartbeat.mjs";
 import { cmdStatus } from "../commands/status.mjs";
 import { cmdSearch } from "../commands/search.mjs";
@@ -162,6 +163,44 @@ const TOOLS = [
     description: "Cross-project compact rows (id, name, resume, counts). No journal bodies. Writes pulse watermark for the active bundle.",
     inputSchema: { type: "object", properties: {} },
   },
+  {
+    name: "option",
+    description: "List or set optional features (track per-UUID; hooks/mcp user-global). Handlers no-op with usage when the feature is off. Do not enable unless the user named the feature this turn.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        feature: { type: "string", enum: ["track", "hooks", "mcp"] },
+        action: { type: "string", enum: ["on", "off"] },
+        all: { type: "boolean" },
+      },
+    },
+  },
+  {
+    name: "track",
+    description: "Optional wall/user timers. Usage when tracking is off for this project — do not enable it. Subcommands: glance (default), start, stop, focus, discard, report, export.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        sub: { type: "string", description: "glance|start|stop|focus|discard|amend|report|export" },
+        title_internal: { type: "string" },
+        title_external: { type: "string" },
+        body_internal: { type: "string" },
+        body_external: { type: "string" },
+        task: { type: "string" },
+        id: { type: "string" },
+        user: { type: "string", description: "h:mm; required on stop --all when any runner is stale" },
+        all: { type: "boolean" },
+        since: { type: "string" },
+        until: { type: "string" },
+        out: { type: "string", description: "export path; must be outside the git worktree" },
+        format: { type: "string", enum: ["csv", "md"] },
+        external: { type: "boolean" },
+        project: { type: "string" },
+        via: { type: "string" },
+        against: { type: "string" },
+      },
+    },
+  },
 ];
 
 function capture(handler, args) {
@@ -298,6 +337,33 @@ function runTool(name, args, ctx) {
     });
   }
   if (name === "pulse") return capture(cmdPulse, base);
+  if (name === "option") {
+    const rest = [];
+    if (args.feature) rest.push(String(args.feature));
+    if (args.action) rest.push(String(args.action));
+    return capture(cmdOption, { ...base, rest, flags: { all: Boolean(args.all) } });
+  }
+  if (name === "track") {
+    const rest = args.sub ? [String(args.sub)] : [];
+    const flags = {};
+    if (args.title_internal) flags["title-internal"] = args.title_internal;
+    if (args.title_external) flags["title-external"] = args.title_external;
+    if (args.body_internal) flags["body-internal"] = args.body_internal;
+    if (args.body_external) flags["body-external"] = args.body_external;
+    if (args.task) flags.task = args.task;
+    if (args.id) flags.id = args.id;
+    if (args.user) flags.user = args.user;
+    if (args.all) flags.all = true;
+    if (args.since) flags.since = args.since;
+    if (args.until) flags.until = args.until;
+    if (args.out) flags.out = args.out;
+    if (args.format) flags.format = args.format;
+    if (args.external) flags.external = true;
+    if (args.project) flags.project = args.project;
+    if (args.via) flags.via = args.via;
+    if (args.against) flags.against = args.against;
+    return capture(cmdTrack, { ...base, rest, flags });
+  }
   return { code: 1, body: { ok: false, error: { code: "unknown-tool", message: name } } };
 }
 
@@ -396,76 +462,4 @@ export function serveMcp(ctx = {}) {
   });
 }
 
-/**
- * Cursor user-level MCP config (`mcpServers` at top level).
- * @param {string} home
- */
-export function cursorMcpPath(home) {
-  return join(home, ".cursor", "mcp.json");
-}
-
-/**
- * Claude Code user-level MCP config (`mcpServers` at top level of ~/.claude.json).
- * @param {string} home
- */
-export function claudeMcpPath(home) {
-  return join(home, ".claude.json");
-}
-
-function readJson(file, fallback) {
-  if (!existsSync(file)) return fallback;
-  try {
-    return JSON.parse(readFileSync(file, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
-function writeJson(file, data) {
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
-}
-
-const MCP_ENTRY = () => ({ command: CMD, args: ["serve"] });
-
-/**
- * Register `mental serve` in user-level MCP configs so tool-only agents can
- * reach Mental mid-chat. Upserts the `mental` key (install overrides previous);
- * never touches other servers. Fails open per file with a parse error.
- * @param {string} home
- */
-export function enableMcp(home) {
-  /** @type {string[]} */
-  const written = [];
-  for (const file of [cursorMcpPath(home), claudeMcpPath(home)]) {
-    const cfg = readJson(file, {});
-    if (!cfg) {
-      return { ok: false, error: { code: "mcp-parse", message: `Could not parse ${file}` }, written };
-    }
-    cfg.mcpServers = cfg.mcpServers && typeof cfg.mcpServers === "object" ? cfg.mcpServers : {};
-    cfg.mcpServers[CMD] = MCP_ENTRY();
-    writeJson(file, cfg);
-    written.push(file);
-  }
-  return { ok: true, written, server: MCP_ENTRY() };
-}
-
-/**
- * Remove only Mental's own MCP entry (identified by `command: "mental"`).
- * @param {string} home
- */
-export function disableMcp(home) {
-  /** @type {string[]} */
-  const written = [];
-  for (const file of [cursorMcpPath(home), claudeMcpPath(home)]) {
-    const cfg = readJson(file, null);
-    const entry = cfg?.mcpServers?.[CMD];
-    if (!entry || entry.command !== CMD) continue;
-    delete cfg.mcpServers[CMD];
-    writeJson(file, cfg);
-    written.push(file);
-  }
-  return { ok: true, written };
-}
-
-export { TOOLS, handle, encode, runTool };
+export { TOOLS, handle, encode, runTool, enableMcp, disableMcp, cursorMcpPath, claudeMcpPath };

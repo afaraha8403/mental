@@ -4,6 +4,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, cpSync } from "node:fs";
 import { basename, dirname, join, relative, resolve as resolvePath, sep } from "node:path";
+import { backupTimeDb, isTimeSidecarName, TIME_DB } from "./time.mjs";
 
 export const CONCEPT_DIRS = ["journal", "decisions", "notes", "attention", "status"];
 
@@ -785,9 +786,15 @@ export function copyOkfTree(src, dest, { skip = new Set(["status"]) } = {}) {
   /** @type {string[]} */
   const copied = [];
   for (const name of readdirSync(src)) {
-    if (skip.has(name) || name === ".mental-local") continue;
+    if (skip.has(name) || name === ".mental-local" || isTimeSidecarName(name)) continue;
     cpSync(join(src, name), join(dest, name), { recursive: true, force: true });
     copied.push(name);
+  }
+  const srcDb = join(src, TIME_DB);
+  const destDb = join(dest, TIME_DB);
+  if (existsSync(srcDb) && !existsSync(destDb)) {
+    const b = backupTimeDb(srcDb, destDb);
+    if (b.ok && !b.skipped) copied.push(TIME_DB);
   }
   return copied;
 }

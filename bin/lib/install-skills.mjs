@@ -3,7 +3,8 @@
  */
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BEGIN, END, RULES_DIR, SKILLS_DIR } from "./pkg.mjs";
+import { BEGIN, END, OPTIONAL_DIR, RULES_DIR, SKILLS_DIR } from "./pkg.mjs";
+import { loadConfig } from "./config.mjs";
 
 export function skillSourceDir() {
   return join(SKILLS_DIR, "mental");
@@ -62,6 +63,104 @@ function copyRule(dest) {
   cpSync(ruleSourceFile(), dest);
 }
 
+export function trackSkillSourceDir() {
+  return join(OPTIONAL_DIR, "mental-track");
+}
+
+export function trackRuleSourceFile() {
+  return join(trackSkillSourceDir(), "rules", "mental-track.mdc");
+}
+
+/**
+ * Track skill dests. Copied only when track is on (or dest already exists).
+ * Not under plugin `skills/` — Agent Plugins would auto-load it.
+ * @param {string} home
+ */
+export function userTrackTargets(home) {
+  return {
+    skills: [
+      join(home, ".claude", "skills", "mental-track"),
+      join(home, ".cursor", "skills", "mental-track"),
+      join(home, ".agents", "skills", "mental-track"),
+      join(home, ".config", "opencode", "skills", "mental-track"),
+    ],
+    cursorRule: join(home, ".cursor", "rules", "mental-track.mdc"),
+  };
+}
+
+function copyDirFollowLink(src, dest) {
+  mkdirSync(dirname(dest), { recursive: true });
+  let target = dest;
+  try {
+    const st = lstatSync(dest);
+    if (st.isSymbolicLink()) target = realpathSync(dest);
+    else if (!st.isDirectory()) rmSync(dest);
+  } catch {
+    // dest does not exist yet
+  }
+  cpSync(src, target, { recursive: true, force: true });
+}
+
+/**
+ * @param {string} home
+ */
+export function trackSkillPresent(home) {
+  return userTrackTargets(home).skills.some((d) => existsSync(join(d, "SKILL.md")));
+}
+
+/**
+ * Recopy when dest exists or track is on for any UUID / default.
+ * @param {string} home
+ */
+export function shouldCopyTrackSkills(home) {
+  if (trackSkillPresent(home) || existsSync(userTrackTargets(home).cursorRule)) return true;
+  const cfg = loadConfig(home);
+  const feat = cfg.features.track;
+  if (!feat) return false;
+  return feat.default === "on" || feat.on.length > 0;
+}
+
+/**
+ * @param {string} home
+ * @returns {string[]}
+ */
+export function copyTrackSkills(home) {
+  if (!existsSync(join(trackSkillSourceDir(), "SKILL.md"))) return [];
+  const targets = userTrackTargets(home);
+  /** @type {string[]} */
+  const written = [];
+  for (const dest of targets.skills) {
+    copyDirFollowLink(trackSkillSourceDir(), dest);
+    written.push(dest);
+  }
+  if (existsSync(trackRuleSourceFile())) {
+    mkdirSync(dirname(targets.cursorRule), { recursive: true });
+    cpSync(trackRuleSourceFile(), targets.cursorRule);
+    written.push(targets.cursorRule);
+  }
+  return written;
+}
+
+/**
+ * @param {string} home
+ */
+export function removeTrackSkills(home) {
+  const targets = userTrackTargets(home);
+  /** @type {string[]} */
+  const removed = [];
+  for (const dest of targets.skills) {
+    if (existsSync(dest)) {
+      rmSync(dest, { recursive: true, force: true });
+      removed.push(dest);
+    }
+  }
+  if (existsSync(targets.cursorRule)) {
+    rmSync(targets.cursorRule, { force: true });
+    removed.push(targets.cursorRule);
+  }
+  return removed;
+}
+
 /**
  * Insert or replace a managed HTML-comment block.
  * @param {string} file
@@ -110,6 +209,9 @@ export function installSkills({ home, projectDir = null, dryRun = false }) {
       const vendored = join(projectDir, ".github", "skills", "mental");
       copySkill(vendored);
       written.push(vendored);
+    }
+    if (shouldCopyTrackSkills(home)) {
+      written.push(...copyTrackSkills(home));
     }
   }
   return { ok: true, written, targets };

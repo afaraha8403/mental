@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BEGIN, END } from "./pkg.mjs";
-import { userInstallTargets } from "./install-skills.mjs";
+import { userInstallTargets, removeTrackSkills } from "./install-skills.mjs";
 
 function esc(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -52,5 +52,6 @@ export function uninstallSkills({ home, projectDir = null }) {
       removed.push(vendored);
     }
   }
+  removed.push(...removeTrackSkills(home));
   return { ok: true, removed };
 }

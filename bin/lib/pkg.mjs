@@ -16,6 +16,7 @@ export const VERSION = pkg.version;
 
 export const SKILLS_DIR = join(PKG_ROOT, "skills");
 export const RULES_DIR = join(PKG_ROOT, "rules");
+export const OPTIONAL_DIR = join(PKG_ROOT, "optional");
 
 /** Managed-block markers for user AGENTS.md / CLAUDE.md. */
 export const BEGIN = `<!-- BEGIN ${CMD} (managed — edits inside are overwritten on reinstall) -->`;

@@ -1,0 +1,6 @@
+---
+description: Optional Mental time tracking. Self-gates on heartbeat track.enabled. Never prompt to enable.
+alwaysApply: false
+---
+
+If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill for wall/user timers. If tracking is off, do nothing. Do not run `mental option track on` unless the user named track or hours **this turn**. Usage "Time tracking is off" is not permission to enable it. Never invent a start clock or a duration. Never `git add` `time.sqlite` or a timesheet export.

@@ -32,6 +32,8 @@ import { cmdServe } from "./commands/serve.mjs";
 import { cmdPark } from "./commands/park.mjs";
 import { cmdHandoff } from "./commands/handoff.mjs";
 import { cmdPulse } from "./commands/pulse.mjs";
+import { cmdOption } from "./commands/option.mjs";
+import { cmdTrack } from "./commands/track.mjs";
 
 export { parseArgv } from "./lib/args.mjs";
 export { normalizeOrigin, findGitRoot } from "./lib/git.mjs";
@@ -65,6 +67,8 @@ const COMMANDS = {
   park: cmdPark,
   handoff: cmdHandoff,
   pulse: cmdPulse,
+  option: cmdOption,
+  track: cmdTrack,
 };
 
 /**
@@ -105,7 +109,7 @@ export async function run(argv, ctx = {}) {
     return 0;
   }
 
-  const io = { stdout, stderr, stdin: ctx.stdin ?? process.stdin };
+  const io = { stdout, stderr, stdin: ctx.stdin ?? process.stdin, isTTY };
   const ctxArgs = { ...args, cwd, home, env };
   const humanTty = isTTY && !args.json;
 

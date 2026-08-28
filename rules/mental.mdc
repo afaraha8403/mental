@@ -15,6 +15,8 @@ If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, conti
 
 Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
 
+If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill. If tracking is off, do nothing — do not enable it and do not suggest `mental option track on`.
+
 If you invoked `mental` this turn, end the user-visible reply with `🧠 **Mental**` then a markdown bullet list: `- emoji **Kind** › *action* › title`. Read with no title omits the third slot. Never inline. No `────────`. Not `</br>`. Example in the Mental skill. Not a code fence.
 
 On a pasted transcript or a plan-progress question ("where in the plan / what's left?"), use the Mental skill. Cheap reload is `mental heartbeat --json`, not a notes dump.

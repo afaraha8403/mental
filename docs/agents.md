@@ -17,6 +17,8 @@ mental heartbeat --json
 
 `heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue, unsettled + settled (lists capped at 7; counts via `attentionCount` / `openDecisionCount` / `needsEyesCount` / `guardrailCount` / `hopsToday`). Use `mental status --json` when you also need notes. Do not call `pulse` every turn.
 
+If JSON includes `data.track.enabled`, follow the Mental Track skill. If tracking is off, do nothing — do not enable it. After `mental install` or `mental doctor`, report `optionals[]` (`needsConsent: true`) and wait. Never run `mental option … on` or `install --hooks|--mcp|--track` unless the user named that feature **this turn**.
+
 ### Park vs handoff vs heartbeat vs pulse
 
 | When | Command |
@@ -123,5 +125,7 @@ When this CLI is behind npm, a sibling is added (omitted when current or skipped
 ```
 
 If `update` is present, tell the user **once this session** and suggest `mental install`. Do not block work. Do not put it on the Mental receipt.
+
+`mental doctor` may also warn that a Claude Code / Copilot plugin, or a copied skill, is behind this CLI. That is a second channel: native plugin caches are not refreshed by `mental install`. Suggest the host's plugin update command. Do not block work.
 
 `where` data: `{ root, id, mode, reason, gitRoot }`. Write commands may include `imported` and `indexed` when a leftover `./.mental/` was ingested.

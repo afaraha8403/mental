@@ -18,6 +18,9 @@ import { collectHeartbeat, formatHeartbeat } from "../lib/heartbeat.mjs";
 import { writeWatermark } from "../lib/watermark.mjs";
 import { printResult, kindLine } from "../lib/output.mjs";
 import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
+import { isFeatureOn } from "../lib/config.mjs";
+import { isBundleRoot } from "../lib/heartbeat.mjs";
+import { stopFocusedForPark } from "../lib/time.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
@@ -103,6 +106,13 @@ export function cmdPark(args, io = {}) {
     return 1;
   }
 
+  const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
+  let timer_stop_failed = false;
+  if (home && isBundleRoot(resolved.data) && isFeatureOn(home, "track", resolved.data.id || null)) {
+    const stopped = stopFocusedForPark(resolved.data.root);
+    if (!stopped.ok) timer_stop_failed = true;
+  }
+
   const title = flagString(args.flags, "title") || "Parked";
   const body = flagString(args.flags, "body") || "";
   ensureSkeleton(resolved.data.root, {
@@ -129,7 +139,6 @@ export function cmdPark(args, io = {}) {
     }
   }
 
-  const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const env = args.env ?? process.env;
   refreshIndex(resolved.data, home, env);
 
@@ -137,7 +146,12 @@ export function cmdPark(args, io = {}) {
   const heartbeat = collected.ok ? collected.data : null;
   if (resolved.data.id) writeWatermark(home, resolved.data.id, env);
 
-  const data = { path: written.path, ...(attention ? { attention } : {}), heartbeat };
+  const data = {
+    path: written.path,
+    ...(attention ? { attention } : {}),
+    heartbeat,
+    ...(timer_stop_failed ? { timer_stop_failed: true } : {}),
+  };
   printResult(stdout, args, true, data, undefined, () => {
     const mark = kindLine("journal", `parked ${written.path}`);
     return heartbeat ? `${mark}\n${formatHeartbeat(heartbeat)}` : mark;

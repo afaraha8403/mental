@@ -33,6 +33,9 @@ jobs:
           PKG=$(node -p "require('./package.json').version")
           test "$TAG" = "v$PKG"
 
+      - name: Check product versions lockstep
+        run: node scripts/bump-version.mjs --check
+
       - name: Publish to npm
         env:
           PRERELEASE: ${{ github.event.release.prerelease }}

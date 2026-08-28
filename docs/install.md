@@ -35,12 +35,14 @@ Use this client's native plugin install if you have one, then put the CLI on PAT
   mental install
   mental doctor
 
-Do not enable hooks unless I ask. Optional MCP is `mental install --mcp`. After doctor, tell me what it reports.
+Native plugin install is a second channel. `mental install` refreshes the CLI and skill copies, not this client's plugin cache. If the plugin UI shows an older version, update it there. After doctor, tell me what it reports.
+
+Do not enable hooks, MCP, or time tracking unless I ask. After install or doctor, list optionals (needsConsent) and wait. Never run `mental option … on` unless I named that feature this turn.
 ```
 
 ## Client one-liners
 
-Plugin install loads the skill and MCP. Still run `mental install` so the CLI, skill, and tiny always-on rule land on this machine.
+Plugin install loads the skill and MCP from a git clone the host caches. Still run `mental install` so the CLI, skill, and tiny always-on rule land on this machine. Upgrading the CLI does **not** refresh that cache — after a release, update the plugin in the host (Claude Code: `claude plugin marketplace update mental` then `claude plugin update mental@mental`, then restart; or Settings → Plugins → Update). Copilot: `copilot plugin marketplace update` then `copilot plugin update mental`. `mental doctor` warns when a host plugin or a copied skill is behind the CLI.
 
 **Cursor** — paste in Agent chat:
 
@@ -96,9 +98,14 @@ Optional:
 ```bash
 mental install --mcp    # register `mental serve` in ~/.cursor/mcp.json + ~/.claude.json
 mental hooks on         # session-start hooks; default off
-mental doctor           # PATH, bindings, ignore, skills, npm update
+mental option track on  # per-UUID timers; never from install paste unless the user asked
+mental doctor           # PATH, bindings, ignore, skills, npm update, host plugin lag, optionals[]
 mental doctor --fix-ignore   # add .mental/ and .mental-id to your global git excludes
 ```
+
+Install and doctor JSON include `optionals[]` (`id`, `enabled`, `scope`, `command`, `isNew`, `needsConsent: true`). Agents list them and wait. Do not pass `--hooks` / `--mcp` / `--track` unless the user named that feature this turn.
+
+Time tracking is off by default. Hours live in bundle `time.sqlite` (never git). The track skill is copied from `optional/mental-track/` only when track is enabled — not from plugin `skills/`.
 
 ## Uninstall
 
@@ -107,4 +114,4 @@ mental uninstall
 mental uninstall --delete-data --confirm DELETE
 ```
 
-Uninstall removes skill / rule / hooks / MCP copies. `~/.mental` stays unless you type `DELETE`.
+Uninstall removes skill / rule / hooks / MCP / mental-track copies. `~/.mental` stays unless you type `DELETE` (`time.sqlite` stays with OKF).

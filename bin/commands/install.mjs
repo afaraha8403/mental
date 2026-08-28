@@ -9,9 +9,12 @@ import { ensureSkeleton } from "../lib/okf.mjs";
 import { installSkills } from "../lib/install-skills.mjs";
 import { installGlobalCli } from "../lib/install-cli.mjs";
 import { enableHooks } from "../lib/hooks.mjs";
-import { enableMcp } from "../lib/mcp.mjs";
+import { enableMcp } from "../lib/mcp-hosts.mjs";
 import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
 import { printResult, brandLine } from "../lib/output.mjs";
+import { FEATURES, listOptionals, markOptionalSeen, setFeature } from "../lib/config.mjs";
+import { formatOptionalsTable } from "./option.mjs";
+import { copyTrackSkills } from "../lib/install-skills.mjs";
 import { purgeBalakitMental } from "../lib/legacy-balakit.mjs";
 import { checkForUpdate, cmpSemver, isDevCheckout } from "../lib/update.mjs";
 
@@ -29,6 +32,7 @@ export function cmdInstall(args, io = {}) {
   const project = Boolean(args.flags?.project);
   const hooks = Boolean(args.flags?.hooks);
   const mcp = Boolean(args.flags?.mcp);
+  const track = Boolean(args.flags?.track);
   const cwd = args.cwd ?? process.cwd();
   const env = args.env ?? process.env;
   const stderr = io.stderr ?? process.stderr;
@@ -47,6 +51,7 @@ export function cmdInstall(args, io = {}) {
         if (project) childArgs.push("--project");
         if (hooks) childArgs.push("--hooks");
         if (mcp) childArgs.push("--mcp");
+        if (track) childArgs.push("--track");
         if (args.dir) childArgs.push("--dir", args.dir);
         const child = spawnSync(newBin, childArgs, {
           encoding: "utf8",
@@ -73,10 +78,16 @@ export function cmdInstall(args, io = {}) {
   ensureSkeleton(personal, { name: "personal" });
 
   let hookResult = null;
-  if (hooks) hookResult = enableHooks(home);
+  if (hooks) {
+    hookResult = enableHooks(home);
+    setFeature(home, "hooks", "on", { all: true });
+  }
 
   let mcpResult = null;
-  if (mcp) mcpResult = enableMcp(home);
+  if (mcp) {
+    mcpResult = enableMcp(home);
+    setFeature(home, "mcp", "on", { all: true });
+  }
 
   const resolved = resolveBundle({
     cwd,
@@ -87,6 +98,14 @@ export function cmdInstall(args, io = {}) {
   });
 
   const imported = resolved.ok ? resolved.data.imported : null;
+  let trackResult = null;
+  if (track && resolved.ok && resolved.data.id) {
+    trackResult = setFeature(home, "track", "on", { uuid: resolved.data.id });
+    if (trackResult.ok) copyTrackSkills(home);
+  }
+  const optionals = listOptionals(home, resolved.ok ? resolved.data.id : null);
+  for (const id of FEATURES) markOptionalSeen(home, id);
+
   const data = {
     home,
     personalRoot: personal,
@@ -95,6 +114,8 @@ export function cmdInstall(args, io = {}) {
     project: project ? `${cwd}/.github/skills/mental` : null,
     hooks: hookResult,
     mcp: mcpResult,
+    track: trackResult,
+    optionals: optionals.optionals,
     where: resolved.ok ? resolved.data : null,
     imported: imported || null,
     legacyRemoved: legacy.removed,
@@ -125,7 +146,7 @@ export function cmdInstall(args, io = {}) {
     data,
     undefined,
     () =>
-      `${brandLine(`installed skill + rule (${installed.written.length} paths)`)}\n~/.mental skeleton: ${personal}${cliLine}${hookLine}${mcpLine}${importLine}${legacyLine}${leftoverLine}`,
+      `${brandLine(`installed skill + rule (${installed.written.length} paths)`)}\n~/.mental skeleton: ${personal}${cliLine}${hookLine}${mcpLine}${importLine}${legacyLine}${leftoverLine}\n${formatOptionalsTable(optionals.optionals)}`,
   );
   return 0;
 }

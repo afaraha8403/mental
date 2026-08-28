@@ -8,11 +8,12 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { parseFrontmatter, slugify, stringifyFrontmatter } from "./okf.mjs";
+import { backupTimeDb, TIME_DB } from "./time.mjs";
 
 /** Written by `mental local`. Leftover Balakit bundles do not have this. */
 export const LOCAL_STORE_MARKER = ".mental-local";
 
-const SKIP_NAMES = new Set([LOCAL_STORE_MARKER, ".DS_Store"]);
+const SKIP_NAMES = new Set([LOCAL_STORE_MARKER, ".DS_Store", TIME_DB, `${TIME_DB}-wal`, `${TIME_DB}-shm`]);
 const SKIP_DIR_NAMES = new Set(["status"]);
 
 const DEFAULT_STATUS = {
@@ -131,6 +132,12 @@ export function importLegacyBundle(src, dest, { now = new Date() } = {}) {
     writeFileSync(destFile, markdown);
     copied.push(classified.dest);
     claimed.add(classified.dest);
+  }
+  const srcDb = join(from, TIME_DB);
+  const destDb = join(to, TIME_DB);
+  if (existsSync(srcDb) && !existsSync(destDb)) {
+    const b = backupTimeDb(srcDb, destDb);
+    if (b.ok && !b.skipped) copied.push(TIME_DB);
   }
   return { from, to, copied, skipped };
 }

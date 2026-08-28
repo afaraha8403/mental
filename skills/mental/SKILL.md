@@ -14,7 +14,7 @@ license: MIT
 compatibility: Requires Node.js >=18 and git. Bundled MCP launches ./bin/cli.mjs serve. Agent Plugins 1.0.0 + Agent Skills.
 metadata:
   author: Ali Farahat
-  version: "1.0.0"
+  version: "0.4.1"
   tags: continuity,coding-agents,mcp,agent-skills,cursor,claude-code,copilot,journal,decisions,handoff,local-first
 user-invocable: true
 disable-model-invocation: false
@@ -57,8 +57,12 @@ Do not grep `.mental`, `~/.mental`, or YAML frontmatter. Humans on a TTY can run
 
 If the JSON envelope includes `update` (`current`, `latest`, `hint`), tell the user **once this session** that a newer Mental CLI is on npm and they can run `mental install`. Do not block work. Do not put this on the Mental receipt.
 
+If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill (optional hours). If tracking is off, do nothing — do not enable it and do not suggest `mental option track on`. Usage "Time tracking is off for this project" is not permission to turn it on. Never run `mental option … on` or `mental install --hooks|--mcp|--track` unless the user named that feature **this turn**. After `mental install` or `mental doctor`, list `optionals[]` (`needsConsent: true`) and wait.
+
 ## Non-goals
 
+- Not a timesheet or scoreboard. Optional hours live in a separate skill and
+  never on the TTY heartbeat or pulse.
 - Not a task manager, GTD app, chat transcript store, analytics store, or
   replacement for repository documentation. Never clone a meeting into 40
   todos. Never duplicate a plan file into Mental.
@@ -108,6 +112,7 @@ Actions (lowercase, italic):
 | Journal, Note | `recorded` |
 | Attention | `recorded` / `resolved` |
 | Decision | `opened` / `decided` |
+| Time | `started` / `stopped` / `exported` / `discarded` (Mental Track skill only; `title_internal`, never the export filename) |
 | Read | `heartbeat` / `pulse` / `searched` / `showed` / `listed` |
 
 Titles only — no `file://` or markdown links. Mental files live in `~/.mental`,

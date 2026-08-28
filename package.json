@@ -59,6 +59,7 @@
     "mcp.json",
     "assets",
     "docs",
+    "optional",
     "scripts/bench.mjs",
     ".cursor-plugin",
     ".claude-plugin",

@@ -27,7 +27,10 @@ Usage:
   ${CMD} link                  Point this clone at --to <id>
   ${CMD} install               Skill + rule + PATH; overwrites existing bin; upgrades if npm is newer
   ${CMD} uninstall             Remove installed skill/rule/hooks (OKF stays unless --delete-data DELETE)
-  ${CMD} hooks on|off          Optional session-start hooks (default off)
+  ${CMD} option                List optional features (track / mcp / hooks). Consent required
+  ${CMD} option track on       Enable time tracking for this UUID (--all for default on)
+  ${CMD} track                 Optional timers (off until option track on). Glance / start / stop
+  ${CMD} hooks on|off          Optional session-start hooks (default off; alias of option hooks)
   ${CMD} serve                 Optional MCP stdio (heartbeat/pulse/park/handoff/where/status/search/list/show/journal/…)
   ${CMD} doctor                PATH, bindings, ignore, skill, index, update; stale residue (--days)
   ${CMD} reindex               Rebuild derived sqlite index from OKF files
@@ -86,6 +89,20 @@ export function parseArgv(argv) {
     "--attention",
     "--days",
     "--via",
+    "--title-internal",
+    "--title-external",
+    "--body-internal",
+    "--body-external",
+    "--project-name",
+    "--task",
+    "--user",
+    "--since",
+    "--until",
+    "--out",
+    "--project",
+    "--id",
+    "--started",
+    "--format",
   ]);
 
   for (let i = 0; i < argv.length; i++) {

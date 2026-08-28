@@ -79,7 +79,9 @@ Use this client's native plugin install if you have one, then:
   mental install
   mental doctor
 
-Do not enable hooks unless I ask. Optional MCP is `mental install --mcp`. After doctor, tell me what it reports.
+Native plugin install is a second channel. `mental install` refreshes the CLI and skill copies, not this client's plugin cache. If the plugin UI shows an older version, update it there. After doctor, tell me what it reports.
+
+Do not enable hooks, MCP, or time tracking unless I ask. After install or doctor, list optionals (needsConsent) and wait. Never run `mental option … on` unless I named that feature this turn.
 ```
 
 Client one-liners: [docs/install.md](docs/install.md).
@@ -132,7 +134,7 @@ Measured. Reproducible. `npm test` · `npm run bench`
 | | | |
 | ---: | --- | --- |
 | **0** | runtime npm dependencies | Node `>=18` |
-| **96** | automated tests | identity, search, install, MCP |
+| **161** | automated tests | identity, search, install, MCP, optional track |
 | **51 ms** | `mental heartbeat --json` | p50, fresh process |
 | **11 ms** | same pulse in-process | MCP after `mental serve` |
 | **46 ms** | search over **2,000** notes | **1.2 ms** in-process |

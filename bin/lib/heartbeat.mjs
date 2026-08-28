@@ -17,6 +17,8 @@ import {
 import { brandMark } from "./output.mjs";
 import { heartbeatDelta, countParkHopsSinceMs, localDayStartMs } from "./delta.mjs";
 import { readWatermark } from "./watermark.mjs";
+import { isFeatureOn } from "./config.mjs";
+import { heartbeatTrack } from "./time.mjs";
 
 export { ATTENTION_HEARTBEAT_CAP, DECISION_HEARTBEAT_CAP };
 
@@ -76,25 +78,30 @@ export function collectHeartbeat(args) {
   const delta = heartbeatDelta(root, wm?.at ?? null);
   const hopsToday = root ? countParkHopsSinceMs(root, localDayStartMs()) : 0;
 
-  return {
-    ok: true,
-    data: {
-      git,
-      gitRoot: where.gitRoot,
-      handoff,
-      against: handoff.against ?? null,
-      attention,
-      openDecisions: openDecisions.slice(0, DECISION_HEARTBEAT_CAP),
-      attentionCount: attentionAll.length,
-      openDecisionCount: openDecisions.length,
-      needsEyes: attention.filter((a) => a.kind === "verify"),
-      needsEyesCount: needsEyesAll.length,
-      guardrails: guardrailsAll.slice(0, DECISION_HEARTBEAT_CAP),
-      guardrailCount: guardrailsAll.length,
-      hopsToday,
-      delta,
-    },
+  /** @type {Record<string, unknown>} */
+  const data = {
+    git,
+    gitRoot: where.gitRoot,
+    handoff,
+    against: handoff.against ?? null,
+    attention,
+    openDecisions: openDecisions.slice(0, DECISION_HEARTBEAT_CAP),
+    attentionCount: attentionAll.length,
+    openDecisionCount: openDecisions.length,
+    needsEyes: attention.filter((a) => a.kind === "verify"),
+    needsEyesCount: needsEyesAll.length,
+    guardrails: guardrailsAll.slice(0, DECISION_HEARTBEAT_CAP),
+    guardrailCount: guardrailsAll.length,
+    hopsToday,
+    delta,
   };
+
+  if (root && home && isBundleRoot(where) && isFeatureOn(home, "track", where.id || null)) {
+    const track = heartbeatTrack(root, { pingFocused: true });
+    if (track.ok) data.track = track.data;
+  }
+
+  return { ok: true, data };
 }
 
 function formatAirItem(a) {

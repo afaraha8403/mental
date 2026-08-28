@@ -6,7 +6,7 @@ import { existsSync, rmSync } from "node:fs";
 import { userMentalDir } from "../lib/bindings.mjs";
 import { uninstallSkills } from "../lib/uninstall.mjs";
 import { disableHooks } from "../lib/hooks.mjs";
-import { disableMcp } from "../lib/mcp.mjs";
+import { disableMcp } from "../lib/mcp-hosts.mjs";
 import { printResult } from "../lib/output.mjs";
 
 export function cmdUninstall(args, io = {}) {

@@ -182,6 +182,7 @@ test("skills/ discovers only immediate children with SKILL.md", () => {
   const skillsDir = join(ROOT, "skills");
   const names = readdirSync(skillsDir).filter((n) => statSync(join(skillsDir, n)).isDirectory());
   assert.ok(names.includes("mental"));
+  assert.equal(names.includes("mental-track"), false, "track skill must not live under plugin skills/");
   for (const name of names) {
     const skillDir = join(skillsDir, name);
     const skillFile = join(skillDir, "SKILL.md");
@@ -203,6 +204,10 @@ test("skills/ discovers only immediate children with SKILL.md", () => {
       assert.equal(typeof fm.metadata, "object");
       for (const v of Object.values(fm.metadata)) {
         assert.equal(typeof v, "string", `${name}: metadata values must be strings`);
+      }
+      if (name === "mental") {
+        const pkg = loadJson(join(ROOT, "package.json"));
+        assert.equal(fm.metadata.version, pkg.version);
       }
     }
     const refs = join(skillDir, "references");
@@ -244,6 +249,7 @@ test("Cursor shim points at the PNG logo; Claude shim has displayName", () => {
   const claude = loadJson(join(ROOT, ".claude-plugin", "plugin.json"));
   assert.equal(claude.name, "mental");
   assert.equal(claude.displayName, "Mental");
+  assert.equal(claude.version, plugin.version);
   assert.equal(claude.mcpServers, "./.mcp.json");
   assert.equal(existsSync(join(ROOT, ".mcp.json")), true);
   const claudeMcp = loadJson(join(ROOT, ".mcp.json"));
@@ -253,4 +259,11 @@ test("Cursor shim points at the PNG logo; Claude shim has displayName", () => {
   const market = loadJson(join(ROOT, ".claude-plugin", "marketplace.json"));
   assert.equal(market.name, "mental");
   assert.equal(market.plugins[0].source, "./");
+  assert.equal("version" in market.plugins[0], false, "marketplace plugin entry must not set version");
+});
+
+test("optional mental-track lives outside plugin skills/", () => {
+  assert.equal(existsSync(join(ROOT, "optional", "mental-track", "SKILL.md")), true);
+  assert.equal(existsSync(join(ROOT, "optional", "mental-track", "rules", "mental-track.mdc")), true);
+  assert.equal(existsSync(join(ROOT, "skills", "mental-track")), false);
 });

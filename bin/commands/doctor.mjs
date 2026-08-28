@@ -2,12 +2,13 @@
  * `mental doctor` — PATH, where, bindings, ignore, skill presence.
  * Exit 3 when problems exist (still prints JSON).
  */
-import { existsSync } from "node:fs";
-import { resolve as resolvePath } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve as resolvePath } from "node:path";
+import { spawnSync } from "node:child_process";
 import { resolveBundle, findLocalMental } from "../lib/resolve.mjs";
-import { loadBindings } from "../lib/bindings.mjs";
+import { loadBindings, userMentalDir } from "../lib/bindings.mjs";
 import { checkMentalIgnored, ensureMentalExcluded, gitAvailable } from "../lib/ignore.mjs";
-import { skillsPresent } from "../lib/install-skills.mjs";
+import { skillsPresent, userTrackTargets, trackSkillPresent } from "../lib/install-skills.mjs";
 import { printResult, brandMark } from "../lib/output.mjs";
 import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
 import { isOptedInLocal } from "../lib/import-legacy.mjs";
@@ -15,9 +16,14 @@ import { findGitRoot } from "../lib/git.mjs";
 import { indexPath } from "../lib/index.mjs";
 import { leftoverBalakitMentalCount, findBalakitMental } from "../lib/legacy-balakit.mjs";
 import { checkForUpdate, cmpSemver, updateHint } from "../lib/update.mjs";
+import { hostPluginChecks } from "../lib/host-plugins.mjs";
 import { DECISION_HEARTBEAT_CAP, listOpenDecisions } from "../lib/okf.mjs";
 import { parseDays, scanStale } from "../lib/stale.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
+import { FEATURES, listOptionals, loadConfig, markOptionalSeen } from "../lib/config.mjs";
+import { formatOptionalsTable } from "./option.mjs";
+import { TIME_DB, listOrphanTimeDbs, runningCount } from "../lib/time.mjs";
+import { skillMetadataVersion } from "../lib/lockstep.mjs";
 
 function check(id, ok, message, level = "error") {
   return { id, ok, level, message };
@@ -110,6 +116,9 @@ export function cmdDoctor(args, io = {}) {
           : `run \`${CMD} install\``,
       ),
     );
+    for (const extra of hostPluginChecks({ home, env, version: VERSION })) {
+      checks.push(check(extra.id, extra.ok, extra.message, extra.level));
+    }
 
     const gitRoot = resolved.ok ? resolved.data.gitRoot : findGitRoot(cwd, { env });
     const leftover = findLocalMental(cwd, { home, gitRoot });
@@ -205,11 +214,108 @@ export function cmdDoctor(args, io = {}) {
     );
   }
 
+  if (home) {
+    const cfg = loadConfig(home);
+    if (cfg.corrupt) {
+      checks.push(check("config", false, "config.json is corrupt; optional features stay off", "warn"));
+    }
+    const gitRoot = resolved.ok ? resolved.data.gitRoot : findGitRoot(cwd, { env });
+    if (gitRoot) {
+      const ls = spawnSync("git", ["-C", gitRoot, "ls-files", "-z"], { encoding: "utf8", env });
+      if (ls.status === 0) {
+        const tracked = (ls.stdout || "").split("\0").filter((f) => /(^|\/)time\.sqlite(-wal|-shm)?$/.test(f));
+        if (tracked.length) {
+          checks.push(
+            check("time-git", false, `time.sqlite is git-tracked (${tracked[0]}). Hours must never be in git.`),
+          );
+        }
+      }
+    }
+    const leftover = findLocalMental(cwd, {
+      home,
+      gitRoot: resolved.ok ? resolved.data.gitRoot : findGitRoot(cwd, { env }),
+    });
+    if (leftover && existsSync(join(leftover, TIME_DB)) && !isOptedInLocal(leftover)) {
+      const ign = checkMentalIgnored({ cwd, env });
+      if (ign.liveIgnored !== true) {
+        checks.push(
+          check(
+            "time-leftover",
+            false,
+            `leftover ${leftover}/${TIME_DB} is not gitignored — will not copy hours into a tracked folder`,
+          ),
+        );
+      }
+    }
+    if (resolved.ok && resolved.data.mode === "local") {
+      checks.push(
+        check(
+          "store-local",
+          true,
+          "binding store=local — other clones of this origin still write the home slice",
+          "warn",
+        ),
+      );
+    }
+    if (resolved.ok && (resolved.data.mode === "env" || args.dir)) {
+      checks.push(
+        check("mental-dir", true, "MENTAL_DIR/--dir hours live here; uninstall --delete-data does not wipe it", "warn"),
+      );
+    }
+    try {
+      const bindings = loadBindings(home);
+      const live = new Set(bindings.bindings.map((b) => b.id));
+      const orphans = listOrphanTimeDbs(join(userMentalDir(home), "projects"), live);
+      if (orphans.length) {
+        checks.push(
+          check("time-orphan", true, `${orphans.length} orphan projects/*/time.sqlite (remap leftover)`, "warn"),
+        );
+      }
+    } catch {
+      // bindings already checked
+    }
+    if (resolved.ok && isBundleRoot(resolved.data)) {
+      const n = runningCount(resolved.data.root);
+      if (n > 0) {
+        checks.push(check("time-running", true, `${n} running interval(s) in time.sqlite`, "info"));
+      }
+    }
+    const trackTargets = userTrackTargets(home);
+    const present = trackTargets.skills.filter((d) => existsSync(join(d, "SKILL.md")));
+    if (present.length && present.length < trackTargets.skills.length) {
+      checks.push(
+        check("track-skill-drift", true, "mental-track skill present in some agent dirs but not all", "warn"),
+      );
+    }
+    if (trackSkillPresent(home)) {
+      let worst = null;
+      for (const dest of trackTargets.skills) {
+        const file = join(dest, "SKILL.md");
+        if (!existsSync(file)) continue;
+        try {
+          const v = skillMetadataVersion(readFileSync(file, "utf8"));
+          if (v && (worst === null || cmpSemver(v, worst) < 0)) worst = v;
+        } catch {
+          // fail open per copy
+        }
+      }
+      if (worst && cmpSemver(worst, VERSION) < 0) {
+        checks.push(
+          check("track-skill-version", true, `mental-track skill ${worst}; CLI ${VERSION}. Run \`${CMD} install\`.`, "warn"),
+        );
+      }
+    }
+  }
+
+  const optionals = home ? listOptionals(home, resolved.ok ? resolved.data.id : null) : { optionals: [] };
+  if (home) for (const id of FEATURES) markOptionalSeen(home, id);
+
   const problems = checks.filter((c) => !c.ok && c.level === "error");
   const data = {
     checks,
     where: resolved.ok ? resolved.data : null,
     problems: problems.length,
+    optionals: optionals.optionals,
   };
   printResult(
     stdout,
@@ -221,6 +327,7 @@ export function cmdDoctor(args, io = {}) {
       d.checks
         .map((c) => `${c.ok ? "✓" : "✖"} ${c.id}: ${c.message}`)
         .join("\n") +
+      `\n${formatOptionalsTable(d.optionals)}` +
       (problems.length ? `\n${problems.length} problem(s)` : `\n${brandMark()} doctor clean`),
   );
   return problems.length ? 3 : 0;
