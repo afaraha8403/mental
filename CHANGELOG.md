@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-28
+
 ### Features
 
 - Plugin skill is a CLI bootstrap (`skills/mental-setup/`). The full procedure lives in `skill/mental/` and is copied by `mental install`.
