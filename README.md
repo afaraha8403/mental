@@ -81,9 +81,11 @@ Use this client's native plugin install if you have one, then:
 
 Native plugin install is a second channel. `mental install` refreshes the CLI and skill copies, not this client's plugin cache. If the plugin UI shows an older version, update it there. After doctor, tell me what it reports.
 
-Do not enable hooks, MCP, or time tracking unless I ask. After install or doctor, list optionals (needsConsent) and wait. Never run `mental option … on` unless I named that feature this turn.
+After doctor, ask whether I want optional hooks or time tracking, and whether MCP is needed for this client. Give a one-liner for each, then wait — never run `mental option … on` until I say yes this turn.
 
-If you are working in this repo (afaraha8403/mental), follow .cursor/rules/release.mdc (Claude: .claude/rules/release.md). package.json version is source of truth. Git tag is v plus that string. A GitHub Release is not done until `npm view @balacode/mental version` equals it. Do not cut a new tag to fix npm.
+- hooks: session-start snippets so a new chat loads Mental status (default off)
+- MCP: register `mental serve` for tool-only agents that cannot shell the CLI (skip if this client already loaded the plugin MCP or can run `mental`)
+- time tracking: optional per-project wall/user timers (default off)
 ```
 
 Client one-liners: [docs/install.md](docs/install.md).

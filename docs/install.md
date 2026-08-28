@@ -37,9 +37,11 @@ Use this client's native plugin install if you have one, then put the CLI on PAT
 
 Native plugin install is a second channel. `mental install` refreshes the CLI and skill copies, not this client's plugin cache. If the plugin UI shows an older version, update it there. After doctor, tell me what it reports.
 
-Do not enable hooks, MCP, or time tracking unless I ask. After install or doctor, list optionals (needsConsent) and wait. Never run `mental option … on` unless I named that feature this turn.
+After doctor, ask whether I want optional hooks or time tracking, and whether MCP is needed for this client. Give a one-liner for each, then wait — never run `mental option … on` until I say yes this turn.
 
-If you are working in this repo (afaraha8403/mental), follow .cursor/rules/release.mdc (Claude: .claude/rules/release.md). package.json version is source of truth. Git tag is v plus that string. A GitHub Release is not done until `npm view @balacode/mental version` equals it. Do not cut a new tag to fix npm.
+- hooks: session-start snippets so a new chat loads Mental status (default off)
+- MCP: register `mental serve` for tool-only agents that cannot shell the CLI (skip if this client already loaded the plugin MCP or can run `mental`)
+- time tracking: optional per-project wall/user timers (default off)
 ```
 
 ## Client one-liners
@@ -105,7 +107,7 @@ mental doctor           # PATH, bindings, ignore, skills, npm update, host plugi
 mental doctor --fix-ignore   # add .mental/ and .mental-id to your global git excludes
 ```
 
-Install and doctor JSON include `optionals[]` (`id`, `enabled`, `scope`, `command`, `isNew`, `needsConsent: true`). Agents list them and wait. Do not pass `--hooks` / `--mcp` / `--track` unless the user named that feature this turn.
+Install and doctor JSON include `optionals[]` (`id`, `enabled`, `scope`, `command`, `isNew`, `needsConsent: true`). After doctor, agents ask about hooks and time tracking, and whether MCP is needed, with a one-liner each. Do not pass `--hooks` / `--mcp` / `--track` until the user says yes this turn.
 
 Time tracking is off by default. Hours live in bundle `time.sqlite` (never git). The track skill is copied from `optional/mental-track/` only when track is enabled — not from plugin `skills/`.
 

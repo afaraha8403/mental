@@ -44,7 +44,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2.
 | `mental remap [--to id]` | List or retarget this clone’s UUID |
 | `mental split [--copy]` | New UUID for this clone (`mental new` is an alias) |
 | `mental link --to <id>` | Point this clone at an existing UUID |
-| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH; `--mcp` registers MCP; `--hooks` / `--track` only if the user named that feature this turn. JSON includes `optionals[]` (`needsConsent: true`) |
+| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH; `--mcp` registers MCP; `--hooks` / `--track` only after the user says yes this turn. JSON includes `optionals[]` (`needsConsent: true`) |
 | `mental uninstall` | Remove installed skill / rule / hooks / MCP / mental-track copies |
 | `mental option` | List or set optional features (`track` per UUID; `mcp` / `hooks` user-global). `--all` sets track default on. `--this` before a UUID is usage |
 | `mental track` | Optional wall/user timers (off until `option track on`). `start` / `stop` / `focus` / `discard` / `report` / `export`. Export `--out` must be outside the git worktree |
