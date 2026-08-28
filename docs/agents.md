@@ -86,6 +86,8 @@ The repo root **is** the plugin root ([spec](https://agent-plugins.org/specifica
 
 Compatible clients (Cursor, VS Code, GitHub Copilot, ChatGPT/Codex, Kiro) load the same directory. Rules and hooks stay client-specific and install via `mental install` / `mental hooks on`.
 
+When **releasing this repo**, git tag `vX.Y.Z`, `package.json`, and `npm view @balacode/mental version` must be the same string. Follow [`.cursor/rules/release.mdc`](../.cursor/rules/release.mdc). The install paste prompt in the [README](../README.md#paste-this-into-your-agent) says the same.
+
 ## Optional MCP
 
 Default **off**. Skill + rule are enough for agents that can shell.

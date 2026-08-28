@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Release workflow publishes with `secrets.NPM_TOKEN` (`NODE_AUTH_TOKEN`) and `setup-node` `registry-url`. `workflow_dispatch` can republish HEAD when git tag `v$(package.json version)` already exists. Agent rule: a release is not done until that npm version equals the tag.
+- Release workflow publishes with `secrets.NPM_TOKEN` (`NODE_AUTH_TOKEN`) and `setup-node` `registry-url`. `workflow_dispatch` can republish HEAD when git tag `v$(package.json version)` already exists. Agent rule: a release is not done until that npm version equals the tag. README and install paste prompt say the same.
 
 ## [0.5.0] - 2026-08-28
 
