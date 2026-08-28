@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changes
+
+- Agent install paste names `skills/mental-setup` vs `skill/mental`, fail-open, and no plugin MCP. README and install-doc pastes stay identical.
+
 ## [0.7.0] - 2026-08-28
 
 ### Features

@@ -69,3 +69,22 @@ test("bootstrap skill fails open, skips plugin MCP, and omits the procedure rece
   assert.match(setup, /Do not start a plugin MCP server/);
   assert.doesNotMatch(setup, /🧠 \*\*Mental\*\*/);
 });
+
+function agentPaste(md) {
+  const m = md.match(/#{2,} Paste this into your agent[\s\S]*?```text\n([\s\S]*?)```/);
+  assert.ok(m, "missing agent paste fence");
+  return m[1];
+}
+
+test("README and install-doc agent pastes stay identical and skills-only", () => {
+  const readme = agentPaste(readFileSync(join(ROOT, "README.md"), "utf8"));
+  const install = agentPaste(readFileSync(join(ROOT, "docs/install.md"), "utf8"));
+  assert.equal(readme, install, "README paste must match docs/install.md paste");
+  assert.match(readme, /skills-only/);
+  assert.match(readme, /skills\/mental-setup/);
+  assert.match(readme, /skill\/mental/);
+  assert.match(readme, /Do not start a plugin MCP server/);
+  assert.match(readme, /fail open/);
+  assert.match(readme, /npx @balacode\/mental/);
+  assert.doesNotMatch(readme, /mcp\.json/);
+});

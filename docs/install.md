@@ -25,11 +25,13 @@ Copy the block into Cursor, Claude Code, Copilot, Codex, or any other coding age
 ```text
 Install Mental from https://github.com/afaraha8403/mental.
 
-Mental is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air.
+Mental is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air. After install, you write it on my behalf — I do not journal by hand.
 
-The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. The plugin skill is setup (install the CLI), not a second procedure. Native plugin does not start MCP.
+The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. Hosts load skills/mental-setup (install the CLI). The full procedure lives in skill/mental and is copied by `mental install` — not plugin-discovered. Native plugin does not start MCP. Do not start a plugin MCP server.
 
-If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH and finish setup:
+If `mental` is already on PATH, do not duplicate setup. Follow the Mental skill copied by `mental install`. Use `mental … --json`. Missing Mental must not block my coding task (fail open): try `npx @balacode/mental` this turn, then tell me to install.
+
+If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH:
 
   npm i -g @balacode/mental
   mental install

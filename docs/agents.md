@@ -6,7 +6,7 @@ The CLI is the contract. Humans type `mental`. Agents call `mental … --json`. 
 
 This is not a hidden hook and not every chat turn. Hooks stay off until the user asks. Write at a task boundary, when a decision constrains the future, or the moment residue surfaces. Fail open if Mental is missing.
 
-If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task (fail open) and mention `npm i -g @balacode/mental` then `mental install`.
+If `mental` is already on PATH, follow the Mental skill copied by `mental install` — not the plugin bootstrap (`skills/mental-setup`). If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task (fail open) and mention `npm i -g @balacode/mental` then `mental install`. The plugin does not start MCP.
 
 ## Always
 

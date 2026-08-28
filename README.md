@@ -71,7 +71,9 @@ Install Mental from https://github.com/afaraha8403/mental.
 
 Mental is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air. After install, you write it on my behalf — I do not journal by hand.
 
-The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. The plugin skill is setup (install the CLI), not a second procedure. Native plugin does not start MCP.
+The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. Hosts load skills/mental-setup (install the CLI). The full procedure lives in skill/mental and is copied by `mental install` — not plugin-discovered. Native plugin does not start MCP. Do not start a plugin MCP server.
+
+If `mental` is already on PATH, do not duplicate setup. Follow the Mental skill copied by `mental install`. Use `mental … --json`. Missing Mental must not block my coding task (fail open): try `npx @balacode/mental` this turn, then tell me to install.
 
 If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH:
 
@@ -102,7 +104,7 @@ equals that `package.json` string (no `v`). Agent rule: [`.cursor/rules/release.
 
 ## Highlights
 
-- **Agents are the scribe.** After install, a skill + tiny always-on rule tell your coding agents to call `mental … --json`. Not every chat turn. Not a hidden hook.
+- **Agents are the scribe.** After install, a skill + tiny always-on rule tell your coding agents to call `mental … --json`. Not every chat turn. Not a hidden hook. The plugin is discovery only (`skills/mental-setup`); the procedure is copied by `mental install`.
 - **A pulse, not a dump.** `mental` / `heartbeat --json` is resume + last outcome + git + residue + open decisions. [51 ms](docs/benchmarks.md) on a fresh process.
 - **Markdown is the source of truth.** OKF files in `~/.mental`. SQLite is a derived cache. Deleting the db loses nothing.
 - **Identity survives a move.** UUID in `bindings.json`, not the folder path. Two clones of the same origin share one brain until you `split`.
@@ -148,7 +150,7 @@ Measured. Reproducible. `npm test` · `npm run bench`
 | | | |
 | ---: | --- | --- |
 | **0** | runtime npm dependencies | Node `>=18` |
-| **161** | automated tests | identity, search, install, MCP, optional track |
+| **193** | automated tests | identity, search, install, MCP, optional track |
 | **51 ms** | `mental heartbeat --json` | p50, fresh process |
 | **11 ms** | same pulse in-process | MCP after `mental serve` |
 | **46 ms** | search over **2,000** notes | **1.2 ms** in-process |

@@ -54,6 +54,6 @@ That is why agents that can keep `mental serve` warm (MCP) should: the work is c
 npm test
 ```
 
-**161** automated tests on this revision: identity (move, SSH ≡ HTTPS, two clones, fork, worktree, monorepo), leftover import, search filters and title ranking, plugin schemas, version lockstep, install / doctor / uninstall, heartbeat, MCP tools, optional time tracking.
+**193** automated tests on this revision: identity (move, SSH ≡ HTTPS, two clones, fork, worktree, monorepo), leftover import, search filters and title ranking, plugin schemas, version lockstep, install / doctor / uninstall, heartbeat, MCP tools, optional time tracking.
 
 Zero runtime npm dependencies. Node `>=18`.
