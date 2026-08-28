@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Agent install paste tells the host to use only this client's plugin flow (do not run other hosts' `/plugin` / `copilot plugin` / Command Palette steps). Human plugin steps in `docs/install.md` no longer recommend Cursor `/add-plugin` with a GitHub URL.
+
 ## [0.5.1] - 2026-08-28
 
 ### Changed

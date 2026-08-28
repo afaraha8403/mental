@@ -29,7 +29,7 @@ Mental is a local-first continuity layer. Git records what changed; Mental recor
 
 The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skill at skills/mental/, MCP at mcp.json.
 
-Use this client's native plugin install if you have one, then put the CLI on PATH and finish setup:
+If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then put the CLI on PATH and finish setup:
 
   npm i -g @balacode/mental
   mental install
@@ -44,28 +44,38 @@ After doctor, ask whether I want optional hooks or time tracking, and whether MC
 - time tracking: optional per-project wall/user timers (default off)
 ```
 
-## Client one-liners
+## Install as a plugin (you, this host)
 
-Plugin install loads the skill and MCP from a git clone the host caches. Still run `mental install` so the CLI, skill, and tiny always-on rule land on this machine. Upgrading the CLI does **not** refresh that cache — after a release, update the plugin in the host (Claude Code: `claude plugin marketplace update mental` then `claude plugin update mental@mental`, then restart; or Settings → Plugins → Update). Copilot: `copilot plugin marketplace update` then `copilot plugin update mental`. `mental doctor` warns when a host plugin or a copied skill is behind the CLI.
+These steps are for a **human in that client**. Do not paste this whole list into an agent — it will run the wrong host's commands. The agent paste above stays gated: this client only, then `mental install`.
 
-**Cursor** — paste in Agent chat:
+Plugin install loads the skill and MCP from a git clone the host caches. Still run `mental install` so the CLI, skill, and tiny always-on rule land on this machine. Upgrading the CLI does **not** refresh that cache — after a release, update the plugin in the host. `mental doctor` warns when a host plugin or a copied skill is behind the CLI.
 
-```text
-/add-plugin https://github.com/afaraha8403/mental
+**Cursor** — [Customize](https://cursor.com/docs/plugins) → Plugins → install. From GitHub today: **+ Add** / install from source with `https://github.com/afaraha8403/mental`, or symlink for local load:
+
+```bash
+mkdir -p ~/.cursor/plugins/local
+ln -sfn /path/to/mental ~/.cursor/plugins/local/mental
 ```
 
-**Claude Code:**
+Then reload the window. `/add-plugin mental` is the marketplace slash **after** Mental is listed on [cursor.com/marketplace](https://cursor.com/marketplace) — it is not a documented GitHub-URL installer. Cursor CLI has no marketplace install (`--plugin-dir` only). Teams/Enterprise: Dashboard → Plugins → Import from Repo.
+
+**Claude Code** — in a session (opens the plugin panel):
 
 ```text
 /plugin marketplace add afaraha8403/mental
 /plugin install mental@mental
 ```
 
-**VS Code** — Command Palette → **Chat: Install Plugin From Source**, then:
+From a terminal (no TUI; what to use when scripting):
 
-```text
-https://github.com/afaraha8403/mental
+```bash
+claude plugin marketplace add afaraha8403/mental
+claude plugin install mental@mental
 ```
+
+After a release: `claude plugin marketplace update mental` then `claude plugin update mental@mental`, then restart.
+
+**VS Code** — Command Palette → **Chat: Install Plugin From Source**, then `https://github.com/afaraha8403/mental`.
 
 **GitHub Copilot CLI:**
 
@@ -73,6 +83,8 @@ https://github.com/afaraha8403/mental
 copilot plugin marketplace add afaraha8403/mental
 copilot plugin install mental@mental
 ```
+
+After a release: `copilot plugin marketplace update` then `copilot plugin update mental`.
 
 Mental is packaged as a portable [Agent Plugins 1.0.0](https://agent-plugins.org/specification) plugin — the vendor-neutral format maintained by Amazon, Cursor, Microsoft, OpenAI, and Vercel. Compatible clients load the same directory.
 

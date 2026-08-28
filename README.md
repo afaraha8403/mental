@@ -73,7 +73,7 @@ Mental is a local-first continuity layer. Git records what changed; Mental recor
 
 The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skill at skills/mental/, MCP at mcp.json.
 
-Use this client's native plugin install if you have one, then:
+If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then put the CLI on PATH:
 
   npm i -g @balacode/mental
   mental install
@@ -88,7 +88,7 @@ After doctor, ask whether I want optional hooks or time tracking, and whether MC
 - time tracking: optional per-project wall/user timers (default off)
 ```
 
-Client one-liners: [docs/install.md](docs/install.md).
+Plugin install for each host (you, not the agent paste): [docs/install.md](docs/install.md#install-as-a-plugin-you-this-host).
 
 ### Releasing this repo
 
