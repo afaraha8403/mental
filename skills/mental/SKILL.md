@@ -14,7 +14,7 @@ license: MIT
 compatibility: Requires Node.js >=18 and git. Bundled MCP launches ./bin/cli.mjs serve. Agent Plugins 1.0.0 + Agent Skills.
 metadata:
   author: Ali Farahat
-  version: "0.4.1"
+  version: "0.5.0"
   tags: continuity,coding-agents,mcp,agent-skills,cursor,claude-code,copilot,journal,decisions,handoff,local-first
 user-invocable: true
 disable-model-invocation: false

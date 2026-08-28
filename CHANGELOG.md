@@ -7,12 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-28
+
 ### Added
 
 - Optional time tracking as an isolated, default-off add-on. Hours live in bundle `time.sqlite` (never git, never the FTS cache). Durations are **wall** (sum of in-session elapsed) and **user** (human time inside that wall), rendered as `h:mm`. `mental option` flags track (per UUID), MCP, and hooks in `~/.mental/config.json`. `mental track` start/stop/focus/discard/report/export. Heartbeat `--json` may include a compact `data.track` sibling (ids only, no titles or hours); TTY heartbeat and pulse stay freeze without a timesheet. Park/handoff stop the focused interval only. The track skill lives in `optional/mental-track/` (not plugin `skills/`). Install and doctor return `optionals[]` with `needsConsent: true`. Agents must not enable a feature unless the user named it this turn.
-
-### Changed
-
 - Product version lockstep: `package.json` is source of truth. Portable `plugin.json`, Cursor/Claude shims, the lockfile, and skill `metadata.version` must match. `node scripts/bump-version.mjs <semver>` writes them; `--check` (and `release.yml`) refuse drift. Marketplace plugin entries still omit `version` (Claude uses `plugin.json`).
 - `mental doctor` warns when a Claude Code or Copilot plugin, or a copied skill, is behind this CLI. Probes `claude plugin list --json` / `copilot plugin list --json` (fail open if missing). Does not write host plugin caches. `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips.
 
@@ -136,7 +135,8 @@ First public release of the Mental CLI.
 - `install --mcp` registers `serve`; `decide` updates by title so an open decision can close.
 - Install, doctor, uninstall; hooks stay off by default.
 
-[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/afaraha8403/mental/releases/tag/v0.5.0
 [0.4.1]: https://github.com/afaraha8403/mental/releases/tag/v0.4.1
 [0.4.0]: https://github.com/afaraha8403/mental/releases/tag/v0.4.0
 [0.3.1]: https://github.com/afaraha8403/mental/releases/tag/v0.3.1
