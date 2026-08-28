@@ -7,7 +7,7 @@ import { readBundleFile } from "../bin/lib/okf.mjs";
 test("list --json returns concepts after journal + decide", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const j = mental(home, root, ["journal", "--json", "--title", "Listable outcome"]);
+  const j = mental(home, root, ["journal", "--json", "--title", "Listable outcome", "--resume", "Continue"]);
   assert.equal(j.status, 0, j.stderr || j.stdout);
   const d = mental(home, root, ["decide", "--json", "--title", "Listable decision"]);
   assert.equal(d.status, 0, d.stderr || d.stdout);
@@ -46,7 +46,7 @@ test("show --json returns frontmatter and body", () => {
 test("show rejects path escape", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  mental(home, root, ["journal", "--json", "--title", "Seed bundle"]);
+  mental(home, root, ["journal", "--json", "--title", "Seed bundle", "--resume", "Continue"]);
   const r = mental(home, root, ["show", "../bindings.json", "--json"]);
   assert.equal(r.status, 1, r.stderr || r.stdout);
   const body = JSON.parse(r.stdout);
@@ -57,7 +57,7 @@ test("show rejects path escape", () => {
 test("readBundleFile rejects .. segments", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const wrote = mental(home, root, ["journal", "--json", "--title", "Seed bundle"]);
+  const wrote = mental(home, root, ["journal", "--json", "--title", "Seed bundle", "--resume", "Continue"]);
   const bundle = JSON.parse(wrote.stdout).data.root;
   const escaped = readBundleFile(bundle, join("notes", "..", "..", "secret"));
   assert.equal(escaped.ok, false);

@@ -1,59 +1,16 @@
 /**
- * Shared CLI argument helpers and usage text.
+ * Shared CLI argument helpers. Known flags come from the catalog.
  */
-import { CMD, VERSION } from "./pkg.mjs";
+import { formatUsageFull, allFlagsByName, knownFlagNames, getCommand } from "./catalog.mjs";
 
-export function usage() {
-  return `${CMD} v${VERSION} — local-first OKF continuity
+export { formatUsageFull as usage, formatUsageShort, formatCommandHelp } from "./catalog.mjs";
 
-Usage:
-  ${CMD}                       Heartbeat (TTY): resume, git, hops, residue, unsettled + settled decisions
-  ${CMD} heartbeat             Same cheap reload (agents: --json). Not a notes dump; does not write watermark
-  ${CMD} pulse                 Cross-project compact rows (id, name, resume, counts) — no journal bodies
-  ${CMD} where                 Active bundle (root, id, mode) — read-only
-  ${CMD} status                Git + latest Resume + residue + open decisions + notes
-  ${CMD} search <q>            Query notes/journal/decisions/attention (sqlite or scan)
-  ${CMD} list                  List concepts (--type --status --tag --kind)
-  ${CMD} show <path>           One file, relative to the bundle root (includes backlinks)
-  ${CMD} park                  Encode at interruption (--resume required; optional --attention --kind)
-  ${CMD} handoff               Planned close: journal then heartbeat (--title --resume required)
-  ${CMD} journal               Append today's journal section (--against PLAN.md)
-  ${CMD} attention             Create or update residue in the air (--kind --status resolved)
-  ${CMD} decide                Scaffold a decision file
-  ${CMD} note                  Scaffold a note
-  ${CMD} local                 Create ./.mental after ignore check (--import copies home, --move switches store)
-  ${CMD} remap                 List UUID bindings, or --to <id> / --from <id> for this clone
-  ${CMD} split                 New UUID for this clone (--copy keeps OKF files)
-  ${CMD} link                  Point this clone at --to <id>
-  ${CMD} install               Skill + rule + PATH; overwrites existing bin; upgrades if npm is newer
-  ${CMD} uninstall             Remove installed skill/rule/hooks (OKF stays unless --delete-data DELETE)
-  ${CMD} option                List optional features (track / mcp / hooks). Consent required
-  ${CMD} option track on       Enable time tracking for this UUID (--all for default on)
-  ${CMD} track                 Optional timers (off until option track on). Glance / start / stop
-  ${CMD} hooks on|off          Optional session-start hooks (default off; alias of option hooks)
-  ${CMD} serve                 Optional MCP stdio (heartbeat/pulse/park/handoff/where/status/search/list/show/journal/…)
-  ${CMD} doctor                PATH, bindings, ignore, skill, index, update; stale residue (--days)
-  ${CMD} reindex               Rebuild derived sqlite index from OKF files
-
-TTY: no args prints a one-shot heartbeat and exits. Named commands are one-shot.
-Non-TTY / agents: always pass --json. Do not grep OKF / YAML.
-
-Global flags:
-  --json             Machine-readable { ok, data } | { ok, error }; optional sibling update when npm is ahead
-  --dir <path>       Override resolve (same as MENTAL_DIR)
-  -h, --help         Show this help
-  -v, --version      Print version
-
-Privacy: default store is ~/.mental (never commit). Project ./.mental
-only after \`${CMD} local\`. Leftover ./.mental is normalized into
-~/.mental/projects/<uuid> and indexed (source is not deleted).
-Never store secrets.
-`;
-}
+const GLOBAL_TOP = new Set(["json", "dir", "help", "version", "plain", "no-color"]);
 
 /**
  * Parse argv into a structured args object.
  * Global flags may appear before or after the command.
+ * After `--`, remaining tokens go to rest (POSIX).
  *
  * @param {string[]} argv
  */
@@ -63,76 +20,140 @@ export function parseArgv(argv) {
     json: false,
     dir: undefined,
     help: false,
+    helpLong: false,
     version: false,
+    plain: false,
     /** @type {string[]} */
     rest: [],
     /** @type {Record<string, string | boolean>} */
     flags: {},
+    /** @type {string[]} */
+    unknownFlags: [],
+    /** @type {string | null} */
+    parseError: null,
   };
 
-  const takesValue = new Set([
-    "--dir",
-    "--title",
-    "--body",
-    "--resume",
-    "--status",
-    "--slug",
-    "--description",
-    "--from",
-    "--to",
-    "--against",
-    "--kind",
-    "--path",
-    "--type",
-    "--tag",
-    "--confirm",
-    "--attention",
-    "--days",
-    "--via",
-    "--title-internal",
-    "--title-external",
-    "--body-internal",
-    "--body-external",
-    "--project-name",
-    "--task",
-    "--user",
-    "--since",
-    "--until",
-    "--out",
-    "--project",
-    "--id",
-    "--started",
-    "--format",
-  ]);
+  const byName = allFlagsByName();
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === "-h" || a === "--help") {
+    if (a === "--") {
+      args.rest.push(...argv.slice(i + 1));
+      break;
+    }
+    if (a === "-h") {
       args.help = true;
-    } else if (a === "-v" || a === "--version") {
+      continue;
+    }
+    if (a === "--help") {
+      args.help = true;
+      args.helpLong = true;
+      continue;
+    }
+    if (a === "-v" || a === "--version") {
       args.version = true;
-    } else if (a === "--json") {
-      args.json = true;
-    } else if (a === "--dir") {
-      const v = argv[++i];
-      if (v == null) throw new Error("--dir requires a path");
-      args.dir = v;
-    } else if (takesValue.has(a)) {
-      const v = argv[++i];
-      if (v == null) throw new Error(`${a} requires a value`);
-      args.flags[a.slice(2)] = v;
-    } else if (a.startsWith("--") && a.includes("=")) {
+      continue;
+    }
+
+    let name = null;
+    /** @type {string | boolean | undefined} */
+    let value;
+    let explicitEquals = false;
+
+    if (a.startsWith("--") && a.includes("=")) {
       const eq = a.indexOf("=");
-      const key = a.slice(2, eq);
-      args.flags[key] = a.slice(eq + 1);
-      if (key === "dir") args.dir = a.slice(eq + 1);
-      if (key === "json") args.json = true;
+      name = a.slice(2, eq);
+      value = a.slice(eq + 1);
+      explicitEquals = true;
     } else if (a.startsWith("--")) {
-      args.flags[a.slice(2)] = true;
+      name = a.slice(2);
     } else if (!args.command) {
       args.command = a;
+      continue;
     } else {
       args.rest.push(a);
+      continue;
+    }
+
+    if (name === "json") {
+      if (explicitEquals && value !== "" && value !== "true") {
+        args.parseError = "--json does not take a value";
+        continue;
+      }
+      args.json = true;
+      continue;
+    }
+    if (name === "dir") {
+      if (!explicitEquals) {
+        const next = argv[i + 1];
+        if (next == null || next.startsWith("-")) {
+          args.parseError = "--dir requires a path";
+          continue;
+        }
+        value = argv[++i];
+      }
+      args.dir = String(value);
+      continue;
+    }
+    if (name === "plain" || name === "no-color") {
+      args.plain = true;
+      args.flags[name] = true;
+      continue;
+    }
+    if (name === "help") {
+      args.help = true;
+      args.helpLong = true;
+      continue;
+    }
+    if (name === "version") {
+      args.version = true;
+      continue;
+    }
+
+    const spec = byName.get(name);
+    if (!spec) {
+      args.unknownFlags.push(name);
+      continue;
+    }
+
+    const takes = spec.takesValue === undefined ? true : spec.takesValue;
+    if (takes === false) {
+      if (explicitEquals && value !== "" && value !== "true") {
+        args.parseError = `--${name} does not take a value`;
+        continue;
+      }
+      args.flags[name] = true;
+      continue;
+    }
+    if (takes === "optional") {
+      if (explicitEquals) {
+        args.flags[name] = value === "" ? true : value;
+        continue;
+      }
+      const next = argv[i + 1];
+      if (next == null || next.startsWith("-")) {
+        args.flags[name] = true;
+      } else {
+        args.flags[name] = argv[++i];
+      }
+      continue;
+    }
+    if (!explicitEquals) {
+      const next = argv[i + 1];
+      if (next == null) {
+        args.parseError = `--${name} requires a value`;
+        continue;
+      }
+      value = argv[++i];
+    }
+    args.flags[name] = value;
+  }
+
+  if (args.command && getCommand(args.command)) {
+    const known = knownFlagNames(args.command);
+    for (const key of Object.keys(args.flags)) {
+      if (GLOBAL_TOP.has(key)) continue;
+      if (!known.has(key) && !args.unknownFlags.includes(key)) args.unknownFlags.push(key);
     }
   }
 

@@ -4,7 +4,7 @@
 import { resolveBundle } from "../lib/resolve.mjs";
 import { readBundleFile } from "../lib/okf.mjs";
 import { listBacklinks } from "../lib/index.mjs";
-import { printResult, kindLine } from "../lib/output.mjs";
+import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 
 export function cmdShow(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -14,7 +14,7 @@ export function cmdShow(args, io = {}) {
       code: "usage",
       message: "mental show requires a path relative to the bundle root",
     });
-    return 1;
+    return EXIT_USAGE;
   }
   const resolved = resolveBundle({
     cwd: args.cwd ?? process.cwd(),

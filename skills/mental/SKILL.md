@@ -14,7 +14,7 @@ license: MIT
 compatibility: Requires Node.js >=18 and git. Bundled MCP launches ./bin/cli.mjs serve. Agent Plugins 1.0.0 + Agent Skills.
 metadata:
   author: Ali Farahat
-  version: "0.5.1"
+  version: "0.6.0"
   tags: continuity,coding-agents,mcp,agent-skills,cursor,claude-code,copilot,journal,decisions,handoff,local-first
 user-invocable: true
 disable-model-invocation: false
@@ -74,6 +74,8 @@ If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Tr
 
 ## Commands (always `--json`)
 
+Flag grammar: run `mental <command> --help` or `mental schema --json`. Cheat sheet: [references/cli.md](references/cli.md).
+
 ```text
 mental where --json
 mental heartbeat --json
@@ -86,9 +88,7 @@ mental park --resume "…" --via cursor --json
 mental handoff --title "…" --resume "…" --via cursor --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --via cursor --json
 mental attention --title "…" --kind direction --status open --via cursor --json
-mental attention --title "…" --kind verify --status open --via cursor --json
 mental decide --title "…" --status open --via cursor --json
-mental decide --title "…" --status decided --via cursor --json
 mental note --title "…" --json
 ```
 

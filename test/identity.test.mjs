@@ -23,7 +23,7 @@ test("two clones same origin share uuid; split diverges; link rejoins", () => {
   const home = tempHome();
   const a = initRepo(home, { name: "c1", origin: "https://github.com/org/shared.git" });
   const b = initRepo(home, { name: "c2", origin: "git@github.com:org/shared.git" });
-  const first = mental(home, a.root, ["journal", "--json", "--title", "Shared brain"]);
+  const first = mental(home, a.root, ["journal", "--json", "--title", "Shared brain", "--resume", "Continue"]);
   assert.equal(first.status, 0, first.stderr || first.stdout);
   const id = JSON.parse(first.stdout).data.id;
   const second = mental(home, b.root, ["status", "--json"]);
@@ -102,7 +102,7 @@ test("remap --to lists then retargets this clone", () => {
 test("split --copy duplicates OKF into the new slice", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  mental(home, root, ["journal", "--json", "--title", "Keep this"]);
+  mental(home, root, ["journal", "--json", "--title", "Keep this", "--resume", "Continue"]);
   const sp = mental(home, root, ["split", "--json", "--copy"]);
   assert.equal(sp.status, 0, sp.stderr || sp.stdout);
   const body = JSON.parse(sp.stdout);

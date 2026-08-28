@@ -7,7 +7,7 @@ import { userMentalDir } from "../lib/bindings.mjs";
 import { uninstallSkills } from "../lib/uninstall.mjs";
 import { disableHooks } from "../lib/hooks.mjs";
 import { disableMcp } from "../lib/mcp-hosts.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, EXIT_USAGE } from "../lib/output.mjs";
 
 export function cmdUninstall(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -27,7 +27,7 @@ export function cmdUninstall(args, io = {}) {
       code: "usage",
       message: "Refusing to delete OKF. Pass --delete-data --confirm DELETE to wipe ~/.mental.",
     });
-    return 1;
+    return EXIT_USAGE;
   }
 
   const skills = uninstallSkills({

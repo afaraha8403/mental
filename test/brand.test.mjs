@@ -21,11 +21,11 @@ test("brandMark and kindLine honor MENTAL_ASCII", () => {
 test("TTY writes use type emoji; --json stays ASCII", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const tty = mental(home, root, ["journal", "--title", "Brand check"]);
+  const tty = mental(home, root, ["journal", "--title", "Brand check", "--resume", "Continue"]);
   assert.equal(tty.status, 0, tty.stderr || tty.stdout);
   assert.match(tty.stdout, /📓 appended journal\//);
 
-  const json = mental(home, root, ["journal", "--json", "--title", "JSON check"]);
+  const json = mental(home, root, ["journal", "--json", "--title", "JSON check", "--resume", "Continue"]);
   assert.equal(json.status, 0, json.stderr || json.stdout);
   const body = JSON.parse(json.stdout);
   assert.equal(body.ok, true);

@@ -30,14 +30,18 @@ export function cmdList(args, io = {}) {
     printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
+  const LIST_CAP = 50;
   const type = typeof args.flags?.type === "string" ? args.flags.type : undefined;
   const status = typeof args.flags?.status === "string" ? args.flags.status : undefined;
   const tag = typeof args.flags?.tag === "string" ? args.flags.tag : undefined;
   const kind = typeof args.flags?.kind === "string" ? args.flags.kind : undefined;
-  const items = filterConcepts(listConcepts(resolved.data.root), { type, status, tag, kind }).map(summarize);
+  const all = filterConcepts(listConcepts(resolved.data.root), { type, status, tag, kind }).map(summarize);
+  const items = all.slice(0, LIST_CAP);
   const data = {
     ...resolved.data,
     items,
+    total: all.length,
+    truncated: all.length > items.length,
     type: type ?? null,
     status: status ?? null,
     tag: tag ?? null,

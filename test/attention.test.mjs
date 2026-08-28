@@ -132,7 +132,7 @@ test("attention create requires --kind; against escapes fail", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   const noKind = mental(home, root, ["attention", "--json", "--title", "Nope"]);
-  assert.equal(noKind.status, 1);
+  assert.equal(noKind.status, 2);
   assert.match(noKind.stdout, /--kind/);
 
   const bad = mental(home, root, [
@@ -145,7 +145,7 @@ test("attention create requires --kind; against escapes fail", () => {
     "--against",
     "../secret",
   ]);
-  assert.equal(bad.status, 1);
+  assert.equal(bad.status, 2);
   assert.match(bad.stdout, /against/);
 });
 

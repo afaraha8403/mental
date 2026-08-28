@@ -45,7 +45,7 @@ test("sanitizeVia rejects fingerprints and accepts short tokens", () => {
 test("attention --kind verify lands on Needs eyes; cap prefers verify", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  parseOk(mental(home, root, ["journal", "--json", "--title", "Seed"]), "seed");
+  parseOk(mental(home, root, ["journal", "--json", "--title", "Seed", "--resume", "Continue"]), "seed");
   const where = whereOf(home, root);
   for (let i = 1; i <= 7; i++) {
     writeOkf(
@@ -93,7 +93,7 @@ test("attention --kind verify lands on Needs eyes; cap prefers verify", () => {
 test("park increments delta.parks; TTY shows Hops; custom title still counts", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  parseOk(mental(home, root, ["journal", "--json", "--title", "Before"]), "seed");
+  parseOk(mental(home, root, ["journal", "--json", "--title", "Before", "--resume", "Continue"]), "seed");
   parseOk(mental(home, root, ["pulse", "--json"]), "watermark");
   parseOk(
     mental(home, root, [
@@ -157,8 +157,8 @@ test("--via cursor is stored; emails and URLs are usage", () => {
   const journal = readFileSync(join(slice, hb.handoff.file), "utf8");
   assert.match(journal, /^Via: cursor$/m);
 
-  const bad = mental(home, root, ["journal", "--json", "--title", "Nope", "--via", "ali@example.com"]);
-  assert.equal(bad.status, 1);
+  const bad = mental(home, root, ["journal", "--json", "--title", "Nope", "--resume", "x", "--via", "ali@example.com"]);
+  assert.equal(bad.status, 2);
   assert.match(bad.stdout, /short client token/);
 
   parseOk(

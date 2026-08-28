@@ -3,7 +3,7 @@
  */
 import { disableHooks, enableHooks } from "../lib/hooks.mjs";
 import { setFeature } from "../lib/config.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, EXIT_USAGE } from "../lib/output.mjs";
 
 export function cmdHooks(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -22,7 +22,7 @@ export function cmdHooks(args, io = {}) {
       code: "usage",
       message: "mental hooks on|off  (default off; install does not enable hooks)",
     });
-    return 1;
+    return EXIT_USAGE;
   }
 
   const result = action === "on" ? enableHooks(home) : disableHooks(home);

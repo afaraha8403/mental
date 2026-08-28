@@ -5,20 +5,39 @@
  */
 import { peekUpdateNotice } from "./update.mjs";
 
+/** POSIX usage / argparse exit. */
+export const EXIT_USAGE = 2;
+
+/**
+ * no-color.org: any non-empty NO_COLOR. Also TERM=dumb, --plain, --no-color.
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {{ plain?: boolean, flags?: Record<string, string | boolean> }} [args]
+ */
+export function usePlain(env = process.env, args = {}) {
+  if (args.plain || args.flags?.plain || args.flags?.["no-color"]) return true;
+  const nc = env.NO_COLOR;
+  if (nc != null && String(nc) !== "") return true;
+  if (env.TERM === "dumb") return true;
+  return false;
+}
+
 /**
  * `MENTAL_ASCII=1` for consoles that cannot render emoji (legacy cmd.exe).
  * @param {NodeJS.ProcessEnv} [env]
+ * @param {{ plain?: boolean, flags?: Record<string, string | boolean> }} [args]
  */
-export function useAsciiBrand(env = process.env) {
+export function useAsciiBrand(env = process.env, args = {}) {
+  if (usePlain(env, args)) return true;
   const v = env.MENTAL_ASCII;
   return v === "1" || v === "true" || v === "yes";
 }
 
 /**
  * @param {NodeJS.ProcessEnv} [env]
+ * @param {{ plain?: boolean, flags?: Record<string, string | boolean> }} [args]
  */
-export function brandMark(env = process.env) {
-  return useAsciiBrand(env) ? "[mental]" : "🧠";
+export function brandMark(env = process.env, args = {}) {
+  return useAsciiBrand(env, args) ? "[mental]" : "🧠";
 }
 
 const KIND_EMOJI = {
@@ -42,9 +61,9 @@ const KIND_ASCII = {
  * @param {"journal" | "attention" | "decision" | "note" | "read"} kind
  * @param {NodeJS.ProcessEnv} [env]
  */
-export function kindMark(kind, env = process.env) {
-  if (useAsciiBrand(env)) return KIND_ASCII[kind] || "[mental]";
-  return KIND_EMOJI[kind] || brandMark(env);
+export function kindMark(kind, env = process.env, args = {}) {
+  if (useAsciiBrand(env, args)) return KIND_ASCII[kind] || "[mental]";
+  return KIND_EMOJI[kind] || brandMark(env, args);
 }
 
 /**
@@ -52,8 +71,8 @@ export function kindMark(kind, env = process.env) {
  * @param {string} text
  * @param {NodeJS.ProcessEnv} [env]
  */
-export function kindLine(kind, text, env = process.env) {
-  return `${kindMark(kind, env)} ${text}`;
+export function kindLine(kind, text, env = process.env, args = {}) {
+  return `${kindMark(kind, env, args)} ${text}`;
 }
 
 /**
@@ -61,28 +80,29 @@ export function kindLine(kind, text, env = process.env) {
  * @param {string} text
  * @param {NodeJS.ProcessEnv} [env]
  */
-export function brandLine(text, env = process.env) {
-  return `${brandMark(env)} ${text}`;
+export function brandLine(text, env = process.env, args = {}) {
+  return `${brandMark(env, args)} ${text}`;
 }
 
 /**
  * @param {boolean} ok
  * @param {object} [data]
- * @param {{ code: string, message: string }} [error]
+ * @param {{ code: string, message: string, hint?: string, retryable?: boolean }} [error]
  * @param {{ current: string, latest: string, hint: string } | null} [update]
  */
 export function envelope(ok, data, error, update) {
   const body = ok ? { ok: true, data } : { ok: false, error };
+  if (!ok && data != null) body.data = data;
   if (update) body.update = update;
   return body;
 }
 
 /**
  * @param {NodeJS.WritableStream} out
- * @param {{ json?: boolean, env?: NodeJS.ProcessEnv }} args
+ * @param {{ json?: boolean, env?: NodeJS.ProcessEnv, stderr?: NodeJS.WritableStream, plain?: boolean }} args
  * @param {boolean} ok
  * @param {object} [data]
- * @param {{ code: string, message: string }} [error]
+ * @param {{ code: string, message: string, hint?: string }} [error]
  * @param {(data: object) => string} [format]
  */
 export function printResult(out, args, ok, data, error, format) {
@@ -94,12 +114,15 @@ export function printResult(out, args, ok, data, error, format) {
     return;
   }
   if (!ok) {
-    out.write(`${error?.message || "error"}\n`);
-    if (update?.hint) out.write(`${brandLine(update.hint, env)}\n`);
+    if (format && data) out.write(`${format(data)}\n`);
+    const dest = args?.stderr ?? out;
+    dest.write(`${error?.message || "error"}\n`);
+    if (error?.hint) dest.write(`${error.hint}\n`);
+    if (update?.hint) dest.write(`${brandLine(update.hint, env, args)}\n`);
     return;
   }
   out.write(`${format ? format(data) : JSON.stringify(data, null, 2)}\n`);
-  if (update?.hint) out.write(`${brandLine(update.hint, env)}\n`);
+  if (update?.hint) out.write(`${brandLine(update.hint, env, args)}\n`);
 }
 
 /** @param {import('./resolve.mjs').WhereData} data */

@@ -4,8 +4,8 @@
 import { resolveBundle } from "../lib/resolve.mjs";
 import { appendJournal, bundleName, ensureSkeleton, repoRelativePath } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
-import { printResult, kindLine } from "../lib/output.mjs";
-import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
+import { printResult, EXIT_USAGE, kindLine } from "../lib/output.mjs";
+import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
 
 /**
  * @param {{ json: boolean, dir?: string, flags?: Record<string, string | boolean>, cwd?: string, home?: string, env?: NodeJS.ProcessEnv }} args
@@ -18,8 +18,9 @@ export function cmdJournal(args, io = {}) {
     printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental journal requires --title (agents also pass --body --resume --json)",
+      hint: "mental journal --title \"…\" --resume \"Exact next — open loops: none\" --json",
     });
-    return 1;
+    return EXIT_USAGE;
   }
   const resolved = resolveBundle({
     cwd: args.cwd ?? process.cwd(),
@@ -34,19 +35,28 @@ export function cmdJournal(args, io = {}) {
   }
   const viaParsed = viaFromFlags(args.flags);
   if (!viaParsed.ok) {
-    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE });
-    return 1;
+    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE, hint: VIA_HINT });
+    return EXIT_USAGE;
   }
   const body = typeof args.flags?.body === "string" ? args.flags.body : "";
-  const resume = typeof args.flags?.resume === "string" ? args.flags.resume : "Continue. — open loops: none";
+  const resume = typeof args.flags?.resume === "string" ? args.flags.resume : null;
+  if (!resume) {
+    printResult(stdout, args, false, undefined, {
+      code: "usage",
+      message: "mental journal requires --resume",
+      hint: "Pass --resume \"Exact next action — open loops: none\"",
+    });
+    return EXIT_USAGE;
+  }
   const againstRaw = typeof args.flags?.against === "string" ? args.flags.against : undefined;
   const against = againstRaw != null ? repoRelativePath(againstRaw) : undefined;
   if (againstRaw != null && against === null) {
     printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "--against must be a repo-relative path (no ..)",
+      hint: "Example: --against PLAN.md",
     });
-    return 1;
+    return EXIT_USAGE;
   }
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),

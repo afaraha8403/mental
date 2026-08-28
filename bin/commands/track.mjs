@@ -8,8 +8,8 @@ import { resolveBundle } from "../lib/resolve.mjs";
 import { TRACK_OFF_USAGE, isFeatureOn, loadConfig } from "../lib/config.mjs";
 import { assertLocalIgnorable } from "../lib/ignore.mjs";
 import { bundleName, repoRelativePath } from "../lib/okf.mjs";
-import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
-import { printResult, kindLine } from "../lib/output.mjs";
+import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
+import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { loadBindings, projectSliceDir } from "../lib/bindings.mjs";
 import { pulseRootForBinding } from "../lib/pulse.mjs";
@@ -32,7 +32,7 @@ function flagString(flags, key) {
 
 function trackOffResult(stdout, args) {
   printResult(stdout, args, false, undefined, { code: "usage", message: TRACK_OFF_USAGE });
-  return 1;
+  return EXIT_USAGE;
 }
 
 function resolveWhere(args, { write }) {
@@ -82,7 +82,7 @@ export function cmdTrack(args, io = {}) {
       code: "usage",
       message: "Time tracking needs a project bundle (git repo after a write, or mental local).",
     });
-    return 1;
+    return EXIT_USAGE;
   }
 
   const uuid = where.id || null;
@@ -100,8 +100,8 @@ export function cmdTrack(args, io = {}) {
 
   const viaParsed = viaFromFlags(args.flags);
   if (!viaParsed.ok) {
-    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE });
-    return 1;
+    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE, hint: VIA_HINT });
+    return EXIT_USAGE;
   }
 
   if (sub === "glance" || sub === "track") {
@@ -121,7 +121,7 @@ export function cmdTrack(args, io = {}) {
         code: "usage",
         message: "--started is TTY-only (agents cannot backfill a clock)",
       });
-      return 1;
+      return EXIT_USAGE;
     }
     const againstRaw = flagString(args.flags, "against");
     const against = againstRaw != null ? repoRelativePath(againstRaw) : undefined;
@@ -130,7 +130,7 @@ export function cmdTrack(args, io = {}) {
         code: "usage",
         message: "--against must be a repo-relative path (no ..)",
       });
-      return 1;
+      return EXIT_USAGE;
     }
     const defaultName = bundleName(where.root, where.id || "project");
     const result = startInterval(where.root, {
@@ -174,7 +174,7 @@ export function cmdTrack(args, io = {}) {
         code: "usage",
         message: "--accept-stale is TTY-only",
       });
-      return 1;
+      return EXIT_USAGE;
     }
     const result = stopIntervals(where.root, {
       id: flagString(args.flags, "id") || undefined,
@@ -319,14 +319,14 @@ export function cmdTrack(args, io = {}) {
     code: "usage",
     message: "mental track [glance|start|stop|focus|discard|amend|report|export]",
   });
-  return 1;
+  return EXIT_USAGE;
 }
 
 function writeExport(stdout, args, chunks, { external, project, all, cwd, gitRoot }) {
   const format = flagString(args.flags, "format") || "csv";
   if (format !== "csv" && format !== "md") {
     printResult(stdout, args, false, undefined, { code: "usage", message: "--format md|csv" });
-    return 1;
+    return EXIT_USAGE;
   }
   const out = flagString(args.flags, "out");
   const dest = assertExportOutPath(out, { cwd, gitRoot });
@@ -340,7 +340,7 @@ function writeExport(stdout, args, chunks, { external, project, all, cwd, gitRoo
       message:
         "a single customer CSV requires --project <name>; without it print per-UUID banners and do not emit one mixed invoice",
     });
-    return 1;
+    return EXIT_USAGE;
   }
   let body = "";
   if (all && !project) {

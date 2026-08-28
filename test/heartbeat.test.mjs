@@ -33,32 +33,39 @@ test("menu is unknown, not a standing session", () => {
   const home = tempHome();
   const r = mental(home, home, ["menu"]);
   assert.equal(r.status, 1, r.stderr || r.stdout);
-  assert.match(r.stdout, /Unknown command: menu/);
+  assert.match(r.stderr || r.stdout, /Unknown command: menu/);
 });
 
 test("journal without --title stays usage on TTY and non-TTY", async () => {
   const home = tempHome();
   const { root } = initRepo(home);
   const r = mental(home, root, ["journal"]);
-  assert.equal(r.status, 1, r.stderr || r.stdout);
-  assert.match(r.stdout, /requires --title/);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stderr || r.stdout, /requires --title/);
 
   const cap = captureStdout();
+  let err = "";
   const code = await run(["journal"], {
     cwd: root,
     home,
     env: gitEnv(home),
     stdout: cap.stdout,
+    stderr: {
+      write(chunk) {
+        err += chunk;
+        return true;
+      },
+    },
     isTTY: true,
   });
-  assert.equal(code, 1);
-  assert.match(cap.buf(), /requires --title/);
+  assert.equal(code, 2);
+  assert.match(err || cap.buf(), /requires --title/);
 });
 
 test("journal --json still writes without prompting", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const r = mental(home, root, ["journal", "--json", "--title", "TTY rethink"]);
+  const r = mental(home, root, ["journal", "--json", "--title", "TTY rethink", "--resume", "Continue"]);
   assert.equal(r.status, 0, r.stderr || r.stdout);
   const body = JSON.parse(r.stdout);
   assert.equal(body.ok, true);
@@ -127,7 +134,7 @@ test("TTY no-args prints heartbeat and exits; does not persist bindings", async 
 test("TTY named commands stay one-shot, not a session", async () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  mental(home, root, ["journal", "--json", "--title", "One-shot status"]);
+  mental(home, root, ["journal", "--json", "--title", "One-shot status", "--resume", "Continue"]);
 
   const cap = captureStdout();
   const code = await run(["status"], {
@@ -160,7 +167,7 @@ test("formatHeartbeat omits uuid chrome", () => {
     },
     openDecisions: [{ status: "open", title: "Park Clack" }],
     attention: [],
-  }, new Date(2026, 7, 25));
+  }, new Date(2026, 7, 25), {});
   assert.match(text, /🧠 Ship heartbeat/);
   assert.match(text, /Dropped the catalog\s+\(14:02\)/);
   assert.match(text, /\[open\] Park Clack/);

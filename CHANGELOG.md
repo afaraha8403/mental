@@ -7,9 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-28
+
+### Features
+
+- Grouped CLI help from a single command catalog: `mental -h` (Daily), `mental --help` (all commands), `mental <cmd> --help` (examples first). `mental schema --json` dumps the catalog. `mental completion bash|zsh|fish` prints a completion script.
+- `mental --json` with no command is a heartbeat. Unknown flags fail instead of becoming silent booleans. POSIX `--` ends option parsing (so `mental search -- -label` works).
+- JSON errors include `error.hint`. Usage failures exit 2. Human errors go to stderr; `--json` stays on stdout. `doctor --json` sets `ok: false` when exit is 3. `list` / `search` JSON include `truncated` and `total`. Heartbeat JSON includes `id` and `mode`; `--fields` can mask keys.
+
+### Fixes
+
+- `journal` requires `--resume` (no silent “Continue” default). Aligns with park/handoff and the skill.
+
 ### Changed
 
 - Agent install paste tells the host to use only this client's plugin flow (do not run other hosts' `/plugin` / `copilot plugin` / Command Palette steps). Human plugin steps in `docs/install.md` no longer recommend Cursor `/add-plugin` with a GitHub URL.
+- Skill points agents at `--help` / `schema` instead of inlining a flag table (`skills/mental/references/cli.md`).
 
 ## [0.5.1] - 2026-08-28
 

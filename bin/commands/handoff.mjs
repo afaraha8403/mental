@@ -7,8 +7,8 @@ import { appendJournal, bundleName, ensureSkeleton, repoRelativePath } from "../
 import { refreshIndex } from "../lib/index.mjs";
 import { collectHeartbeat, formatHeartbeat } from "../lib/heartbeat.mjs";
 import { writeWatermark } from "../lib/watermark.mjs";
-import { printResult, kindLine } from "../lib/output.mjs";
-import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
+import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
+import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
 import { isFeatureOn } from "../lib/config.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { stopFocusedForPark } from "../lib/time.mjs";
@@ -30,20 +30,20 @@ export function cmdHandoff(args, io = {}) {
       code: "usage",
       message: "mental handoff requires --title",
     });
-    return 1;
+    return EXIT_USAGE;
   }
   if (!resume) {
     printResult(stdout, args, false, undefined, {
       code: "usage",
       message: "mental handoff requires --resume",
     });
-    return 1;
+    return EXIT_USAGE;
   }
 
   const viaParsed = viaFromFlags(args.flags);
   if (!viaParsed.ok) {
-    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE });
-    return 1;
+    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE, hint: VIA_HINT });
+    return EXIT_USAGE;
   }
 
   const againstRaw = flagString(args.flags, "against");
@@ -53,7 +53,7 @@ export function cmdHandoff(args, io = {}) {
       code: "usage",
       message: "--against must be a repo-relative path (no ..)",
     });
-    return 1;
+    return EXIT_USAGE;
   }
 
   const resolved = resolveBundle({

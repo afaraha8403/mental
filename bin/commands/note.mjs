@@ -4,7 +4,7 @@
 import { resolveBundle } from "../lib/resolve.mjs";
 import { bundleName, ensureSkeleton, writeNote } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
-import { printResult, kindLine } from "../lib/output.mjs";
+import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 
 const STATUSES = new Set(["draft", "active", "superseded"]);
 
@@ -16,7 +16,7 @@ export function cmdNote(args, io = {}) {
       code: "usage",
       message: "mental note requires --title",
     });
-    return 1;
+    return EXIT_USAGE;
   }
   const status = typeof args.flags?.status === "string" ? args.flags.status : "active";
   if (!STATUSES.has(status)) {
@@ -24,7 +24,7 @@ export function cmdNote(args, io = {}) {
       code: "usage",
       message: `status must be ${[...STATUSES].join("|")}`,
     });
-    return 1;
+    return EXIT_USAGE;
   }
   const resolved = resolveBundle({
     cwd: args.cwd ?? process.cwd(),

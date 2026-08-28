@@ -29,6 +29,21 @@ todos:
   - id: phase-9-agent-plugin
     content: "Ship as Agent Plugins 1.0.0 — root plugin.json, mcp.json stdio (./bin/cli.mjs serve), skills/mental; tests lock the closed schemas"
     status: completed
+  - id: cli-ux-0-catalog
+    content: "Single command catalog (groups, flags, examples, effects) driving help, schema, completions, MCP inputSchema"
+    status: pending
+  - id: cli-ux-a-help-traps
+    content: "Per-command help; grouped -h vs --help; mental --json → heartbeat; reject unknown flags; POSIX --"
+    status: pending
+  - id: cli-ux-b-envelope-caps
+    content: "error.hint + usage exit 2; doctor ok:false; list/search caps + truncated; schema --json; journal requires --resume"
+    status: pending
+  - id: cli-ux-c-human-polish
+    content: "NO_COLOR / TERM=dumb / --plain; TTY heartbeat footer; shell completions; TTY-only did-you-mean (never auto-run)"
+    status: pending
+  - id: cli-ux-d-skill-fields
+    content: "Split SKILL.md (procedure vs flags); heartbeat --fields; CI skill against schema; additive id/mode on heartbeat JSON"
+    status: pending
 isProject: false
 ---
 
@@ -635,4 +650,110 @@ Work in `/home/ali/Development/Projects/balakit` **after** Mental CLI install wo
 - Do not overlay personal + project search in v1.
 - Do not use Graphify `graph.json` as SoT.
 - Do not commit `.mental/` user data or tokens to the public repo.
+
+---
+
+## 18. CLI UX — humans + agents (post-0.5.1)
+
+Research (Aug 2026): clig.dev, 12-factor CLI, CLI Spec 0.3, Arcjet agent CLI, Anthropic tool-writing + Agent Skills, Claude Code `--help` learning, gh `--json` field projection, git porcelain vs plumbing, .NET CLI guidance, WCAG2ICT / GitHub CLI a11y, Nielsen errors, Cursor Shell Mode. Canvas: session `cli-ux-research`.
+
+**Verdict:** Dual surface is already right (TTY heartbeat vs `--json`). Do not redesign the command tree. Improve discoverability, honest envelopes, and bounded output.
+
+### Invariants (do not reopen)
+
+- Same binary, two renderers. CLI is the write path. MCP remains optional peer.
+- TTY heartbeat may evolve (git human `status`). `--json` is `--porcelain=v2`: additive fields only, no ANSI, ignore-unknown.
+- Do **not** default named commands to JSON when piped (breaks `mental where | grep`). Skill already forces `--json`.
+- Do **not** rename `park` / `handoff` / `heartbeat` / `pulse` / `status` / `where`. Fix **help language** (identity vs cheap reload vs notes dump vs cross-repo rows).
+- Do **not** noun-verb rewrite (`mental decision create`).
+- Do **not** `--dry-run` / `--confirm` on journal. Confirm stays on uninstall wipe and optional-feature consent.
+- Do **not** fuzzy-auto-run typos. TTY may *suggest*; `--json` hard-fails.
+- Do **not** MCP-wrap identity (`remap` / `split` / `link` / `local`) or dump the full CLI schema into MCP context.
+- Do **not** add `--verbose` on heartbeat that dumps notes. That is `status`.
+- Do **not** grow SKILL.md. Flag grammar belongs in `--help` / `schema`; procedure stays in the skill. Unread `references/` cost zero tokens.
+- Do **not** design for Warp typing into a PTY. Cursor Shell Mode: 30s, no prompts.
+- Color never carries meaning. Labels stay words. `--json` never SGR. 4-bit ANSI only if we color TTY later.
+
+### Foundation — `cli-ux-0-catalog`
+
+One table in `bin/lib/catalog.mjs` (name TBD) is the source of truth:
+
+- `group`: Daily | Lookup | Write | Identity | Setup
+- `summary` (one line), `usage`, 2–3 copy-paste `examples` (human + `--json`)
+- `flags`: name, required, enum, default
+- `effects`: `read_only` | `idempotent` | `non_idempotent`
+- `rest`: whether positionals exist; honor POSIX `--`
+
+`parseArgv`, `usage()`, `mental schema --json`, completions, and MCP `inputSchema` all read this table. Do not hand-maintain three lists.
+
+Dispatch change in `bin/cli.mjs`: handle `--help` **after** command parse so `mental handoff --help` is per-command. Global `-h` / no-command `--help` stay grouped.
+
+### Phase A — Help + agent traps (`cli-ux-a-help-traps`)
+
+Highest leverage. Unblocks Claude Code’s “run `--help` then use it.”
+
+1. **Per-command help** from the catalog. Examples first. Required vs optional. Enums (`--kind direction|concern|thread|verify`). Distinct one-liners for where / heartbeat / status / pulse.
+2. **Progressive disclosure:** `mental -h` = one screen (what it is + Daily core: heartbeat, park, handoff, decide, attention, search + pointer to `--help` / `--json`). `mental --help` = full 25 grouped. jq/clap pattern.
+3. **`mental --json` with no command** → heartbeat envelope (exit 0), not usage text exit 2. Tiny; stops the #1 agent trap. TTY no-args unchanged.
+4. **Reject unknown flags.** Today `--josn` becomes `flags.josn = true` and is ignored. Error with `hint` listing legal flags for that command.
+5. **POSIX `--`:** `mental search -- -label` is a query, not a flag.
+6. Tests: `test/heartbeat.test.mjs` (no-command `--json`), new `test/help-catalog.test.mjs` (per-command help contains examples; unknown flag fails; `--` search). Update `test/attention.test.mjs` help assertion.
+
+Docs: `docs/cli.md` command table generated or kept in lockstep with the catalog.
+
+### Phase B — Honest machine contract (`cli-ux-b-envelope-caps`)
+
+`--json` stays a versioned API.
+
+1. **`error.hint`** (copy-paste next argv). Optional `retryable` (default omit/false). Usage failures **exit 2** (POSIX). Keep exit 2 for non-TTY no-args *without* `--json` (help). `--json` no-args is heartbeat after Phase A. Update `docs/cli.md` exit-code table. This is a minor contract bump (was exit 1 for missing `--title`).
+2. **Human errors → stderr.** `--json` envelope stays **stdout** (do not break skill/tests).
+3. **`doctor --json`:** `ok: false` when process exit is 3 (error-level problems). Warn-only checks stay `ok: true` with `level: "warn"` (current stale/budget behavior). Agents that only read `ok` currently miss PATH/ignore failures.
+4. **Caps:** `list` default cap (match search or 50) + `truncated` + `total`. Search already caps 50 — emit `truncated` / `total`. Do not cap `status` notes into heartbeat; keep status explicit.
+5. **`mental schema --json`:** dump the catalog (no auth, no network). `mental heartbeat --json` with `--fields` omitted may later list legal field names (gh trick) — implement field listing in Phase D; schema command here.
+6. **`journal` requires `--resume`** (align with park/handoff). Kill the silent `"Continue. — open loops: none"` default. Skill already requires it.
+7. Additive (safe): include `id` / `mode` on heartbeat JSON so agents can skip a `where` round-trip. Do not put notes on heartbeat.
+
+Unknown-command `--json`: envelope `code: unknown-command` + `hint` listing Daily names (not fuzzy execute). TTY may print “similar: …” as a hint only.
+
+### Phase C — Human polish (`cli-ux-c-human-polish`)
+
+1. Honor `NO_COLOR` (non-empty), `TERM=dumb`, optional `--plain` / `--no-color`. `MENTAL_ASCII` stays for emoji. Doctor `✓/✖` must respect ASCII/plain.
+2. TTY heartbeat footer: `more · mental doctor · mental search · mental --help`. clig “suggest the next command.”
+3. Shell completions (bash/zsh/fish) generated from the catalog. `mental completion bash` or install-time snippet — pick the smaller of the two; do not add a completion framework dep.
+4. TTY-only “did you mean” for unknown commands. Never auto-run. `--json` hard-fail.
+5. Optional later: 4-bit ANSI on TTY labels only. Not required to close this phase.
+
+### Phase D — Skill + field masks (`cli-ux-d-skill-fields`)
+
+Depends on A+B (help and schema exist).
+
+1. **SKILL.md** keeps *when* to write (orient / residue / park vs handoff / fail-open / receipt). Move flag cheatsheet to `skills/mental/references/cli.md` or tell agents to run `mental <cmd> --help`. Target: body stays procedure; Anthropic Level 3 for flags. Always-on rule stays tiny.
+2. **`--fields`** on heartbeat (and maybe search): `mental heartbeat --json --fields resume,attention`. Compact default unchanged. Do not add a third dump command.
+3. **CI:** test that skill/rule command names ⊆ catalog. Prevents SKILL.md drift (`--foo` that the CLI renamed).
+4. MCP `inputSchema` generated from the catalog for the **existing** tool subset. Do **not** 1:1 map all 25 CLI verbs (OpenAI/Vertex: start with under 20 tools; Anthropic always-loaded band is 3–5). Keep `option` / `track` deferred until those features are on. Add `against` on journal MCP (today missing). Enum `kind` / `status` where the CLI already has a closed set.
+
+### Out of scope (explicit)
+
+- Standing TUI / pager / interactive wizards.
+- JSON-when-piped default for named commands.
+- Renaming pulse/heartbeat/status.
+- `--dry-run` on OKF writes.
+- `--verbosity` five-level ladder.
+- `mental alias`.
+- Wrapping remap/split/link as MCP tools.
+
+### Semver
+
+Ship as **0.6.0**. Additive help/schema/fields + small error-code change (usage 1→2) + journal `--resume` required. Cut CHANGELOG `[Unreleased]` when the first phase lands, not when this section is written.
+
+### Acceptance
+
+- `mental handoff --help` shows handoff examples, not the 25-command wall.
+- `mental --json` (no command) is a heartbeat envelope, `ok: true`.
+- `mental journal --json --title X` without `--resume` is `ok: false`, exit 2, `error.hint` names `--resume`.
+- `mental nosuch --json` does not suggest-and-run a neighbor.
+- `mental doctor --json` with real problems has `ok: false` and exit 3.
+- `mental list --json` includes `truncated` and `total` when over cap.
+- `NO_COLOR=1 mental` has no ANSI.
+- `npm test` green. Skill still teaches `--json` and fail-open.
 

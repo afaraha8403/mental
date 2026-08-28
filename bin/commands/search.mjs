@@ -3,7 +3,7 @@
  */
 import { resolveBundle } from "../lib/resolve.mjs";
 import { searchBundle } from "../lib/index.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, EXIT_USAGE } from "../lib/output.mjs";
 
 export function cmdSearch(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -13,7 +13,7 @@ export function cmdSearch(args, io = {}) {
       code: "usage",
       message: "mental search requires a query",
     });
-    return 1;
+    return EXIT_USAGE;
   }
   const resolved = resolveBundle({
     cwd: args.cwd ?? process.cwd(),
@@ -41,7 +41,7 @@ export function cmdSearch(args, io = {}) {
     tag,
     kind,
   });
-  const data = { ...resolved.data, q, ...found };
+  const data = { ...resolved.data, q, ...found, truncated: found.total > found.hits.length };
   printResult(stdout, args, true, data, undefined, (d) => {
     if (d.hits.length === 0) return `no hits for ${d.q} (${d.backend})`;
     return d.hits

@@ -22,6 +22,27 @@ import { heartbeatTrack } from "./time.mjs";
 
 export { ATTENTION_HEARTBEAT_CAP, DECISION_HEARTBEAT_CAP };
 
+/** JSON keys agents may pass to `--fields`. */
+export const HEARTBEAT_JSON_FIELDS = [
+  "id",
+  "mode",
+  "git",
+  "gitRoot",
+  "handoff",
+  "against",
+  "attention",
+  "openDecisions",
+  "attentionCount",
+  "openDecisionCount",
+  "needsEyes",
+  "needsEyesCount",
+  "guardrails",
+  "guardrailCount",
+  "hopsToday",
+  "delta",
+  "track",
+];
+
 /**
  * Home mode without a UUID is `~/.mental/projects` (parent), not a bundle.
  * @param {{ id?: string | null, mode?: string }} where
@@ -80,6 +101,8 @@ export function collectHeartbeat(args) {
 
   /** @type {Record<string, unknown>} */
   const data = {
+    id: where.id ?? null,
+    mode: where.mode,
     git,
     gitRoot: where.gitRoot,
     handoff,
@@ -118,8 +141,9 @@ function extraLine(shown, total) {
  * @param {Extract<ReturnType<typeof collectHeartbeat>, { ok: true }>["data"]} data
  * @param {Date} [now]
  * @param {NodeJS.ProcessEnv} [env]
+ * @param {{ plain?: boolean, flags?: Record<string, string | boolean> }} [args]
  */
-export function formatHeartbeat(data, now = new Date(), env = process.env) {
+export function formatHeartbeat(data, now = new Date(), env = process.env, args = {}) {
   const resume =
     data.handoff.resume ||
     "No journal yet — start work, then `mental journal` at the task boundary.";
@@ -162,7 +186,7 @@ export function formatHeartbeat(data, now = new Date(), env = process.env) {
       : ["Settled", shownGuard.map((g) => `  ${g.title}`).join("\n") + extraLine(shownGuard.length, guardTotal)];
   const parks = data.hopsToday ?? data.delta?.parks ?? 0;
 
-  const lines = [`${brandMark(env)} ${resume}`];
+  const lines = [`${brandMark(env, args)} ${resume}`];
   if (against) lines.push(`Against ${against}`);
   lines.push("", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, `Hops    ${parks}`, ...eyesBlock, "In the air", air, "Unsettled", open, ...settled);
   return lines.join("\n");

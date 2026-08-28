@@ -376,13 +376,15 @@ export function searchBundle({
     if (DatabaseSync && existsSync(file)) {
       maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file });
       try {
-        return { backend: "sqlite", hits: searchSqlite(DatabaseSync, file, needle, { ...filters, limit }) };
+        const found = searchSqlite(DatabaseSync, file, needle, { ...filters, limit });
+        return { backend: "sqlite", hits: found.hits, total: found.total };
       } catch {
         // fall through to scan
       }
     }
   }
-  return { backend: "scan", hits: searchScan(listConcepts(root), needle, { ...filters, limit }) };
+  const found = searchScan(listConcepts(root), needle, { ...filters, limit });
+  return { backend: "scan", hits: found.hits, total: found.total };
 }
 
 /**
@@ -415,8 +417,7 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
               c.status AS status, c.kind AS kind, c.tags_json AS tags_json, c.body_text AS body_text
        FROM concepts c
        WHERE (lower(c.title) LIKE ? OR lower(c.body_text) LIKE ? OR lower(c.path) LIKE ?)${extra}
-       ORDER BY CASE WHEN lower(c.title) LIKE ? THEN 0 ELSE 1 END, c.path
-       LIMIT ?`,
+       ORDER BY CASE WHEN lower(c.title) LIKE ? THEN 0 ELSE 1 END, c.path`,
     );
     const pat = `%${needle}%`;
     let rows = [];
@@ -428,8 +429,7 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
          FROM concepts_fts
          JOIN concepts c ON c.path = concepts_fts.path
          WHERE concepts_fts MATCH ?${extra}
-         ORDER BY bm25(concepts_fts)
-         LIMIT ?`,
+         ORDER BY bm25(concepts_fts)`,
       );
       const tokens = needle
         .replace(/[^\p{L}\p{N}\s]+/gu, " ")
@@ -437,18 +437,19 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
         .split(/\s+/)
         .filter(Boolean);
       const q = tokens.length ? tokens.map((t) => `${t}*`).join(" AND ") : needle;
-      rows = fts.all(q, ...filterParams, limit);
+      rows = fts.all(q, ...filterParams);
     } catch {
       rows = [];
     }
     if (!rows || rows.length === 0) {
       try {
-        rows = like.all(pat, pat, pat, ...filterParams, pat, limit);
+        rows = like.all(pat, pat, pat, ...filterParams, pat);
       } catch {
         rows = [];
       }
     }
-    return (rows || []).map((r) => rowToHit(r, needle)).slice(0, limit);
+    const mapped = (rows || []).map((r) => rowToHit(r, needle));
+    return { hits: mapped.slice(0, limit), total: mapped.length };
   } finally {
     db.close();
   }
@@ -518,7 +519,7 @@ function searchScan(concepts, needle, { type, status, tag, kind, limit }) {
       if (at !== bt) return at - bt;
       return a.path.localeCompare(b.path);
     });
-  return hits.slice(0, limit);
+  return { hits: hits.slice(0, limit), total: hits.length };
 }
 
 /**

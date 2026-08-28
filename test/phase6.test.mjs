@@ -11,11 +11,11 @@ test("uninstall removes skill copies and leaves OKF unless DELETE", () => {
   const { root } = initRepo(home);
   assert.equal(mental(home, root, ["install", "--json"]).status, 0);
   assert.equal(existsSync(join(home, ".agents", "skills", "mental", "SKILL.md")), true);
-  mental(home, root, ["journal", "--json", "--title", "Keep me"]);
+  mental(home, root, ["journal", "--json", "--title", "Keep me", "--resume", "Continue"]);
   const slice = JSON.parse(mental(home, root, ["status", "--json"]).stdout).data.root;
 
   const refused = mental(home, root, ["uninstall", "--json", "--delete-data"]);
-  assert.equal(refused.status, 1);
+  assert.equal(refused.status, 2);
   assert.match(refused.stdout, /DELETE/);
 
   const gone = mental(home, root, ["uninstall", "--json"]);
@@ -89,7 +89,7 @@ test("install --mcp preserves other MCP servers; uninstall removes only mental",
 test("MCP initialize + tools/list + where", async () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  mental(home, root, ["journal", "--json", "--title", "MCP handoff"]);
+  mental(home, root, ["journal", "--json", "--title", "MCP handoff", "--resume", "Continue"]);
 
   const init = handle({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }, {});
   assert.equal(init.result.serverInfo.name, "mental");
@@ -157,7 +157,7 @@ test("MCP heartbeat + attention round-trip (mid-chat parity)", () => {
 test("local --import copies home slice into ./.mental", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  mental(home, root, ["journal", "--json", "--title", "Home first"]);
+  mental(home, root, ["journal", "--json", "--title", "Home first", "--resume", "Continue"]);
   const fix = mental(home, root, ["doctor", "--fix-ignore", "--json"]);
   assert.ok(fix.status === 0 || fix.status === 3, fix.stderr || fix.stdout);
   const r = mental(home, root, ["local", "--import", "--json"]);

@@ -20,7 +20,7 @@ function parseErr(r, label) {
 }
 
 function enableTrack(home, root) {
-  parseOk(mental(home, root, ["journal", "--json", "--title", "Seed"]), "seed");
+  parseOk(mental(home, root, ["journal", "--json", "--title", "Seed", "--resume", "Continue"]), "seed");
   parseOk(mental(home, root, ["option", "track", "on", "--json"]), "option track on");
 }
 

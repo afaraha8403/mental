@@ -12,8 +12,8 @@ import {
   writeDecision,
 } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
-import { printResult, kindLine } from "../lib/output.mjs";
-import { VIA_USAGE, viaFromFlags } from "../lib/via.mjs";
+import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
+import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
@@ -28,7 +28,7 @@ export function cmdDecide(args, io = {}) {
       code: "usage",
       message: "mental decide requires --title (or --path to update)",
     });
-    return 1;
+    return EXIT_USAGE;
   }
 
   const statusFlag = flagString(args.flags, "status");
@@ -37,14 +37,14 @@ export function cmdDecide(args, io = {}) {
       code: "usage",
       message: `status must be ${[...DECISION_STATUSES].join("|")}`,
     });
-    return 1;
+    return EXIT_USAGE;
   }
   const status = statusFlag || "open";
 
   const viaParsed = viaFromFlags(args.flags);
   if (!viaParsed.ok) {
-    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE });
-    return 1;
+    printResult(stdout, args, false, undefined, { code: "usage", message: VIA_USAGE, hint: VIA_HINT });
+    return EXIT_USAGE;
   }
 
   const resolved = resolveBundle({

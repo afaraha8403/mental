@@ -15,7 +15,7 @@ export function tempHome(prefix = "mental-") {
  * @param {string} home
  */
 export function gitEnv(home) {
-  return {
+  const env = {
     ...process.env,
     HOME: home,
     USERPROFILE: home,
@@ -32,6 +32,9 @@ export function gitEnv(home) {
     MENTAL_SKIP_UPDATE_CHECK: "1",
     MENTAL_SKIP_HOST_PLUGIN_CHECK: "1",
   };
+  delete env.NO_COLOR;
+  if (env.TERM === "dumb") delete env.TERM;
+  return env;
 }
 
 export function git(cwd, args, home) {

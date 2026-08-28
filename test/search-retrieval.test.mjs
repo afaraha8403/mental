@@ -15,7 +15,7 @@ function writeConcept(bundle, rel, data, body) {
 test("search --type still finds a Decision among 50 matching Notes", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const seeded = mental(home, root, ["journal", "--json", "--title", "Seed retrieval"]);
+  const seeded = mental(home, root, ["journal", "--json", "--title", "Seed retrieval", "--resume", "Continue"]);
   assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
   const bundle = JSON.parse(seeded.stdout).data.root;
 
@@ -49,7 +49,7 @@ test("search --type still finds a Decision among 50 matching Notes", () => {
 test("search ranks a title match above a buried body mention", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const seeded = mental(home, root, ["journal", "--json", "--title", "Seed rank"]);
+  const seeded = mental(home, root, ["journal", "--json", "--title", "Seed rank", "--resume", "Continue"]);
   assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
   const bundle = JSON.parse(seeded.stdout).data.root;
   writeConcept(
@@ -153,7 +153,7 @@ test("show --json includes backlinks from other concepts", () => {
 test("MCP list tool and search type filter; tool JSON is compact", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  mental(home, root, ["journal", "--json", "--title", "MCP retrieval seed"]);
+  mental(home, root, ["journal", "--json", "--title", "MCP retrieval seed", "--resume", "Continue"]);
   mental(home, root, ["decide", "--json", "--title", "MCP filter decision", "--body", "Keep typed filters."]);
   mental(home, root, ["note", "--json", "--title", "MCP filter note", "--body", "A note about filters."]);
 

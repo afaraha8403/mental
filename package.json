@@ -1,6 +1,6 @@
 {
   "name": "@balacode/mental",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Never reconstruct where you left off. Local-first continuity for coding agents — resume, decisions, and residue git cannot see. CLI, MCP, and Agent Skills.",
   "license": "MIT",
   "author": {

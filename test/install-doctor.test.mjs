@@ -87,7 +87,7 @@ test("doctor --fix-ignore appends .mental/ to isolated global excludes", () => {
   const r = mental(home, root, ["doctor", "--fix-ignore", "--json"]);
   assert.ok(r.status === 0 || r.status === 3, r.stderr || r.stdout);
   const body = JSON.parse(r.stdout);
-  assert.equal(body.ok, true);
+  assert.equal(body.ok, r.status !== 3);
   const file = defaultExcludesFile(home, env);
   const cur = readFileSync(file, "utf8");
   assert.match(cur, /^\.mental\/$/m);

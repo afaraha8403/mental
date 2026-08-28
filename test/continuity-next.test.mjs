@@ -53,7 +53,7 @@ test("park requires --resume", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   const r = mental(home, root, ["park", "--json"]);
-  assert.equal(r.status, 1, r.stderr || r.stdout);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
   const err = parseErr(r);
   assert.equal(err.code, "usage");
   assert.match(err.message, /--resume/);
@@ -143,7 +143,7 @@ test("park --attention without --kind is usage", () => {
     "--attention",
     "Forgot the kind",
   ]);
-  assert.equal(r.status, 1, r.stderr || r.stdout);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
   const err = parseErr(r);
   assert.equal(err.code, "usage");
   assert.match(err.message, /--kind/);
@@ -154,12 +154,12 @@ test("handoff requires --title and --resume", () => {
   const { root } = initRepo(home);
 
   const noTitle = mental(home, root, ["handoff", "--json", "--resume", "x — open loops: none"]);
-  assert.equal(noTitle.status, 1);
+  assert.equal(noTitle.status, 2);
   assert.equal(parseErr(noTitle).code, "usage");
   assert.match(parseErr(noTitle).message, /--title/);
 
   const noResume = mental(home, root, ["handoff", "--json", "--title", "Landed"]);
-  assert.equal(noResume.status, 1);
+  assert.equal(noResume.status, 2);
   assert.equal(parseErr(noResume).code, "usage");
   assert.match(parseErr(noResume).message, /--resume/);
 });

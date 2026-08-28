@@ -9,7 +9,7 @@ import { resolveBundle, findLocalMental } from "../lib/resolve.mjs";
 import { loadBindings, userMentalDir } from "../lib/bindings.mjs";
 import { checkMentalIgnored, ensureMentalExcluded, gitAvailable } from "../lib/ignore.mjs";
 import { skillsPresent, userTrackTargets, trackSkillPresent } from "../lib/install-skills.mjs";
-import { printResult, brandMark } from "../lib/output.mjs";
+import { printResult, brandMark, useAsciiBrand } from "../lib/output.mjs";
 import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
 import { isOptedInLocal } from "../lib/import-legacy.mjs";
 import { findGitRoot } from "../lib/git.mjs";
@@ -317,18 +317,28 @@ export function cmdDoctor(args, io = {}) {
     problems: problems.length,
     optionals: optionals.optionals,
   };
+  const ok = problems.length === 0;
   printResult(
     stdout,
     args,
-    true,
+    ok,
     data,
-    undefined,
-    (d) =>
-      d.checks
-        .map((c) => `${c.ok ? "✓" : "✖"} ${c.id}: ${c.message}`)
-        .join("\n") +
-      `\n${formatOptionalsTable(d.optionals)}` +
-      (problems.length ? `\n${problems.length} problem(s)` : `\n${brandMark()} doctor clean`),
+    ok
+      ? undefined
+      : {
+          code: "doctor-failed",
+          message: `${problems.length} problem(s)`,
+          hint: `Run \`${CMD} doctor --fix-ignore\` for ignore issues, or \`${CMD} install\` for PATH/skill.`,
+        },
+    (d) => {
+      const yes = useAsciiBrand(args.env ?? process.env, args) ? "OK" : "✓";
+      const no = useAsciiBrand(args.env ?? process.env, args) ? "X" : "✖";
+      return (
+        d.checks.map((c) => `${c.ok ? yes : no} ${c.id}: ${c.message}`).join("\n") +
+        `\n${formatOptionalsTable(d.optionals)}` +
+        (problems.length ? `\n${problems.length} problem(s)` : `\n${brandMark(args.env ?? process.env, args)} doctor clean`)
+      );
+    },
   );
   return problems.length ? 3 : 0;
 }

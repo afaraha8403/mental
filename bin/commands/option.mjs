@@ -7,7 +7,7 @@ import { FEATURES, listOptionals, setFeature } from "../lib/config.mjs";
 import { enableHooks, disableHooks } from "../lib/hooks.mjs";
 import { enableMcp, disableMcp } from "../lib/mcp-hosts.mjs";
 import { copyTrackSkills } from "../lib/install-skills.mjs";
-import { printResult } from "../lib/output.mjs";
+import { printResult, EXIT_USAGE } from "../lib/output.mjs";
 import { runningCount } from "../lib/time.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 
@@ -69,14 +69,14 @@ export function cmdOption(args, io = {}) {
       code: "usage",
       message: `mental option [${FEATURES.join("|")}] on|off`,
     });
-    return 1;
+    return EXIT_USAGE;
   }
   if (action !== "on" && action !== "off") {
     printResult(stdout, args, false, undefined, {
       code: "usage",
       message: `mental option ${feature} on|off`,
     });
-    return 1;
+    return EXIT_USAGE;
   }
 
   if (feature !== "track" && thisFlag) {
@@ -84,7 +84,7 @@ export function cmdOption(args, io = {}) {
       code: "usage",
       message: `mental option ${feature} is user-global; --this is usage`,
     });
-    return 1;
+    return EXIT_USAGE;
   }
 
   const { uuid, where } = uuidForThis(args);
@@ -97,7 +97,7 @@ export function cmdOption(args, io = {}) {
       message:
         "mental option track on|off needs a project UUID (run from a git repo after a write). --this before identity exists is usage.",
     });
-    return 1;
+    return EXIT_USAGE;
   }
 
   if (feature === "track" && action === "off" && where && isBundleRoot(where)) {
@@ -107,7 +107,7 @@ export function cmdOption(args, io = {}) {
         code: "usage",
         message: `Time tracking has ${n} running interval(s). Stop or discard them before option track off.`,
       });
-      return 1;
+      return EXIT_USAGE;
     }
   }
 
