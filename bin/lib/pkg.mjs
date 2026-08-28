@@ -14,6 +14,7 @@ export const NAME = pkg.name;
 export const CMD = Object.keys(pkg.bin ?? {})[0] ?? "mental";
 export const VERSION = pkg.version;
 
+/** Plugin-discovered skills (bootstrap). Full procedure lives in `skill/mental`. */
 export const SKILLS_DIR = join(PKG_ROOT, "skills");
 export const RULES_DIR = join(PKG_ROOT, "rules");
 export const OPTIONAL_DIR = join(PKG_ROOT, "optional");

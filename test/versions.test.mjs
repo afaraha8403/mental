@@ -22,14 +22,14 @@ test("repo product versions lockstep to package.json", () => {
   assert.equal(r.files[".claude-plugin/plugin.json"], VERSION);
   assert.equal(r.files["package-lock.json"], VERSION);
   assert.equal(r.files['package-lock.json#packages[""]'], VERSION);
-  assert.equal(r.files["skills/mental/SKILL.md"], VERSION);
+  assert.equal(r.files["skill/mental/SKILL.md"], VERSION);
   assert.equal(r.files["optional/mental-track/SKILL.md"], VERSION);
   assert.equal(r.files[".claude-plugin/marketplace.json"], null);
 });
 
 test("applyProductVersion rewrites json + skill metadata", () => {
   const dir = mkdtempSync(join(tmpdir(), "mental-lockstep-"));
-  const skillDir = join(dir, "skills", "mental");
+  const skillDir = join(dir, "skill", "mental");
   mkdirSync(skillDir, { recursive: true });
   mkdirSync(join(dir, ".cursor-plugin"));
   mkdirSync(join(dir, ".claude-plugin"));
@@ -57,7 +57,7 @@ test("applyProductVersion rewrites json + skill metadata", () => {
 
 test("readProductVersions fails when a shim drifts", () => {
   const dir = mkdtempSync(join(tmpdir(), "mental-lockstep-"));
-  mkdirSync(join(dir, "skills", "mental"), { recursive: true });
+  mkdirSync(join(dir, "skill", "mental"), { recursive: true });
   mkdirSync(join(dir, ".cursor-plugin"));
   mkdirSync(join(dir, ".claude-plugin"));
   writeFileSync(join(dir, "package.json"), `${JSON.stringify({ version: "1.0.0" }, null, 2)}\n`);
@@ -70,7 +70,7 @@ test("readProductVersions fails when a shim drifts", () => {
   );
   writeFileSync(join(dir, "package-lock.json"), `${JSON.stringify({ version: "1.0.0" }, null, 2)}\n`);
   writeFileSync(
-    join(dir, "skills", "mental", "SKILL.md"),
+    join(dir, "skill", "mental", "SKILL.md"),
     `---\nname: mental\nmetadata:\n  version: "1.0.0"\n---\n`,
   );
   const r = readProductVersions(dir);
@@ -80,7 +80,7 @@ test("readProductVersions fails when a shim drifts", () => {
 
 test("marketplace plugin entry version is drift", () => {
   const dir = mkdtempSync(join(tmpdir(), "mental-lockstep-"));
-  mkdirSync(join(dir, "skills", "mental"), { recursive: true });
+  mkdirSync(join(dir, "skill", "mental"), { recursive: true });
   mkdirSync(join(dir, ".cursor-plugin"));
   mkdirSync(join(dir, ".claude-plugin"));
   const v = { version: "1.0.0" };
@@ -94,7 +94,7 @@ test("marketplace plugin entry version is drift", () => {
     `${JSON.stringify({ plugins: [{ source: "./", version: "1.0.0" }] }, null, 2)}\n`,
   );
   writeFileSync(
-    join(dir, "skills", "mental", "SKILL.md"),
+    join(dir, "skill", "mental", "SKILL.md"),
     `---\nname: mental\nmetadata:\n  version: "1.0.0"\n---\n`,
   );
   const r = readProductVersions(dir);

@@ -21,10 +21,18 @@ function mentionedCommands(text) {
 }
 
 test("skill and rule command names are in the catalog", () => {
-  const skill = stripFrontmatter(readFileSync(join(ROOT, "skills/mental/SKILL.md"), "utf8"));
+  const skill = stripFrontmatter(readFileSync(join(ROOT, "skill/mental/SKILL.md"), "utf8"));
   const rule = stripFrontmatter(readFileSync(join(ROOT, "rules/mental.mdc"), "utf8"));
-  const refs = readFileSync(join(ROOT, "skills/mental/references/cli.md"), "utf8");
+  const refs = readFileSync(join(ROOT, "skill/mental/references/cli.md"), "utf8");
   for (const name of mentionedCommands(`${skill}\n${rule}\n${refs}`)) {
     assert.ok(KNOWN.has(name), `skill/rule mentions mental ${name} which is not in the catalog`);
+  }
+});
+
+test("plugin bootstrap skill only names setup commands", () => {
+  const setup = stripFrontmatter(readFileSync(join(ROOT, "skills/mental-setup/SKILL.md"), "utf8"));
+  const allowed = new Set(["install", "doctor", "help", "where", "option"]);
+  for (const name of mentionedCommands(setup)) {
+    assert.ok(allowed.has(name), `bootstrap mentions mental ${name}`);
   }
 });

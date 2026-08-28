@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "mental": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/cli.mjs", "serve"]
-    }
-  }
-}

@@ -60,7 +60,7 @@ Mid-chat, not just start/finish:
 - The **skill** — procedure (when to journal, CLI contract, privacy). Model-invocable and user `/mental`.
 - A **tiny always-on rule** — pointer, not the full lifecycle.
 
-Source: [skills/mental/SKILL.md](../skills/mental/SKILL.md) and [rules/mental.mdc](../rules/mental.mdc).
+Source: [skill/mental/SKILL.md](../skill/mental/SKILL.md) and [rules/mental.mdc](../rules/mental.mdc).
 
 Mental is **not** a todo app. Do not store transcripts. Do not duplicate `PLAN.md`. Create a decision only when it constrains the future. Attention is residue, not a backlog.
 
@@ -81,10 +81,10 @@ Full table and read-only shape: the skill.
 The repo root **is** the plugin root ([spec](https://agent-plugins.org/specification)):
 
 - `plugin.json` — closed manifest
-- `skills/mental/` — discovered as an immediate child of `skills/`
-- `mcp.json` — stdio `./bin/cli.mjs serve`
+- `skills/mental-setup/` — bootstrap: install the CLI (immediate child of `skills/`)
+- `skill/mental/` — full procedure, copied by `mental install` (not plugin-discovered)
 
-Compatible clients (Cursor, VS Code, GitHub Copilot, ChatGPT/Codex, Kiro) load the same directory. Rules and hooks stay client-specific and install via `mental install` / `mental hooks on`.
+Compatible clients (Cursor, VS Code, GitHub Copilot, ChatGPT/Codex, Kiro) load the same directory. Native plugin does **not** start MCP. Rules and hooks stay client-specific and install via `mental install` / `mental hooks on`. Optional MCP is `mental serve` / `mental install --mcp` only.
 
 When **releasing this repo**, git tag `vX.Y.Z`, `package.json`, and `npm view @balacode/mental version` must be the same string. Follow [`.cursor/rules/release.mdc`](../.cursor/rules/release.mdc). [README](../README.md#releasing-this-repo) restates that; the agent install paste does not.
 

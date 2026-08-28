@@ -27,20 +27,20 @@ Install Mental from https://github.com/afaraha8403/mental.
 
 Mental is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air.
 
-The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skill at skills/mental/, MCP at mcp.json.
+The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. The plugin skill is setup (install the CLI), not a second procedure. Native plugin does not start MCP.
 
-If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then put the CLI on PATH and finish setup:
+If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH and finish setup:
 
   npm i -g @balacode/mental
   mental install
   mental doctor
 
-Native plugin install is a second channel. `mental install` refreshes the CLI and skill copies, not this client's plugin cache. If the plugin UI shows an older version, update it there. After doctor, tell me what it reports.
+The plugin is discovery. npm + `mental install` are the source of truth for the binary and the procedure. After doctor, tell me what it reports.
 
 After doctor, ask whether I want optional hooks or time tracking, and whether MCP is needed for this client. Give a one-liner for each, then wait — never run `mental option … on` until I say yes this turn.
 
 - hooks: session-start snippets so a new chat loads Mental status (default off)
-- MCP: register `mental serve` for tool-only agents that cannot shell the CLI (skip if this client already loaded the plugin MCP or can run `mental`)
+- MCP: register `mental serve` for tool-only agents that cannot shell the CLI (skip if this client can run `mental`)
 - time tracking: optional per-project wall/user timers (default off)
 ```
 
@@ -48,7 +48,7 @@ After doctor, ask whether I want optional hooks or time tracking, and whether MC
 
 These steps are for a **human in that client**. Do not paste this whole list into an agent — it will run the wrong host's commands. The agent paste above stays gated: this client only, then `mental install`.
 
-Plugin install loads the skill and MCP from a git clone the host caches. Still run `mental install` so the CLI, skill, and tiny always-on rule land on this machine. Upgrading the CLI does **not** refresh that cache — after a release, update the plugin in the host. `mental doctor` warns when a host plugin or a copied skill is behind the CLI.
+Plugin install loads the setup skill from a git clone the host caches. It does **not** start MCP. Still run `mental install` so the CLI, full procedure, and tiny always-on rule land on this machine. Upgrading the CLI does **not** refresh that cache — after a release, update the plugin in the host. `mental doctor` warns when a host plugin or a copied skill is behind the CLI.
 
 **Cursor** — [Customize](https://cursor.com/docs/plugins) → Plugins → install. From GitHub today: **+ Add** / install from source with `https://github.com/afaraha8403/mental`, or symlink for local load:
 
@@ -91,8 +91,8 @@ Mental is packaged as a portable [Agent Plugins 1.0.0](https://agent-plugins.org
 | Piece | Where | Role |
 | --- | --- | --- |
 | `plugin.json` | repo root | Manifest (`$schema` + `name`). The portable schema has no icon field. |
-| `skills/mental/` | Agent Skills | Procedure: when to journal, CLI contract, privacy |
-| `mcp.json` | repo root | stdio MCP → `./bin/cli.mjs serve` (`cwd` `${PLUGIN_ROOT}`) |
+| `skills/mental-setup/` | Agent Skills | Bootstrap: install the CLI |
+| `skill/mental/` | `mental install` | Full procedure (not plugin-discovered) |
 
 Cursor extras live in `.cursor-plugin/plugin.json` (logo). Claude Code extras live in `.claude-plugin/plugin.json` (`displayName: Mental`) and `.claude-plugin/marketplace.json`. Rules and hooks are **not** portable v1 components — they still come from `mental install` / `mental hooks on`.
 

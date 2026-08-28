@@ -15,7 +15,7 @@ Mental is a local-first continuity layer for you and your coding agents. This hu
 Also in-repo, not rewritten here:
 
 - [PLAN.md](../PLAN.md) — product spec (source of truth for behavior)
-- [skills/mental/SKILL.md](../skills/mental/SKILL.md) — the procedure agents load
+- [skill/mental/SKILL.md](../skill/mental/SKILL.md) — the procedure agents load
 - [CHANGELOG.md](../CHANGELOG.md) — what shipped
 
 OKF markdown is the source of truth. SQLite is a derived cache. Agents call `mental … --json`. They do not grep YAML.

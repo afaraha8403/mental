@@ -3,11 +3,15 @@
  */
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BEGIN, END, OPTIONAL_DIR, RULES_DIR, SKILLS_DIR } from "./pkg.mjs";
+import { BEGIN, END, OPTIONAL_DIR, PKG_ROOT, RULES_DIR } from "./pkg.mjs";
 import { loadConfig } from "./config.mjs";
 
+/**
+ * Directory of the full Mental procedure copied by `mental install`.
+ * Kept out of plugin `skills/` so Agent Plugins does not auto-load it.
+ */
 export function skillSourceDir() {
-  return join(SKILLS_DIR, "mental");
+  return join(PKG_ROOT, "skill", "mental");
 }
 
 export function ruleSourceFile() {

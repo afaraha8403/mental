@@ -213,7 +213,7 @@ Default git policy for `./.mental/` and `.mental-id`: **not tracked**. Installer
 
 ### 3.3 OKF concept types (keep Mental’s current vocabulary)
 
-Port templates from [skills/mental/references/templates.md](skills/mental/references/templates.md):
+Port templates from [skill/mental/references/templates.md](skill/mental/references/templates.md):
 
 
 | `type` (required) | Path                           | `status` values                                |
@@ -402,7 +402,7 @@ Approximate text:
 - If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, continue the user’s coding task and mention install.
 - Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
 
-### 8.3 Skill body (port from [skills/mental/SKILL.md](skills/mental/SKILL.md), rewrite)
+### 8.3 Skill body (port from [skill/mental/SKILL.md](skill/mental/SKILL.md), rewrite)
 
 **Delete:** Balakit `installed.json`, `npx balakit doctor`, “read YAML files yourself.”
 
@@ -418,7 +418,7 @@ Approximate text:
 - `~/.config/opencode/skills/mental/`
 - Optional: `.github/skills/mental` only with `--project`
 
-Mirror layout like Balakit: **one source** in the mental repo `skills/mental/`, copy to user dirs. Do not maintain five hand-edited copies in the product repo beyond documented mirrors if you use a tiny `scripts/install-skills.mjs`.
+Mirror layout like Balakit: **one source** in the mental repo `skill/mental/`, copy to user dirs. Do not maintain five hand-edited copies in the product repo beyond documented mirrors if you use a tiny `scripts/install-skills.mjs`. Plugin hosts load `skills/mental-setup/` only (install the CLI).
 
 ### 8.4 Hooks (optional, default off)
 
@@ -435,13 +435,14 @@ Never Stop auto-journal.
 
 ### 8.6 Agent Plugins package (portable)
 
-The repo root **is** the plugin root ([Agent Plugins 1.0.0](https://agent-plugins.org/specification)):
+The repo root **is** the plugin root ([Agent Plugins 1.0.0](https://agent-plugins.org/specification)). Skills-only: missing `mcp.json` is not an error.
 
 - `plugin.json` — closed manifest (`$schema` + `name` required). No inline MCP, hooks, or rules in this file.
-- `skills/mental/SKILL.md` — discovered as the immediate child of `skills/`.
-- `mcp.json` — stdio `mental` → `./bin/cli.mjs serve` (plugin-relative command; `cwd` `${PLUGIN_ROOT}`).
+- `skills/mental-setup/SKILL.md` — discovered as the immediate child of `skills/`. Bootstrap: install the CLI (`npm i -g` + `mental install`). Not a second procedure.
+- `skill/mental/` — full CLI-first procedure + `references/`. Copied by `mental install` only. **Not** under `skills/` (same reason track lives in `optional/`).
+- No `mcp.json` / `.mcp.json`. Native plugin does **not** start MCP. Optional MCP is PATH `mental serve` via `mental install --mcp` only.
 
-Rules and hooks stay client-specific (`rules/mental.mdc`, `hooks/session-start.sh`) and install via `mental install` / `mental hooks on`. They are not portable v1 components. Cursor-facing extras live in `.cursor-plugin/plugin.json` (`logo: assets/logo.png`). Claude Code extras live in `.claude-plugin/plugin.json` (`displayName: Mental`, `mcpServers: ./mcp.json`). Do not put `logo` on the portable `plugin.json` — the schema is closed.
+Rules and hooks stay client-specific (`rules/mental.mdc`, `hooks/session-start.sh`) and install via `mental install` / `mental hooks on`. They are not portable v1 components. Cursor-facing extras live in `.cursor-plugin/plugin.json` (`logo: assets/logo.png`). Claude Code extras live in `.claude-plugin/plugin.json` (`displayName: Mental`) with **no** `mcpServers`. Do not put `logo` on the portable `plugin.json` — the schema is closed.
 
 ---
 
@@ -503,7 +504,6 @@ README.md               # install + mental where/status/search + privacy
 LICENSE                 # MIT
 package.json
 plugin.json             # Agent Plugins 1.0.0 manifest
-mcp.json                # stdio MCP → ./bin/cli.mjs serve
 bin/cli.mjs             # argv router
 bin/commands/*.mjs      # where, status, search, journal, local, remap, doctor, install, hooks, serve
 bin/lib/resolve.mjs     # bundle resolution
@@ -512,8 +512,9 @@ bin/lib/okf.mjs         # parse/write frontmatter, templates
 bin/lib/index.mjs       # sqlite or scan
 bin/lib/git.mjs         # origin normalize, git root
 bin/lib/install-skills.mjs
-skills/mental/SKILL.md
-skills/mental/references/templates.md
+skill/mental/SKILL.md   # full procedure (mental install)
+skill/mental/references/templates.md
+skills/mental-setup/SKILL.md  # plugin bootstrap: install the CLI
 rules/mental.mdc        # tiny alwaysApply pointer (Cursor source)
 hooks/session-start.sh  # calls mental status --json
 test/*.test.mjs         # resolve, bindings, origin normalize (node:test)
@@ -616,9 +617,10 @@ Work in `/home/ali/Development/Projects/balakit` **after** Mental CLI install wo
 ### Phase 9 — Agent Plugins package
 
 - Root `plugin.json` targeting `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json`
-- Root `mcp.json` targeting the matching MCP schema; stdio command `./bin/cli.mjs serve`
-- `skills/mental/` already matches discovery (immediate child + `SKILL.md`)
-- Tests: closed schemas, name rules, command stays inside the plugin root
+- Skills-only plugin: no `mcp.json`. Hosts load `skills/mental-setup/` (install the CLI)
+- Full procedure source is `skill/mental/` (`mental install` only — not under `skills/`)
+- Tests: skills-only plugin still valid; `bin/cli.mjs` exists as the CLI product
+- Optional MCP is PATH `mental serve` via `mental install --mcp` only
 - Do **not** treat rules/hooks as portable components
 
 ---
@@ -727,7 +729,7 @@ Unknown-command `--json`: envelope `code: unknown-command` + `hint` listing Dail
 
 Depends on A+B (help and schema exist).
 
-1. **SKILL.md** keeps *when* to write (orient / residue / park vs handoff / fail-open / receipt). Move flag cheatsheet to `skills/mental/references/cli.md` or tell agents to run `mental <cmd> --help`. Target: body stays procedure; Anthropic Level 3 for flags. Always-on rule stays tiny.
+1. **SKILL.md** keeps *when* to write (orient / residue / park vs handoff / fail-open / receipt). Move flag cheatsheet to `skill/mental/references/cli.md` or tell agents to run `mental <cmd> --help`. Target: body stays procedure; Anthropic Level 3 for flags. Always-on rule stays tiny.
 2. **`--fields`** on heartbeat (and maybe search): `mental heartbeat --json --fields resume,attention`. Compact default unchanged. Do not add a third dump command.
 3. **CI:** test that skill/rule command names ⊆ catalog. Prevents SKILL.md drift (`--foo` that the CLI renamed).
 4. MCP `inputSchema` generated from the catalog for the **existing** tool subset. Do **not** 1:1 map all 25 CLI verbs (OpenAI/Vertex: start with under 20 tools; Anthropic always-loaded band is 3–5). Keep `option` / `track` deferred until those features are on. Add `against` on journal MCP (today missing). Enum `kind` / `status` where the CLI already has a closed set.

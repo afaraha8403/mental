@@ -5,12 +5,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
-const MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
 const PLUGIN_FIELDS = new Set([
   "$schema",
   "name",
@@ -25,7 +24,6 @@ const PLUGIN_FIELDS = new Set([
 ]);
 const NAME_RE = /^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
 const SKILL_NAME_RE = /^(?!-)(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const CWD_RE = /^(?:\.\/|\$\{PLUGIN_ROOT\}(?:\/|$)|\$\{PLUGIN_DATA\}(?:\/|$))/;
 const SKILL_FRONTMATTER_KEYS = new Set([
   "name",
   "description",
@@ -37,11 +35,6 @@ const SKILL_FRONTMATTER_KEYS = new Set([
 
 function loadJson(file) {
   return JSON.parse(readFileSync(file, "utf8"));
-}
-
-function schemaVersion(id) {
-  const m = String(id).match(/\/schemas\/(\d+\.\d+\.\d+)\//);
-  return m ? m[1] : null;
 }
 
 function parseFrontmatter(md) {
@@ -134,54 +127,16 @@ test("plugin.json is a closed Agent Plugins 1.0.0 manifest", () => {
   }
 });
 
-test("mcp.json is a closed stdio MCP config matching plugin.json version", () => {
-  const file = join(ROOT, "mcp.json");
-  assert.equal(statSync(file).isFile(), true);
-  const mcp = loadJson(file);
-  const plugin = loadJson(join(ROOT, "plugin.json"));
-  assert.equal(mcp.$schema, MCP_SCHEMA);
-  assert.equal(schemaVersion(mcp.$schema), schemaVersion(plugin.$schema));
-  assert.deepEqual(Object.keys(mcp).sort(), ["$schema", "mcpServers"]);
-  assert.equal(typeof mcp.mcpServers, "object");
-  const mental = mcp.mcpServers.mental;
-  assert.ok(mental, "mcpServers.mental is required");
-  assert.equal(mental.type, "stdio");
-  assert.equal(mental.command, "./bin/cli.mjs");
-  assert.deepEqual(mental.args, ["serve"]);
-  assert.match(mental.cwd, CWD_RE);
-  for (const [name, server] of Object.entries(mcp.mcpServers)) {
-    assert.ok(["stdio", "streamable-http", "sse"].includes(server.type), `${name}: unknown type`);
-    if (server.type === "stdio") {
-      assert.equal(typeof server.command, "string");
-      assert.ok(server.command === server.command.trim());
-      assert.equal(server.command.includes(" "), false, `${name}: command must be one token`);
-      const rel = server.command.startsWith("./");
-      const bare = /^[A-Za-z0-9._-]+$/.test(server.command);
-      assert.ok(rel || bare, `${name}: command must be ./relative or a bare name`);
-      if (rel) {
-        const abs = resolve(ROOT, server.command);
-        assert.ok(abs.startsWith(ROOT), `${name}: command escapes plugin root`);
-        assert.equal(existsSync(abs), true, `${name}: bundled command missing`);
-      }
-      if (server.cwd) assert.match(server.cwd, CWD_RE);
-      if (server.env) {
-        assert.equal("PLUGIN_ROOT" in server.env, false);
-        assert.equal("PLUGIN_DATA" in server.env, false);
-      }
-    } else {
-      assert.equal(typeof server.url, "string");
-      const u = new URL(server.url);
-      assert.ok(u.protocol === "https:" || u.hostname === "localhost");
-      assert.equal(u.username || u.password, "");
-      assert.equal(u.hash, "");
-    }
-  }
+test("plugin is skills-only: no clone MCP config", () => {
+  assert.equal(existsSync(join(ROOT, "mcp.json")), false);
+  assert.equal(existsSync(join(ROOT, ".mcp.json")), false);
 });
 
 test("skills/ discovers only immediate children with SKILL.md", () => {
   const skillsDir = join(ROOT, "skills");
   const names = readdirSync(skillsDir).filter((n) => statSync(join(skillsDir, n)).isDirectory());
-  assert.ok(names.includes("mental"));
+  assert.ok(names.includes("mental-setup"));
+  assert.equal(names.includes("mental"), false, "full procedure must not live under plugin skills/");
   assert.equal(names.includes("mental-track"), false, "track skill must not live under plugin skills/");
   for (const name of names) {
     const skillDir = join(skillsDir, name);
@@ -205,9 +160,8 @@ test("skills/ discovers only immediate children with SKILL.md", () => {
       for (const v of Object.values(fm.metadata)) {
         assert.equal(typeof v, "string", `${name}: metadata values must be strings`);
       }
-      if (name === "mental") {
-        const pkg = loadJson(join(ROOT, "package.json"));
-        assert.equal(fm.metadata.version, pkg.version);
+      if (name === "mental-setup") {
+        assert.equal(fm.metadata?.version, undefined, "bootstrap skill omits product version");
       }
     }
     const refs = join(skillDir, "references");
@@ -222,14 +176,13 @@ test("skills/ discovers only immediate children with SKILL.md", () => {
 });
 
 test("plugin package paths stay inside the plugin root", () => {
-  const mcp = loadJson(join(ROOT, "mcp.json"));
-  const cmd = resolve(ROOT, mcp.mcpServers.mental.command);
-  assert.equal(relative(ROOT, cmd).startsWith(".."), false);
   assert.equal(existsSync(join(ROOT, "bin", "cli.mjs")), true);
   const pkg = loadJson(join(ROOT, "package.json"));
-  for (const extra of ["plugin.json", "mcp.json", "assets"]) {
+  for (const extra of ["plugin.json", "skill", "assets"]) {
     assert.ok(pkg.files.includes(extra), `package.json files must include ${extra}`);
   }
+  assert.equal(pkg.files.includes("mcp.json"), false);
+  assert.equal(pkg.files.includes(".mcp.json"), false);
 });
 
 test("Cursor shim points at the PNG logo; Claude shim has displayName", () => {
@@ -250,10 +203,8 @@ test("Cursor shim points at the PNG logo; Claude shim has displayName", () => {
   assert.equal(claude.name, "mental");
   assert.equal(claude.displayName, "Mental");
   assert.equal(claude.version, plugin.version);
-  assert.equal(claude.mcpServers, "./.mcp.json");
-  assert.equal(existsSync(join(ROOT, ".mcp.json")), true);
-  const claudeMcp = loadJson(join(ROOT, ".mcp.json"));
-  assert.equal(claudeMcp.mcpServers.mental.command, "node");
+  assert.equal("mcpServers" in claude, false, "Claude shim must not auto-start clone MCP");
+  assert.equal(existsSync(join(ROOT, ".mcp.json")), false);
   assert.equal(claude.description, plugin.description);
 
   const market = loadJson(join(ROOT, ".claude-plugin", "marketplace.json"));

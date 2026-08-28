@@ -7,13 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Plugin skill is a CLI bootstrap (`skills/mental-setup/`). The full procedure lives in `skill/mental/` and is copied by `mental install`.
+
+### Changes
+
+- Native plugin no longer auto-starts clone MCP from `mcp.json` / `.mcp.json`. Use `mental install --mcp` for PATH `mental serve`. Breaking for plugin-only MCP users.
+
 ## [0.6.0] - 2026-08-28
 
 ### Features
 
-- Grouped CLI help from a single command catalog: `mental -h` (Daily), `mental --help` (all commands), `mental <cmd> --help` (examples first). `mental schema --json` dumps the catalog. `mental completion bash|zsh|fish` prints a completion script.
-- `mental --json` with no command is a heartbeat. Unknown flags fail instead of becoming silent booleans. POSIX `--` ends option parsing (so `mental search -- -label` works).
-- JSON errors include `error.hint`. Usage failures exit 2. Human errors go to stderr; `--json` stays on stdout. `doctor --json` sets `ok: false` when exit is 3. `list` / `search` JSON include `truncated` and `total`. Heartbeat JSON includes `id` and `mode`; `--fields` can mask keys.
+- Single command catalog drives grouped help, `mental schema --json`, shell completions, and MCP `inputSchema`. Groups: Daily, Lookup, Write, Identity, Setup.
+- Progressive help: `mental -h` is Daily (one screen); `mental --help` is all commands grouped; `mental <cmd> --help` and `mental help <cmd>` show that command with examples first, required vs optional, and enums.
+- `mental schema --json` dumps the catalog (no auth, no network). `mental schema <cmd> --json` is one command.
+- `mental completion bash|zsh|fish` prints a completion script from the catalog (does not write shell rc files).
+- `mental --json` with no command is a heartbeat (exit 0). Non-TTY no-args without `--json` still prints help and exits 2.
+- Unknown flags fail (exit 2, `unknown-flag`) instead of becoming silent booleans. Hint lists legal flags for that command.
+- POSIX `--` ends option parsing (`mental search -- -label` is a query, not a flag).
+- JSON errors include `error.hint` (copy-paste next argv). Usage failures exit 2. Human errors go to stderr; `--json` stays on stdout.
+- `doctor --json` sets `ok: false` when process exit is 3 (error-level problems). Warn-only stays `ok: true`.
+- `list` / `search` JSON include `truncated` and `total` (default cap 50).
+- Heartbeat JSON includes `id` and `mode` so agents can skip a `where` round-trip.
+- `mental heartbeat --json --fields resume,attention` masks keys. `--fields` with no value lists legal names.
+- `--plain` / `--no-color`, plus `NO_COLOR` (any non-empty) and `TERM=dumb`: no emoji, no ANSI. `MENTAL_ASCII` still strips emoji only.
+- TTY heartbeat footer: `more · mental doctor · mental search · mental --help`.
+- TTY-only “did you mean” for unknown commands. Never auto-run. `--json` hard-fails with `unknown-command` and a Daily hint.
 
 ### Fixes
 
@@ -21,8 +41,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Agent install paste tells the host to use only this client's plugin flow (do not run other hosts' `/plugin` / `copilot plugin` / Command Palette steps). Human plugin steps in `docs/install.md` no longer recommend Cursor `/add-plugin` with a GitHub URL.
-- Skill points agents at `--help` / `schema` instead of inlining a flag table (`skills/mental/references/cli.md`).
+- Agent install paste tells the host to use only this client's plugin flow (do not run other hosts' `/plugin` / `copilot plugin` / Command Palette steps).
+- Human install docs match Cursor Customize / local symlink, Claude slash vs CLI, and Copilot shell. No GitHub URL `/add-plugin`.
+- Skill points agents at `--help` / `schema` instead of inlining a flag table (`skills/mental/references/cli.md`). Procedure stays in SKILL.md.
+- MCP `inputSchema` is generated from the catalog for the existing session subset (identity and setup stay CLI). Journal MCP accepts `against`. Closed enums for `kind` / `status` where the CLI already has them.
 
 ## [0.5.1] - 2026-08-28
 
@@ -159,7 +181,9 @@ First public release of the Mental CLI.
 - `install --mcp` registers `serve`; `decide` updates by title so an open decision can close.
 - Install, doctor, uninstall; hooks stay off by default.
 
-[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/afaraha8403/mental/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/afaraha8403/mental/releases/tag/v0.6.0
+[0.5.1]: https://github.com/afaraha8403/mental/releases/tag/v0.5.1
 [0.5.0]: https://github.com/afaraha8403/mental/releases/tag/v0.5.0
 [0.4.1]: https://github.com/afaraha8403/mental/releases/tag/v0.4.1
 [0.4.0]: https://github.com/afaraha8403/mental/releases/tag/v0.4.0

@@ -29,6 +29,5 @@
     "okf",
     "handoff",
     "context"
-  ],
-  "mcpServers": "./.mcp.json"
+  ]
 }
