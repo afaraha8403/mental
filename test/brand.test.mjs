@@ -67,3 +67,12 @@ test("skill shows a copy-paste receipt example; rule points at it", () => {
   assert.match(rule, /\*\*Kind\*\* › \*action\*/);
   assert.match(rule, /Mental skill/);
 });
+
+test("bootstrap skill omits the receipt example; rule points at Mental skill", () => {
+  const setup = readFileSync(join(ROOT, "skills", "mental-setup", "SKILL.md"), "utf8");
+  assert.doesNotMatch(setup, /🧠 \*\*Mental\*\*/);
+  assert.doesNotMatch(setup, /› \*recorded\*/);
+  const rule = readFileSync(join(ROOT, "rules", "mental.mdc"), "utf8");
+  assert.match(rule, /Mental skill/);
+  assert.doesNotMatch(rule, /mental-setup/);
+});

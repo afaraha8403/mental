@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
@@ -103,6 +103,7 @@ test("plugin.json is a closed Agent Plugins 1.0.0 manifest", () => {
   for (const key of Object.keys(manifest)) {
     assert.ok(PLUGIN_FIELDS.has(key), `unknown plugin.json field: ${key}`);
   }
+  assert.equal("mcpServers" in manifest, false, "portable plugin.json must not declare clone MCP");
   const pkg = loadJson(join(ROOT, "package.json"));
   assert.equal(pkg.name, "@balacode/mental");
   assert.ok(Array.isArray(pkg.keywords));
@@ -178,7 +179,7 @@ test("skills/ discovers only immediate children with SKILL.md", () => {
 test("plugin package paths stay inside the plugin root", () => {
   assert.equal(existsSync(join(ROOT, "bin", "cli.mjs")), true);
   const pkg = loadJson(join(ROOT, "package.json"));
-  for (const extra of ["plugin.json", "skill", "assets"]) {
+  for (const extra of ["plugin.json", "skill", "skills", "assets"]) {
     assert.ok(pkg.files.includes(extra), `package.json files must include ${extra}`);
   }
   assert.equal(pkg.files.includes("mcp.json"), false);
@@ -197,6 +198,7 @@ test("Cursor shim points at the PNG logo; Claude shim has displayName", () => {
   assert.equal(cursor.logo, "assets/logo.png");
   assert.equal(cursor.description, plugin.description);
   assert.equal(cursor.version, plugin.version);
+  assert.equal("mcpServers" in cursor, false, "Cursor shim must not auto-start clone MCP");
   assert.equal(existsSync(join(ROOT, cursor.logo)), true);
 
   const claude = loadJson(join(ROOT, ".claude-plugin", "plugin.json"));
@@ -217,4 +219,22 @@ test("optional mental-track lives outside plugin skills/", () => {
   assert.equal(existsSync(join(ROOT, "optional", "mental-track", "SKILL.md")), true);
   assert.equal(existsSync(join(ROOT, "optional", "mental-track", "rules", "mental-track.mdc")), true);
   assert.equal(existsSync(join(ROOT, "skills", "mental-track")), false);
+});
+
+test("leftover skills/mental/ must not exist; procedure lives in skill/mental/", () => {
+  assert.equal(
+    existsSync(join(ROOT, "skills", "mental")),
+    false,
+    "leftover skills/mental/ would auto-load the full procedure via Agent Plugins",
+  );
+  assert.equal(existsSync(join(ROOT, "skill", "mental", "SKILL.md")), true);
+  assert.equal(existsSync(join(ROOT, "skill", "mental", "references", "cli.md")), true);
+  assert.equal(existsSync(join(ROOT, "skill", "mental", "references", "templates.md")), true);
+});
+
+test("bootstrap skill name is mental-setup; procedure skill name is mental", () => {
+  const setup = parseFrontmatter(readFileSync(join(ROOT, "skills", "mental-setup", "SKILL.md"), "utf8"));
+  assert.equal(setup.name, "mental-setup", "bootstrap name must not collide with the installed procedure skill");
+  const procedure = parseFrontmatter(readFileSync(join(ROOT, "skill", "mental", "SKILL.md"), "utf8"));
+  assert.equal(procedure.name, "mental");
 });

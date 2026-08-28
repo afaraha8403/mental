@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { findMentalPlugin, hostPluginChecks, skipHostPluginCheck } from "../bin/lib/host-plugins.mjs";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
+import { skillMetadataVersion } from "../bin/lib/lockstep.mjs";
 import { VERSION } from "../bin/lib/pkg.mjs";
 
 test("skipHostPluginCheck reads MENTAL_SKIP_HOST_PLUGIN_CHECK", () => {
@@ -84,6 +85,26 @@ test("hostPluginChecks warns when a copied skill is behind", () => {
   assert.equal(skill.ok, false);
   assert.equal(skill.level, "warn");
   assert.match(skill.message, /mental install/);
+});
+
+test("install copies lockstepped procedure skill so hostPluginChecks can compare versions", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const r = mental(home, root, ["install", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const copied = readFileSync(join(home, ".claude", "skills", "mental", "SKILL.md"), "utf8");
+  const copiedVersion = skillMetadataVersion(copied);
+  assert.equal(copiedVersion, VERSION, "copied skill must carry CLI version (bootstrap has none)");
+  const checks = hostPluginChecks({
+    home,
+    version: VERSION,
+    env: { ...gitEnv(home), MENTAL_SKIP_HOST_PLUGIN_CHECK: "0" },
+    spawn: () => ({ status: 127, stdout: "", stderr: "", error: undefined }),
+  });
+  const skill = checks.find((c) => c.id === "skills-version");
+  assert.ok(skill, "missing metadata.version would skip the skills-version check");
+  assert.equal(skill.ok, true);
+  assert.equal(skill.level, "info");
 });
 
 test("doctor reports claude-plugin when a fake claude is on PATH", () => {

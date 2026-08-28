@@ -6,6 +6,7 @@ import { spawnSync } from "node:child_process";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
 import { ensureMentalExcluded, MENTAL_IGNORE_LINE } from "../bin/lib/ignore.mjs";
 import { defaultExcludesFile } from "../bin/lib/ignore.mjs";
+import { skillSourceDir } from "../bin/lib/install-skills.mjs";
 
 const BALAKIT_MENTAL_RULE = `---
 description: Project continuity — derive current state before substantive work.
@@ -158,4 +159,55 @@ ${BALAKIT_MENTAL_RULE}
   const post = mental(home, root, ["doctor", "--json"]);
   const postBody = JSON.parse(post.stdout);
   assert.equal(postBody.data.checks.some((c) => c.id === "legacy-balakit"), false);
+});
+
+test("install copies the full procedure skill, not the plugin bootstrap", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const r = mental(home, root, ["install", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.equal(JSON.parse(r.stdout).ok, true);
+
+  const cursor = readFileSync(join(home, ".cursor", "skills", "mental", "SKILL.md"), "utf8");
+  const claude = readFileSync(join(home, ".claude", "skills", "mental", "SKILL.md"), "utf8");
+  for (const skill of [cursor, claude]) {
+    assert.match(skill, /^name:\s*mental\s*$/m);
+    assert.doesNotMatch(skill, /^name:\s*mental-setup\s*$/m);
+    assert.match(skill, /Mental — project continuity/);
+    assert.doesNotMatch(skill, /Mental setup — install the CLI/);
+  }
+  assert.equal(existsSync(join(home, ".cursor", "skills", "mental", "references", "cli.md")), true);
+});
+
+test("install does not write the plugin bootstrap into user skill dirs", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const r = mental(home, root, ["install", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.equal(JSON.parse(r.stdout).ok, true);
+  assert.equal(existsSync(join(home, ".cursor", "skills", "mental-setup")), false);
+  assert.equal(existsSync(join(home, ".claude", "skills", "mental-setup")), false);
+});
+
+test("skillSourceDir is skill/mental, not the plugin skills/ tree", () => {
+  const src = skillSourceDir();
+  assert.ok(src.endsWith(join("skill", "mental")), src);
+  assert.ok(!src.endsWith(join("skills", "mental")), src);
+  assert.equal(existsSync(join(src, "SKILL.md")), true);
+});
+
+test("install --project vendors the procedure skill into the repo", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const r = mental(home, root, ["install", "--json", "--project"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, true);
+  const vendored = join(root, ".github", "skills", "mental");
+  assert.equal(existsSync(join(vendored, "SKILL.md")), true);
+  const skill = readFileSync(join(vendored, "SKILL.md"), "utf8");
+  assert.match(skill, /Mental — project continuity/);
+  assert.doesNotMatch(skill, /Mental setup — install the CLI/);
+  assert.equal(existsSync(join(vendored, "references", "cli.md")), true);
+  assert.equal(existsSync(join(root, ".github", "skills", "mental-setup")), false);
 });

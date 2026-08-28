@@ -36,3 +36,36 @@ test("plugin bootstrap skill only names setup commands", () => {
     assert.ok(allowed.has(name), `bootstrap mentions mental ${name}`);
   }
 });
+
+test("bootstrap skill does not leak continuity commands or auto-enable optionals", () => {
+  const setup = stripFrontmatter(readFileSync(join(ROOT, "skills/mental-setup/SKILL.md"), "utf8"));
+  const mentioned = mentionedCommands(setup);
+  const forbidden = [
+    "journal",
+    "heartbeat",
+    "handoff",
+    "decide",
+    "park",
+    "pulse",
+    "search",
+    "serve",
+    "track",
+    "attention",
+    "note",
+    "list",
+    "show",
+    "status",
+  ];
+  for (const name of forbidden) {
+    assert.equal(mentioned.has(name), false, `bootstrap leaks continuity command: mental ${name}`);
+  }
+  // Letter-start option name so ellipsis prose (`mental option … on`) is not a false positive.
+  assert.doesNotMatch(setup, /\bmental option [a-z][a-z0-9-]* on\b/);
+});
+
+test("bootstrap skill fails open, skips plugin MCP, and omits the procedure receipt", () => {
+  const setup = readFileSync(join(ROOT, "skills/mental-setup/SKILL.md"), "utf8");
+  assert.match(setup, /Missing Mental must not block the user's coding task \(fail open\)/);
+  assert.match(setup, /Do not start a plugin MCP server/);
+  assert.doesNotMatch(setup, /🧠 \*\*Mental\*\*/);
+});

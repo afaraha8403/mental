@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { encode, handle, runTool, serveMcp } from "../bin/lib/mcp.mjs";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
+import { CMD } from "../bin/lib/pkg.mjs";
 
 test("uninstall removes skill copies and leaves OKF unless DELETE", () => {
   const home = tempHome();
@@ -52,10 +53,13 @@ test("install --mcp writes user MCP configs without enabling hooks", () => {
   assert.equal(r.status, 0, r.stderr || r.stdout);
   const body = JSON.parse(r.stdout);
   assert.equal(body.data.mcp.ok, true);
+  assert.equal(body.data.mcp.server.command, CMD);
   assert.equal(body.data.mcp.server.args[0], "serve");
+  assert.doesNotMatch(JSON.stringify(body.data.mcp.server), /cli\.mjs/);
   for (const file of [join(home, ".cursor", "mcp.json"), join(home, ".claude.json")]) {
     const cfg = JSON.parse(readFileSync(file, "utf8"));
-    assert.deepEqual(cfg.mcpServers.mental, { command: "mental", args: ["serve"] });
+    assert.deepEqual(cfg.mcpServers[CMD], { command: CMD, args: ["serve"] });
+    assert.doesNotMatch(cfg.mcpServers[CMD].command, /[/\\]|cli\.mjs/);
   }
   assert.equal(existsSync(join(home, ".cursor", "hooks.json")), false);
 
