@@ -54,7 +54,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH. From a published install, upgrades when npm is ahead then re-runs so skills match. `--mcp` registers MCP; `--hooks` / `--track` only after the user says yes this turn. JSON includes `optionals[]` (`needsConsent: true`) |
 | `mental uninstall` | Remove installed skill / rule / hooks / MCP / mental-track copies |
 | `mental option` | List or set optional features (`track` per UUID; `mcp` / `hooks` user-global). `--all` sets track default on. `--this` before a UUID is usage |
-| `mental track` | Optional wall/user timers (off until `option track on`). One live clock; stop sets `user = wall`. Export `--out` must be outside the git worktree. [What it can and cannot do](./track.md) |
+| `mental track` | Optional automated project-time record (off until `option track on`): private/customer copy, wall/billable, several clocks, dated client export. [Full contract](./track.md) |
 | `mental hooks on\|off` | Optional session hooks (default off; alias of `option hooks`) |
 | `mental serve` | Optional MCP stdio (session verbs: heartbeat, journal, park, …). Identity/setup stay CLI |
 | `mental doctor` | PATH, bindings, ignore, skills, npm update, host plugin / skill-copy lag, decision budget, stale residue, `optionals[]`, `time.sqlite` never git-tracked (exit 3). `--fix-ignore` adds `.mental/` to global excludes. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns). `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips host CLIs. |
@@ -71,6 +71,9 @@ mental attention --title "Come back to MCP" --kind thread --status later --via c
 mental attention --title "Resolver tests not reviewed" --kind verify --via cursor
 mental attention --title "Tom said ship the pointer not the dump" --status resolved
 mental note --title "Identity is a UUID in bindings.json"
+mental track start --title-internal "Auth callback" --via cursor
+mental park --resume "Exact next action — open loops: none"
+mental track report --since 2026-08-01 --until 2026-08-31
 ```
 
 Journal contract (one section per task, not per chat turn):
@@ -121,7 +124,7 @@ time.sqlite                # optional hours (off until `mental option track on`;
 
 Index: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` (rebuildable). Hours are **not** in the index — they live in bundle `time.sqlite`.
 
-Optional timers are default **off**. When on: start at hop begin; park / handoff / journal set `user = wall`; heartbeat JSON may include `track.unclocked` (gap flag, not hours); report may include `unclockedCommitDays` (git dates with no slice — not hours). TTY heartbeat and pulse never show hours. What Track [can and cannot do](./track.md).
+Optional timers are default **off**. When on, agents generate private and customer-ready title/body fields from current work and refresh them at park, journal, or handoff. `track start` is ensure-running; `--new` starts another clock; billable defaults to wall. Missing customer copy returns structured `review` JSON. Customer export rows contain date, work description, wall, and billable. TTY heartbeat and pulse never show hours. [Full Track contract](./track.md).
 
 Pulse watermark: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json` (`{ at: iso }` — rebuildable, not SoT). Written after delta by `pulse` / `park` / `handoff`; **heartbeat never writes it**.
 

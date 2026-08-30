@@ -1,12 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, posix as posixPath, win32 as win32Path } from "node:path";
 import { spawnSync } from "node:child_process";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
 import { ensureMentalExcluded, MENTAL_IGNORE_LINE } from "../bin/lib/ignore.mjs";
 import { defaultExcludesFile } from "../bin/lib/ignore.mjs";
 import { skillSourceDir } from "../bin/lib/install-skills.mjs";
+import {
+  cliInvoke,
+  npmGlobalBinPath,
+  npmGlobalCliScript,
+  userPathBin,
+  windowsCmdShim,
+} from "../bin/lib/install-cli.mjs";
 
 const BALAKIT_MENTAL_RULE = `---
 description: Project continuity — derive current state before substantive work.
@@ -34,6 +41,8 @@ test("mental install --json copies skill + rule and creates ~/.mental skeleton",
   assert.equal(existsSync(join(home, ".mental", "index.md")), true);
   assert.match(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8"), /BEGIN mental/);
   assert.doesNotMatch(readFileSync(join(home, ".claude", "skills", "mental", "SKILL.md"), "utf8"), /balakit/i);
+  assert.match(body.data.cli.script, /cli\.mjs$/);
+  assert.doesNotMatch(body.data.cli.bin, /\.mjs$/);
   const bin = join(home, ".local", "bin", "mental");
   assert.equal(existsSync(bin), true, "install should put mental on ~/.local/bin");
   const ver = spawnSync(bin, ["--version"], { encoding: "utf8", env: gitEnv(home) });
@@ -210,4 +219,41 @@ test("install --project vendors the procedure skill into the repo", () => {
   assert.doesNotMatch(skill, /Mental setup — install the CLI/);
   assert.equal(existsSync(join(vendored, "references", "cli.md")), true);
   assert.equal(existsSync(join(root, ".github", "skills", "mental-setup")), false);
+});
+
+test("Windows PATH bins are mental.cmd, never a raw .mjs", () => {
+  const prefix = "C:\\Users\\a\\AppData\\Roaming\\npm";
+  const home = "C:\\Users\\a";
+  const modules = win32Path.join(prefix, "node_modules");
+  assert.equal(npmGlobalBinPath(prefix, "mental", "win32"), win32Path.join(prefix, "mental.cmd"));
+  assert.equal(
+    userPathBin(home, "mental", "win32"),
+    win32Path.join(home, ".local", "bin", "mental.cmd"),
+  );
+  assert.equal(
+    npmGlobalCliScript(modules, "@balacode/mental", "win32"),
+    win32Path.join(modules, "@balacode", "mental", "bin", "cli.mjs"),
+  );
+  assert.equal(npmGlobalBinPath("/usr/local", "mental", "linux"), posixPath.join("/usr/local", "bin", "mental"));
+  assert.equal(userPathBin("/home/a", "mental", "linux"), posixPath.join("/home/a", ".local", "bin", "mental"));
+});
+
+test("CLI invoke always runs node, never the .mjs as argv0", () => {
+  const inv = cliInvoke("/tmp/cli.mjs", ["install", "--json"]);
+  assert.equal(inv.command, process.execPath);
+  assert.equal(inv.args[0], "/tmp/cli.mjs");
+  assert.deepEqual(inv.args.slice(1), ["install", "--json"]);
+  assert.doesNotMatch(inv.command, /\.mjs$/i);
+});
+
+test("Windows cmd shim forwards argv through node", () => {
+  const body = windowsCmdShim(
+    "C:\\Program Files\\nodejs\\node.exe",
+    "C:\\npm\\node_modules\\@balacode\\mental\\bin\\cli.mjs",
+  );
+  assert.match(body, /^@echo off/i);
+  assert.match(body, /node\.exe/);
+  assert.match(body, /cli\.mjs/);
+  assert.match(body, /%\*/);
+  assert.doesNotMatch(body, /^[^"\r\n]*cli\.mjs/m);
 });

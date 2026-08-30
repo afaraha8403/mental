@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { git, initRepo, mental, tempHome } from "./helpers.mjs";
 import { TIME_DB, backupTimeDb, openTimeDb, timeDbPath } from "../bin/lib/time.mjs";
 import { importLegacyBundle } from "../bin/lib/import-legacy.mjs";
@@ -38,33 +38,236 @@ function getRow(root, id) {
   return row;
 }
 
-test("new start stops every running interval; one live clock", () => {
+test("same-day start is ensure-running; title amends; one sit-down clock", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
   const a = parseOk(
-    mental(home, root, ["track", "start", "--json", "--title-internal", "Task A"]),
+    mental(home, root, ["track", "start", "--json", "--via", "cursor", "--title-internal", "Task A"]),
     "start A",
   );
+  assert.equal(a.data.ensured, false);
   const b = parseOk(
-    mental(home, root, ["track", "start", "--json", "--title-internal", "Task B"]),
+    mental(home, root, ["track", "start", "--json", "--via", "claude-code", "--title-internal", "Task B"]),
     "start B",
   );
-  assert.notEqual(a.data.id, b.data.id);
-  assert.equal(b.data.focused, true);
+  assert.equal(b.data.ensured, true);
+  assert.equal(a.data.id, b.data.id);
+  assert.equal(b.data.title_internal, "Task B");
+  assert.equal(b.data.started, a.data.started);
   const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
   const prior = getRow(slice, a.data.id);
-  assert.equal(prior.status, "stopped");
-  assert.equal(prior.needs_user, 0);
-  assert.ok(prior.user);
+  assert.equal(prior.status, "running");
+  assert.equal(prior.via, "cursor");
   const glance = parseOk(mental(home, root, ["track", "--json"]), "glance");
   assert.equal(glance.data.running.length, 1);
-  assert.equal(glance.data.running[0].id, b.data.id);
+  assert.equal(glance.data.running[0].id, a.data.id);
   const stopped = parseOk(mental(home, root, ["track", "stop", "--json"]), "stop focused");
   assert.equal(stopped.data.stopped.length, 1);
   assert.equal(stopped.data.stopped[0].id, b.data.id);
   const after = parseOk(mental(home, root, ["track", "--json"]), "glance empty");
   assert.equal(after.data.running.length, 0);
+});
+
+test("--new starts a second clock; ensure-running keeps both continuable", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const a = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Acme"]),
+    "start Acme",
+  );
+  const b = parseOk(
+    mental(home, root, [
+      "track",
+      "start",
+      "--json",
+      "--new",
+      "--title-internal",
+      "Internal",
+      "--title-external",
+      "Platform maintenance",
+    ]),
+    "start --new",
+  );
+  assert.equal(b.data.ensured, false);
+  assert.notEqual(a.data.id, b.data.id);
+  assert.notEqual(a.data.task_id, b.data.task_id);
+  assert.equal(b.data.title_external, "Platform maintenance");
+  const glance = parseOk(mental(home, root, ["track", "--json"]), "two clocks");
+  assert.equal(glance.data.running.length, 2);
+  assert.equal(glance.data.overlap.length, 0);
+  const ping = parseOk(mental(home, root, ["track", "start", "--json", "--via", "claude-code"]), "ensure");
+  assert.equal(ping.data.ensured, true);
+  assert.equal(ping.data.id, b.data.id);
+  const labeled = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-external", "Invoice line"]),
+    "ensure external",
+  );
+  assert.equal(labeled.data.ensured, true);
+  assert.equal(labeled.data.id, b.data.id);
+  assert.equal(labeled.data.title_external, "Invoice line");
+  const still = parseOk(mental(home, root, ["track", "--json"]), "still two");
+  assert.equal(still.data.running.length, 2);
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  assert.equal(getRow(slice, a.data.id).status, "running");
+  assert.equal(getRow(slice, b.data.id).status, "running");
+});
+
+test("extra running row on the same task is closed at last_seen", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const a = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Keep"]),
+    "start",
+  );
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const extraId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+  const lastSeen = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  opened.db
+    .prepare(
+      `INSERT INTO intervals (
+        id, type, status, title_internal, title_external, body_internal, body_external,
+        project_name, started, stopped, last_seen_at, focused, against, via, timestamp,
+        task_id, stale_stop, discarded, needs_user, needs_external
+      ) VALUES (?, 'Time', 'running', 'Dup', '', '', '', '', ?, NULL, ?, 0, '', '', ?, ?, 0, 0, 0, 0)`,
+    )
+    .run(extraId, a.data.started, lastSeen, a.data.timestamp || lastSeen, a.data.task_id);
+  opened.db.close();
+  const ping = parseOk(mental(home, root, ["track", "start", "--json"]), "ensure extras");
+  assert.equal(ping.data.ensured, true);
+  assert.equal(ping.data.id, a.data.id);
+  const extra = getRow(slice, extraId);
+  assert.equal(extra.status, "stopped");
+  assert.equal(extra.stopped, lastSeen);
+  const glance = parseOk(mental(home, root, ["track", "--json"]), "one runner");
+  assert.equal(glance.data.running.length, 1);
+});
+
+test("stop --billable records less than wall; --user is an alias; JSON has billable", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const started = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Invoice"]),
+    "start",
+  );
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const startedAt = new Date(Date.now() - 90 * 60 * 1000).toISOString();
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  opened.db.prepare("UPDATE intervals SET started = ?, last_seen_at = ? WHERE id = ?").run(
+    startedAt,
+    startedAt,
+    started.data.id,
+  );
+  opened.db.close();
+  const both = parseErr(
+    mental(home, root, ["track", "stop", "--json", "--billable", "1:00", "--user", "0:30"]),
+    "both flags",
+  );
+  assert.match(both.error.message, /not both/);
+  const stopped = parseOk(
+    mental(home, root, ["track", "stop", "--json", "--billable", "1:00"]),
+    "stop billable",
+  );
+  assert.equal(stopped.data.stopped[0].billable, "1:00");
+  assert.equal(stopped.data.stopped[0].user, "1:00");
+  assert.ok((stopped.data.stopped[0].wall_minutes || 0) >= 89);
+});
+
+test("schema migration preserves legacy user hours as billable", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const started = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Legacy"]),
+    "start",
+  );
+  parseOk(mental(home, root, ["track", "stop", "--json"]), "stop");
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  opened.db.exec("ALTER TABLE intervals DROP COLUMN billable");
+  opened.db.exec("ALTER TABLE intervals DROP COLUMN billable_minutes");
+  opened.db.prepare("UPDATE meta SET value = '1' WHERE key = 'schema'").run();
+  opened.db.close();
+
+  const migrated = openTimeDb(timeDbPath(slice), { write: true });
+  const row = migrated.db
+    .prepare('SELECT "user", user_minutes, billable, billable_minutes FROM intervals WHERE id = ?')
+    .get(started.data.id);
+  migrated.db.close();
+  assert.equal(row.billable, row.user);
+  assert.equal(row.billable_minutes, row.user_minutes);
+});
+
+test("start without --title-internal uses Session", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const started = parseOk(mental(home, root, ["track", "start", "--json"]), "start default title");
+  assert.equal(started.data.ensured, false);
+  assert.equal(started.data.title_internal, "Session");
+  assert.equal(started.data.project_name, basename(root));
+});
+
+test("missing customer copy surfaces a structured review; supplied copy does not", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  parseOk(mental(home, root, ["track", "start", "--json", "--title-internal", "Private wording"]), "start");
+  const missing = parseOk(mental(home, root, ["track", "stop", "--json"]), "stop missing copy");
+  assert.equal(missing.data.review.kind, "customer-copy");
+  assert.equal(missing.data.review.interval_ids.length, 1);
+  assert.equal(missing.data.review.questions.length, 1);
+  assert.equal(missing.data.review.questions[0].id, "customer-copy-action");
+  assert.equal(missing.data.review.questions[0].allow_multiple, false);
+  assert.equal(missing.data.review.questions[0].options[0].id, "generate");
+  assert.match(missing.data.review.questions[0].options[0].label, /\(Recommended\)$/);
+  const blockedOut = join(home, "blocked-customer.csv");
+  const blocked = parseErr(
+    mental(home, root, ["track", "export", "--json", "--external", "--out", blockedOut]),
+    "export missing copy",
+  );
+  assert.equal(blocked.error.code, "needs-customer-copy");
+  assert.equal(blocked.error.review.kind, "customer-copy");
+  assert.equal(existsSync(blockedOut), false);
+  parseOk(
+    mental(home, root, [
+      "track",
+      "amend",
+      "--json",
+      "--id",
+      missing.data.stopped[0].id,
+      "--title-external",
+      "Authentication investigation",
+      "--body-external",
+      "Investigated authentication behavior and documented the resulting improvements.",
+    ]),
+    "amend generated copy",
+  );
+
+  parseOk(
+    mental(home, root, [
+      "track",
+      "start",
+      "--json",
+      "--title-internal",
+      "Private details",
+      "--body-internal",
+      "Internal implementation notes.",
+      "--title-external",
+      "Authentication improvements",
+      "--body-external",
+      "Improved login reliability and error handling.",
+    ]),
+    "start with copy",
+  );
+  const complete = parseOk(mental(home, root, ["track", "stop", "--json"]), "stop with copy");
+  assert.equal(complete.data.review, undefined);
+  assert.equal(complete.data.stopped[0].title_external, "Authentication improvements");
+  assert.equal(complete.data.stopped[0].body_external, "Improved login reliability and error handling.");
 });
 
 test("heartbeat pings focused last_seen; glance is not a ping", () => {
@@ -85,7 +288,7 @@ test("heartbeat pings focused last_seen; glance is not a ping", () => {
   assert.equal(getRow(slice, a.data.id).last_seen_at, old, "glance is not a focus ping");
 });
 
-test("stale stop sets user = wall and flags stale_stop; --accept-stale rejected on --json", () => {
+test("stale stop sets billable = wall and flags stale_stop; --accept-stale rejected on --json", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
@@ -127,7 +330,7 @@ test("false start discard is excluded from report", () => {
   assert.equal(report.data.rows.length, 0);
 });
 
-test("park stops the focused runner; new start already closed the previous", () => {
+test("park stops the focused runner after ensure-running kept one clock", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
@@ -201,7 +404,7 @@ test("heartbeat unclocked is true after a hop today with no interval", () => {
   assert.equal(after.data.track.unclocked, false);
 });
 
-test("last_seen matching started is not never-started; stop still sets user = wall", () => {
+test("last_seen matching started is not never-started; stop still sets billable = wall", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
@@ -274,6 +477,10 @@ test("export --external strips internal columns; --out inside repo is usage", ()
   assert.doesNotMatch(csv, /title_internal/);
   assert.doesNotMatch(csv, /WIP ticket/);
   assert.match(csv, /Auth callback/);
+  const header = csv.split("\n")[0];
+  assert.match(header, /^date,/);
+  assert.match(header, /billable/);
+  assert.doesNotMatch(header, /(^|,)user(,|$)/);
   assert.doesNotMatch(csv, /stale_stop/);
   assert.doesNotMatch(csv, /against/);
 });
@@ -339,6 +546,97 @@ test("invalid h:mm is usage; user cannot exceed wall", () => {
   parseOk(mental(home, root, ["track", "start", "--json", "--title-internal", "Bounds"]), "start");
   const bad = parseErr(mental(home, root, ["track", "stop", "--json", "--user", "1:60"]), "1:60");
   assert.equal(bad.error.code, "usage");
-  const over = parseErr(mental(home, root, ["track", "stop", "--json", "--user", "99:00"]), "over wall");
-  assert.match(over.error.message, /user must be <= wall/);
+  const over = parseErr(mental(home, root, ["track", "stop", "--json", "--billable", "99:00"]), "over wall");
+  assert.match(over.error.message, /billable must be <= wall/);
+});
+
+function shiftIsoDate(iso, dayDelta) {
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + dayDelta);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}${m[4]}`;
+}
+
+test("new calendar day closes leftover at last_seen then starts a new interval", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const a = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Friday"]),
+    "start",
+  );
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const startedY = shiftIsoDate(a.data.started, -1);
+  const lastY = startedY;
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  opened.db
+    .prepare("UPDATE intervals SET started = ?, last_seen_at = ? WHERE id = ?")
+    .run(startedY, lastY, a.data.id);
+  opened.db.close();
+  const b = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Monday"]),
+    "start next day",
+  );
+  assert.equal(b.data.ensured, false);
+  assert.notEqual(a.data.id, b.data.id);
+  const old = getRow(slice, a.data.id);
+  assert.equal(old.status, "stopped");
+  assert.equal(old.stopped, lastY);
+  assert.equal(old.user, old.wall);
+  assert.equal(old.wall_minutes, 0);
+  const glance = parseOk(mental(home, root, ["track", "--json"]), "glance");
+  assert.equal(glance.data.running.length, 1);
+  assert.equal(glance.data.running[0].id, b.data.id);
+});
+
+test("12h started cap closes at last_seen then starts a new interval", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const a = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Long day"]),
+    "start",
+  );
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const startedAt = new Date(Date.now() - 13 * 3600 * 1000).toISOString();
+  const lastSeen = new Date(Date.now() - 1 * 3600 * 1000).toISOString();
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  opened.db
+    .prepare("UPDATE intervals SET started = ?, last_seen_at = ? WHERE id = ?")
+    .run(startedAt, lastSeen, a.data.id);
+  opened.db.close();
+  const b = parseOk(mental(home, root, ["track", "start", "--json", "--title-internal", "Next"]), "start after cap");
+  assert.equal(b.data.ensured, false);
+  assert.notEqual(a.data.id, b.data.id);
+  const old = getRow(slice, a.data.id);
+  assert.equal(old.status, "stopped");
+  assert.equal(old.stopped, lastSeen);
+  assert.ok((old.wall_minutes || 0) >= 11 * 60);
+  assert.ok((old.wall_minutes || 0) <= 13 * 60);
+});
+
+test("heartbeat does not ping a leftover from another day; TTY heartbeat does not start", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const beforeStart = parseOk(mental(home, root, ["track", "--json"]), "glance none");
+  assert.equal(beforeStart.data.running.length, 0);
+  const tty = mental(home, root, ["heartbeat"]);
+  assert.equal(tty.status, 0, tty.stderr || tty.stdout);
+  const stillNone = parseOk(mental(home, root, ["track", "--json"]), "glance after tty hb");
+  assert.equal(stillNone.data.running.length, 0);
+
+  const a = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Leftover"]),
+    "start",
+  );
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const startedY = shiftIsoDate(a.data.started, -1);
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  opened.db
+    .prepare("UPDATE intervals SET started = ?, last_seen_at = ? WHERE id = ?")
+    .run(startedY, startedY, a.data.id);
+  opened.db.close();
+  parseOk(mental(home, root, ["heartbeat", "--json"]), "hb leftover");
+  assert.equal(getRow(slice, a.data.id).last_seen_at, startedY);
 });

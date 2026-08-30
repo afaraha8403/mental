@@ -14,13 +14,15 @@ function isBundleRoot(where) {
 }
 
 export const TIME_DB = "time.sqlite";
-export const TIME_SCHEMA_VERSION = 1;
+export const TIME_SCHEMA_VERSION = 2;
 export const STALE_LAST_SEEN_MS = 2 * 60 * 60 * 1000;
 export const STALE_STARTED_MS = 12 * 60 * 60 * 1000;
 /** Wall shorter than this is a false start (0:00 minutes), not last_seen ≈ started. */
 export const NEVER_STARTED_MS = 120 * 1000;
 export const HEARTBEAT_RUNNING_CAP = 7;
 export const PROJECT_NAME_MAX = 80;
+/** Default --title-internal when omitted. Start is ensure-running; a name is optional. */
+export const DEFAULT_TITLE_INTERNAL = "Session";
 
 export const SQLITE_MISSING = {
   code: "sqlite",
@@ -165,6 +167,23 @@ export function isStaleRow(row, now = new Date()) {
 }
 
 /**
+ * Same sit-down: started today (local calendar) and under the 12h cap.
+ * A quiet stretch without heartbeat is not a slice boundary. Park, a new
+ * calendar day, or 12h since started is. last_seen 2h stale is a glance flag only.
+ * @param {{ started: string, last_seen_at?: string, status?: string, discarded?: boolean }} row
+ * @param {Date} [now]
+ */
+export function canContinueRunner(row, now = new Date()) {
+  if (!row || row.discarded || (row.status && row.status !== "running")) return false;
+  const start = Date.parse(row.started);
+  if (!Number.isFinite(start)) return false;
+  if (now.getTime() - start > STALE_STARTED_MS) return false;
+  const startedDay = calendarDateFromIso(row.started);
+  const today = calendarDateFromIso(isoWithOffset(now));
+  return Boolean(startedDay) && startedDay === today;
+}
+
+/**
  * Suggested user minutes: last_seen - started (display only until stop --user).
  * @param {{ started: string, last_seen_at: string }} row
  */
@@ -197,8 +216,10 @@ const SCHEMA_SQL = `
     focused INTEGER NOT NULL DEFAULT 0,
     wall TEXT,
     "user" TEXT,
+    billable TEXT,
     wall_minutes INTEGER,
     user_minutes INTEGER,
+    billable_minutes INTEGER,
     against TEXT,
     via TEXT,
     timestamp TEXT NOT NULL,
@@ -219,7 +240,16 @@ function migrate(db) {
   db.exec(SCHEMA_SQL);
   const row = db.prepare("SELECT value FROM meta WHERE key = 'schema'").get();
   const current = row ? Number(row.value) : 0;
-  // Never DROP. Future versions ALTER TABLE ADD COLUMN here, then bump meta.
+  if (!Number.isFinite(current) || current < 2) {
+    const columns = new Set(db.prepare("PRAGMA table_info(intervals)").all().map((column) => column.name));
+    if (!columns.has("billable")) db.exec("ALTER TABLE intervals ADD COLUMN billable TEXT");
+    if (!columns.has("billable_minutes")) db.exec("ALTER TABLE intervals ADD COLUMN billable_minutes INTEGER");
+    db.exec(
+      `UPDATE intervals
+       SET billable = COALESCE(billable, "user"),
+           billable_minutes = COALESCE(billable_minutes, user_minutes)`,
+    );
+  }
   if (!Number.isFinite(current) || current < TIME_SCHEMA_VERSION) {
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("schema", String(TIME_SCHEMA_VERSION));
   }
@@ -321,14 +351,27 @@ function mapRow(row) {
     body_internal: row.body_internal || "",
     body_external: row.body_external || "",
     project_name: row.project_name || "",
+    date: calendarDateFromIso(row.started) || "",
     started: row.started,
     stopped: row.stopped || null,
     last_seen_at: row.last_seen_at,
     focused: Boolean(row.focused),
     wall: row.wall || null,
-    user: row.user || null,
+    user: row.billable || row.user || null,
+    billable: row.billable || row.user || null,
     wall_minutes: row.wall_minutes == null ? null : Number(row.wall_minutes),
-    user_minutes: row.user_minutes == null ? null : Number(row.user_minutes),
+    user_minutes:
+      row.billable_minutes == null
+        ? row.user_minutes == null
+          ? null
+          : Number(row.user_minutes)
+        : Number(row.billable_minutes),
+    billable_minutes:
+      row.billable_minutes == null
+        ? row.user_minutes == null
+          ? null
+          : Number(row.user_minutes)
+        : Number(row.billable_minutes),
     against: row.against || "",
     via: row.via || "",
     timestamp: row.timestamp,
@@ -351,6 +394,13 @@ function getById(db, id) {
   return mapRow(db.prepare("SELECT * FROM intervals WHERE id = ?").get(id));
 }
 
+function runningRows(db) {
+  return db
+    .prepare("SELECT * FROM intervals WHERE status = 'running' AND discarded = 0")
+    .all()
+    .map(mapRow);
+}
+
 function clearFocus(db) {
   db.prepare("UPDATE intervals SET focused = 0 WHERE focused = 1").run();
 }
@@ -368,35 +418,59 @@ function annotate(row, now) {
     live_wall_minutes: liveWall,
     suggested_user: formatHmm(suggested || 0),
     suggested_user_minutes: suggested || 0,
+    suggested_billable: formatHmm(suggested || 0),
+    suggested_billable_minutes: suggested || 0,
   };
 }
 
 function externalIsInternal(row) {
   const ext = String(row.title_external || "").trim();
   const intern = String(row.title_internal || "").trim();
-  if (!ext) return true;
+  const body = String(row.body_external || "").trim();
+  if (!ext || !body) return true;
   return ext === intern;
+}
+
+function customerCopyReview(rows) {
+  const intervalIds = rows.filter((row) => row.needs_external || externalIsInternal(row)).map((row) => row.id);
+  if (!intervalIds.length) return null;
+  return {
+    kind: "customer-copy",
+    interval_ids: intervalIds,
+    questions: [
+      {
+        id: "customer-copy-action",
+        prompt: "How should these time entries be prepared for the customer export?",
+        options: [
+          { id: "generate", label: "Generate and save copy (Recommended)" },
+          { id: "review", label: "Show generated copy before saving" },
+          { id: "custom", label: "Enter custom wording" },
+        ],
+        allow_multiple: false,
+      },
+    ],
+  };
 }
 
 /**
  * @param {string} root
  * @param {{
- *   titleInternal: string,
+ *   titleInternal?: string,
  *   titleExternal?: string,
  *   bodyInternal?: string,
+ *   bodyExternal?: string,
  *   projectName?: string,
  *   against?: string,
  *   via?: string,
  *   taskId?: string,
  *   started?: string,
+ *   forceNew?: boolean,
  *   now?: Date,
  * }} opts
  */
 export function startInterval(root, opts) {
-  const titleInternal = String(opts.titleInternal || "").trim();
-  if (!titleInternal) {
-    return { ok: false, error: { code: "usage", message: "mental track start requires --title-internal" } };
-  }
+  const givenTitle = String(opts.titleInternal || "").trim();
+  const titleInternal = givenTitle || DEFAULT_TITLE_INTERNAL;
   const proj = sanitizeProjectName(opts.projectName);
   if (!proj.ok) return proj;
   const now = opts.now ?? new Date();
@@ -413,45 +487,95 @@ export function startInterval(root, opts) {
   if (!opened.ok) return opened;
   const { db } = opened;
   try {
-    const row = withImmediateTxn(db, () => {
-      if (opts.taskId) {
+    const result = withImmediateTxn(db, () => {
+      if (opts.taskId && !opts.forceNew) {
         const existing = db.prepare("SELECT id FROM intervals WHERE task_id = ? LIMIT 1").get(opts.taskId);
         if (!existing) {
           throw Object.assign(new Error(`unknown --task ${opts.taskId}`), { code: "usage" });
         }
       }
-      const taskId = opts.taskId || randomUUID();
-      const id = randomUUID();
-      const ts = isoWithOffset(now);
-      const live = db
-        .prepare("SELECT * FROM intervals WHERE status = 'running' AND discarded = 0")
-        .all()
-        .map(mapRow);
-      for (const prior of live) {
-        applyStopRow(db, prior, { now, userMinutes: null, acceptStale: true });
+      for (const prior of runningRows(db)) {
+        if (!canContinueRunner(prior, now)) {
+          applyStopRow(db, prior, { now, stoppedAt: prior.last_seen_at, userMinutes: null });
+        }
       }
-      db.prepare(
-        `INSERT INTO intervals (
-          id, type, status, title_internal, title_external, body_internal, body_external,
-          project_name, started, stopped, last_seen_at, focused, against, via, timestamp,
-          task_id, stale_stop, discarded, needs_user, needs_external
-        ) VALUES (?, 'Time', 'running', ?, ?, ?, '', ?, ?, NULL, ?, 1, ?, ?, ?, ?, 0, 0, 0, 0)`,
-      ).run(
-        id,
-        titleInternal,
-        opts.titleExternal || "",
-        opts.bodyInternal || "",
-        proj.name,
-        started,
-        started,
-        opts.against || "",
-        opts.via || "",
-        ts,
-        taskId,
-      );
-      return getById(db, id);
+      const live = runningRows(db);
+      const insert = () => {
+        const taskId = opts.forceNew ? randomUUID() : opts.taskId || randomUUID();
+        const id = randomUUID();
+        const ts = isoWithOffset(now);
+        clearFocus(db);
+        db.prepare(
+          `INSERT INTO intervals (
+            id, type, status, title_internal, title_external, body_internal, body_external,
+            project_name, started, stopped, last_seen_at, focused, against, via, timestamp,
+            task_id, stale_stop, discarded, needs_user, needs_external
+          ) VALUES (?, 'Time', 'running', ?, ?, ?, ?, ?, ?, NULL, ?, 1, ?, ?, ?, ?, 0, 0, 0, 0)`,
+        ).run(
+          id,
+          titleInternal,
+          opts.titleExternal || "",
+          opts.bodyInternal || "",
+          opts.bodyExternal || "",
+          proj.name,
+          started,
+          started,
+          opts.against || "",
+          opts.via || "",
+          ts,
+          taskId,
+        );
+        return { row: getById(db, id), ensured: false };
+      };
+
+      if (opts.forceNew) return insert();
+
+      const focused = live.find((r) => r.focused) || null;
+      let continuable = null;
+      if (opts.taskId) {
+        const onTask = live.filter((r) => r.task_id === opts.taskId);
+        continuable =
+          focused && focused.task_id === opts.taskId && canContinueRunner(focused, now)
+            ? focused
+            : onTask.find((r) => canContinueRunner(r, now)) || null;
+      } else {
+        continuable =
+          focused && canContinueRunner(focused, now)
+            ? focused
+            : live.find((r) => canContinueRunner(r, now)) || null;
+      }
+
+      if (continuable) {
+        for (const extra of live) {
+          if (extra.id === continuable.id) continue;
+          if (extra.task_id === continuable.task_id) {
+            applyStopRow(db, extra, { now, stoppedAt: extra.last_seen_at, userMinutes: null });
+          }
+        }
+        const ts = isoWithOffset(now);
+        const nextTitle = givenTitle || continuable.title_internal;
+        const nextExt =
+          opts.titleExternal != null && String(opts.titleExternal).trim()
+            ? String(opts.titleExternal).trim()
+            : continuable.title_external;
+        const nextBody = opts.bodyInternal != null ? String(opts.bodyInternal) : continuable.body_internal;
+        const nextBodyExt =
+          opts.bodyExternal != null && String(opts.bodyExternal).trim()
+            ? String(opts.bodyExternal).trim()
+            : continuable.body_external;
+        clearFocus(db);
+        db.prepare(
+          `UPDATE intervals SET
+             title_internal = ?, body_internal = ?, title_external = ?, body_external = ?,
+             last_seen_at = ?, timestamp = ?, focused = 1
+           WHERE id = ?`,
+        ).run(nextTitle, nextBody || "", nextExt || "", nextBodyExt || "", ts, ts, continuable.id);
+        return { row: getById(db, continuable.id), ensured: true };
+      }
+
+      return insert();
     });
-    return { ok: true, data: annotate(row, now) };
+    return { ok: true, data: { ...annotate(result.row, now), ensured: result.ensured } };
   } catch (err) {
     const code = /** @type {{ code?: string }} */ (err).code || "write";
     const message = err instanceof Error ? err.message : String(err);
@@ -490,8 +614,26 @@ export function focusInterval(root, { id, now = new Date() }) {
   }
 }
 
-function applyStopRow(db, row, { now, userMinutes, acceptStale: _acceptStale, titleExternal, bodyExternal, projectName }) {
-  const stopped = isoWithOffset(now);
+function applyStopRow(
+  db,
+  row,
+  {
+    now,
+    stoppedAt,
+    userMinutes,
+    acceptStale: _acceptStale,
+    titleInternal,
+    bodyInternal,
+    titleExternal,
+    bodyExternal,
+    projectName,
+  },
+) {
+  let stopped = isoWithOffset(now);
+  if (stoppedAt) {
+    const ms = Date.parse(String(stoppedAt));
+    if (Number.isFinite(ms)) stopped = String(stoppedAt);
+  }
   const wallMin = elapsedMinutes(row.started, stopped);
   const stale = isStaleRow(row, now);
   let userMin = wallMin;
@@ -499,29 +641,36 @@ function applyStopRow(db, row, { now, userMinutes, acceptStale: _acceptStale, ti
   const staleStop = stale ? 1 : 0;
   if (userMinutes != null) {
     if (userMinutes > wallMin) {
-      throw Object.assign(new Error("user must be <= wall"), { code: "usage" });
+      throw Object.assign(new Error("billable must be <= wall"), { code: "usage" });
     }
     userMin = userMinutes;
   }
   const ext = titleExternal != null ? String(titleExternal) : row.title_external;
   const bodyExt = bodyExternal != null ? String(bodyExternal) : row.body_external;
+  const intern = titleInternal != null && String(titleInternal).trim() ? String(titleInternal).trim() : row.title_internal;
+  const bodyIntern = bodyInternal != null ? String(bodyInternal) : row.body_internal;
   let needsExternal = row.needs_external ? 1 : 0;
-  const intern = row.title_internal;
-  if (!String(ext || "").trim() || String(ext).trim() === intern.trim()) needsExternal = 1;
+  if (!String(ext || "").trim() || !String(bodyExt || "").trim() || String(ext).trim() === intern.trim()) needsExternal = 1;
   else needsExternal = 0;
   const proj = projectName != null ? projectName : row.project_name;
   const ts = isoWithOffset(now);
   db.prepare(
     `UPDATE intervals SET
       status = 'stopped', stopped = ?, focused = 0,
+      title_internal = ?, body_internal = ?,
       wall = ?, wall_minutes = ?, "user" = ?, user_minutes = ?,
+      billable = ?, billable_minutes = ?,
       stale_stop = ?, needs_user = ?, needs_external = ?,
       title_external = ?, body_external = ?, project_name = ?, timestamp = ?
      WHERE id = ?`,
   ).run(
     stopped,
+    intern,
+    bodyIntern || "",
     formatHmm(wallMin),
     wallMin,
+    userMin == null ? null : formatHmm(userMin),
+    userMin,
     userMin == null ? null : formatHmm(userMin),
     userMin,
     staleStop,
@@ -544,6 +693,8 @@ function applyStopRow(db, row, { now, userMinutes, acceptStale: _acceptStale, ti
  *   userHmm?: string,
  *   acceptStale?: boolean,
  *   json?: boolean,
+ *   titleInternal?: string,
+ *   bodyInternal?: string,
  *   titleExternal?: string,
  *   bodyExternal?: string,
  *   projectName?: string,
@@ -556,7 +707,7 @@ export function stopIntervals(root, opts = {}) {
   if (opts.userHmm != null && opts.userHmm !== "") {
     userMinutes = parseHmm(opts.userHmm);
     if (userMinutes == null) {
-      return { ok: false, error: { code: "usage", message: "--user must be h:mm (minutes 00–59)" } };
+      return { ok: false, error: { code: "usage", message: "--billable must be h:mm (minutes 00–59)" } };
     }
   }
   if (opts.acceptStale && opts.json) {
@@ -594,6 +745,8 @@ export function stopIntervals(root, opts = {}) {
             now,
             userMinutes,
             acceptStale: Boolean(opts.acceptStale),
+            titleInternal: opts.titleInternal,
+            bodyInternal: opts.bodyInternal,
             titleExternal: opts.titleExternal,
             bodyExternal: opts.bodyExternal,
             projectName: proj.name,
@@ -602,7 +755,8 @@ export function stopIntervals(root, opts = {}) {
         ),
       );
     });
-    return { ok: true, data: { stopped } };
+    const review = customerCopyReview(stopped);
+    return { ok: true, data: { stopped, ...(review ? { review } : {}) } };
   } catch (err) {
     const code = /** @type {{ code?: string }} */ (err).code || "write";
     const message = err instanceof Error ? err.message : String(err);
@@ -616,9 +770,27 @@ export function stopIntervals(root, opts = {}) {
  * Park/handoff: stop focused only. Fail closed for hours (no ok if txn rolls back).
  * Caller still journals if this fails (fail open for coding).
  * @param {string} root
- * @param {{ now?: Date }} [opts]
+ * @param {{
+ *   now?: Date,
+ *   titleInternal?: string,
+ *   bodyInternal?: string,
+ *   titleExternal?: string,
+ *   bodyExternal?: string,
+ *   projectName?: string,
+ *   billableHmm?: string,
+ * }} [opts]
  */
-export function stopFocusedForPark(root, { now = new Date() } = {}) {
+export function stopFocusedForPark(root, opts = {}) {
+  const now = opts.now ?? new Date();
+  const project = opts.projectName != null ? sanitizeProjectName(opts.projectName) : { ok: true, name: undefined };
+  if (!project.ok) return project;
+  let billableMinutes = null;
+  if (opts.billableHmm != null && opts.billableHmm !== "") {
+    billableMinutes = parseHmm(opts.billableHmm);
+    if (billableMinutes == null) {
+      return { ok: false, error: { code: "usage", message: "--billable must be h:mm (minutes 00–59)" } };
+    }
+  }
   if (!existsSync(timeDbPath(root))) return { ok: true, skipped: true };
   const opened = openTimeDb(timeDbPath(root), { write: true });
   if (!opened.ok) return { ok: false, error: opened.error };
@@ -629,9 +801,20 @@ export function stopFocusedForPark(root, { now = new Date() } = {}) {
         db.prepare("SELECT * FROM intervals WHERE focused = 1 AND discarded = 0 AND status = 'running'").get(),
       );
       if (!focused) return null;
-      return applyStopRow(db, focused, { now, userMinutes: null, acceptStale: false });
+      return applyStopRow(db, focused, {
+        now,
+        userMinutes: billableMinutes,
+        acceptStale: false,
+        titleInternal: opts.titleInternal,
+        bodyInternal: opts.bodyInternal,
+        titleExternal: opts.titleExternal,
+        bodyExternal: opts.bodyExternal,
+        projectName: project.name,
+      });
     });
-    return { ok: true, skipped: !row, data: row ? annotate(row, now) : null };
+    const data = row ? annotate(row, now) : null;
+    const review = data ? customerCopyReview([data]) : null;
+    return { ok: true, skipped: !row, data, ...(review ? { review } : {}) };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, error: { code: "timer_stop_failed", message } };
@@ -660,6 +843,7 @@ export function discardInterval(root, { id, now = new Date() } = {}) {
       db.prepare(
         `UPDATE intervals SET discarded = 1, status = 'stopped', focused = 0,
           wall = '0:00', wall_minutes = 0, "user" = '0:00', user_minutes = 0,
+          billable = '0:00', billable_minutes = 0,
           stopped = ?, timestamp = ? WHERE id = ?`,
       ).run(ts, ts, target.id);
       return getById(db, target.id);
@@ -676,7 +860,7 @@ export function discardInterval(root, { id, now = new Date() } = {}) {
 
 /**
  * @param {string} root
- * @param {{ id: string, titleExternal?: string, bodyExternal?: string, userHmm?: string, projectName?: string, now?: Date }} opts
+ * @param {{ id: string, titleInternal?: string, bodyInternal?: string, titleExternal?: string, bodyExternal?: string, userHmm?: string, projectName?: string, now?: Date }} opts
  */
 export function amendInterval(root, opts) {
   if (!opts.id) return { ok: false, error: { code: "usage", message: "mental track amend requires --id" } };
@@ -692,25 +876,37 @@ export function amendInterval(root, opts) {
       let userHmm = cur.user;
       if (opts.userHmm != null) {
         userMin = parseHmm(opts.userHmm);
-        if (userMin == null) throw Object.assign(new Error("--user must be h:mm"), { code: "usage" });
+        if (userMin == null) throw Object.assign(new Error("--billable must be h:mm"), { code: "usage" });
         const wall = cur.wall_minutes ?? 0;
-        if (userMin > wall) throw Object.assign(new Error("user must be <= wall"), { code: "usage" });
+        if (userMin > wall) throw Object.assign(new Error("billable must be <= wall"), { code: "usage" });
         userHmm = formatHmm(userMin);
       }
       const proj = opts.projectName != null ? sanitizeProjectName(opts.projectName) : { ok: true, name: cur.project_name };
       if (!proj.ok) throw Object.assign(new Error(proj.error.message), { code: "usage" });
       const ext = opts.titleExternal != null ? opts.titleExternal : cur.title_external;
       const bodyExt = opts.bodyExternal != null ? opts.bodyExternal : cur.body_external;
-      const needsExternal = !String(ext || "").trim() || String(ext).trim() === cur.title_internal.trim() ? 1 : 0;
+      const intern =
+        opts.titleInternal != null && String(opts.titleInternal).trim()
+          ? String(opts.titleInternal).trim()
+          : cur.title_internal;
+      const bodyIntern = opts.bodyInternal != null ? opts.bodyInternal : cur.body_internal;
+      const needsExternal =
+        !String(ext || "").trim() || !String(bodyExt || "").trim() || String(ext).trim() === intern.trim() ? 1 : 0;
       const ts = isoWithOffset(now);
       db.prepare(
-        `UPDATE intervals SET title_external = ?, body_external = ?, project_name = ?,
-          "user" = ?, user_minutes = ?, needs_user = ?, needs_external = ?, timestamp = ?
+        `UPDATE intervals SET title_internal = ?, body_internal = ?,
+          title_external = ?, body_external = ?, project_name = ?,
+          "user" = ?, user_minutes = ?, billable = ?, billable_minutes = ?,
+          needs_user = ?, needs_external = ?, timestamp = ?
          WHERE id = ?`,
       ).run(
+        intern,
+        bodyIntern || "",
         ext || "",
         bodyExt || "",
         proj.name || "",
+        userHmm,
+        userMin,
         userHmm,
         userMin,
         userMin == null ? 1 : 0,
@@ -720,7 +916,9 @@ export function amendInterval(root, opts) {
       );
       return getById(db, cur.id);
     });
-    return { ok: true, data: annotate(row, now) };
+    const data = annotate(row, now);
+    const review = customerCopyReview([data]);
+    return { ok: true, data: { ...data, ...(review ? { review } : {}) } };
   } catch (err) {
     const code = /** @type {{ code?: string }} */ (err).code || "write";
     const message = err instanceof Error ? err.message : String(err);
@@ -743,10 +941,12 @@ export function pingFocusedLastSeen(root, { now = new Date() } = {}) {
   const { db } = opened;
   try {
     withImmediateTxn(db, () => {
+      const focused = mapRow(
+        db.prepare("SELECT * FROM intervals WHERE focused = 1 AND status = 'running' AND discarded = 0").get(),
+      );
+      if (!focused || !canContinueRunner(focused, now)) return;
       const ts = isoWithOffset(now);
-      db.prepare(
-        "UPDATE intervals SET last_seen_at = ?, timestamp = ? WHERE focused = 1 AND status = 'running' AND discarded = 0",
-      ).run(ts, ts);
+      db.prepare("UPDATE intervals SET last_seen_at = ?, timestamp = ? WHERE id = ?").run(ts, ts, focused.id);
     });
     return { ok: true };
   } catch (err) {
@@ -935,6 +1135,7 @@ export function glanceTime(root, { now = new Date(), since, until } = {}) {
         title_internal: title,
         wall: formatHmm(wallMin),
         user: formatHmm(userMin),
+        billable: formatHmm(userMin),
         intervals,
       };
     });
@@ -944,7 +1145,11 @@ export function glanceTime(root, { now = new Date(), since, until } = {}) {
         tasks,
         running,
         stoppedToday,
-        overlap: overlappingPairs(running, now),
+        overlap: overlappingPairs(running, now).filter(([idA, idB]) => {
+          const a = running.find((r) => r.id === idA);
+          const b = running.find((r) => r.id === idB);
+          return Boolean(a && b && a.task_id === b.task_id);
+        }),
       },
     };
   } finally {
@@ -975,6 +1180,7 @@ export function reportTime(root, opts = {}) {
         rows: [],
         wall: "0:00",
         user: "0:00",
+        billable: "0:00",
         overlap: [],
         skippedNeedsExternal: 0,
         unclockedCommitDays: emptyUnclocked(),
@@ -996,16 +1202,20 @@ export function reportTime(root, opts = {}) {
       rows = rows.filter((r) => r.project_name === opts.project);
     }
     let skippedNeedsExternal = 0;
+    let review = null;
     if (opts.external) {
       const kept = [];
+      const missing = [];
       for (const r of rows) {
         if (r.needs_external || externalIsInternal(r)) {
           skippedNeedsExternal += 1;
+          missing.push(r);
           continue;
         }
         kept.push(r);
       }
       rows = kept;
+      review = customerCopyReview(missing);
     }
     const wallMin = rows.reduce((s, r) => s + (r.wall_minutes || 0), 0);
     const userMin = rows.reduce((s, r) => s + (r.user_minutes || 0), 0);
@@ -1017,10 +1227,13 @@ export function reportTime(root, opts = {}) {
         rows,
         wall: formatHmm(wallMin),
         user: formatHmm(userMin),
+        billable: formatHmm(userMin),
         wall_minutes: wallMin,
         user_minutes: userMin,
+        billable_minutes: userMin,
         overlap,
         skippedNeedsExternal,
+        ...(review ? { review } : {}),
         unclockedCommitDays: emptyUnclocked(),
       },
     };
@@ -1029,7 +1242,16 @@ export function reportTime(root, opts = {}) {
   }
 }
 
-const EXTERNAL_COLS = ["title_external", "body_external", "project_name", "started", "stopped", "wall", "user"];
+const EXTERNAL_COLS = [
+  "date",
+  "title_external",
+  "body_external",
+  "project_name",
+  "started",
+  "stopped",
+  "wall",
+  "billable",
+];
 const INTERNAL_COLS = [
   "id",
   "task_id",
@@ -1039,7 +1261,7 @@ const INTERNAL_COLS = [
   "started",
   "stopped",
   "wall",
-  "user",
+  "billable",
   "against",
   "via",
   "stale_stop",

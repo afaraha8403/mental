@@ -2,16 +2,128 @@
  * Put `mental` on PATH. Last `mental install` (or `npm i -g @balacode/mental`) wins.
  *
  * `npm install -g` this package into the active npm prefix, then expose the
- * same binary at `~/.local/bin/mental` when that dir is the user's PATH bin
- * and differs from the npm prefix (as on this machine).
+ * same binary at `~/.local/bin/mental` (Unix) or `mental.cmd` (Windows) when
+ * that dir differs from the npm prefix.
+ *
+ * Never spawn a `.mjs` file as argv0. Windows has no shebang and ShellExecutes
+ * unknown extensions ("how do you want to open this file?").
  */
-import { chmodSync, existsSync, lstatSync, mkdirSync, symlinkSync, unlinkSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, posix as posixPath, resolve, win32 as win32Path } from "node:path";
 import { spawnSync } from "node:child_process";
-import { CMD, PKG_ROOT } from "./pkg.mjs";
+import { CMD, NAME, PKG_ROOT } from "./pkg.mjs";
 
 function runNpm(args, env) {
   return spawnSync("npm", args, { encoding: "utf8", env });
+}
+
+function unlinkQuiet(dest) {
+  try {
+    unlinkSync(dest);
+  } catch {
+    // missing
+  }
+}
+
+/**
+ * Path helpers for the given OS. Tests pass `win32` while running on Unix.
+ *
+ * @param {string} [platform]
+ */
+export function pathFor(platform = process.platform) {
+  return platform === "win32" ? win32Path : posixPath;
+}
+
+/**
+ * npm global bin directory. Unix is `<prefix>/bin`; Windows is the prefix.
+ *
+ * @param {string} prefix
+ * @param {string} [platform]
+ */
+export function npmGlobalBinDir(prefix, platform = process.platform) {
+  const p = pathFor(platform);
+  return platform === "win32" ? prefix : p.join(prefix, "bin");
+}
+
+/**
+ * Path to the `mental` executable npm writes.
+ * Windows: `<prefix>/mental.cmd` (never the raw `.mjs`).
+ *
+ * @param {string} prefix
+ * @param {string} [cmd]
+ * @param {string} [platform]
+ */
+export function npmGlobalBinPath(prefix, cmd = CMD, platform = process.platform) {
+  const p = pathFor(platform);
+  const dir = npmGlobalBinDir(prefix, platform);
+  return platform === "win32" ? p.join(dir, `${cmd}.cmd`) : p.join(dir, cmd);
+}
+
+/**
+ * User PATH shim Mental also writes (`~/.local/bin`).
+ *
+ * @param {string} home
+ * @param {string} [cmd]
+ * @param {string} [platform]
+ */
+export function userPathBin(home, cmd = CMD, platform = process.platform) {
+  const p = pathFor(platform);
+  const dir = p.join(home, ".local", "bin");
+  return platform === "win32" ? p.join(dir, `${cmd}.cmd`) : p.join(dir, cmd);
+}
+
+/**
+ * `cli.mjs` inside a global `node_modules` tree (`npm root -g`).
+ *
+ * @param {string} globalNodeModules
+ * @param {string} [name]
+ * @param {string} [platform]
+ */
+export function npmGlobalCliScript(globalNodeModules, name = NAME, platform = process.platform) {
+  const p = pathFor(platform);
+  const segs = name.startsWith("@") ? name.split("/") : [name];
+  return p.join(globalNodeModules, ...segs, "bin", "cli.mjs");
+}
+
+/**
+ * argv for invoking the CLI without ShellExecute of a `.mjs` file.
+ *
+ * @param {string} scriptPath
+ * @param {string[]} [args]
+ * @returns {{ command: string, args: string[] }}
+ */
+export function cliInvoke(scriptPath, args = []) {
+  return { command: process.execPath, args: [scriptPath, ...args] };
+}
+
+/**
+ * Spawn `node cli.mjs …`. Never uses the `.mjs` path as the executable.
+ *
+ * @param {string} scriptPath
+ * @param {string[]} args
+ * @param {import('node:child_process').SpawnSyncOptionsWithStringEncoding} [opts]
+ */
+export function spawnCli(scriptPath, args, opts) {
+  const inv = cliInvoke(scriptPath, args);
+  return spawnSync(inv.command, inv.args, opts);
+}
+
+/**
+ * cmd.exe shim body: run Node with the CLI script. `%*` forwards argv.
+ *
+ * @param {string} nodePath
+ * @param {string} scriptPath
+ */
+export function windowsCmdShim(nodePath, scriptPath) {
+  return `@echo off\r\n"${nodePath}" "${scriptPath}" %*\r\n`;
 }
 
 function npmGlobalPrefix(env) {
@@ -20,18 +132,15 @@ function npmGlobalPrefix(env) {
   return p || null;
 }
 
-function npmGlobalBin(prefix) {
-  // Unix npm: <prefix>/bin/<cmd>
-  return join(prefix, "bin", CMD);
+function npmGlobalRoot(env) {
+  const r = runNpm(["root", "-g"], env);
+  const p = (r.stdout || "").trim();
+  return p || null;
 }
 
-function replaceWithSymlink(dest, target) {
+function replaceWithUnixSymlink(dest, target) {
   mkdirSync(dirname(dest), { recursive: true });
-  try {
-    unlinkSync(dest);
-  } catch {
-    // missing
-  }
+  unlinkQuiet(dest);
   symlinkSync(target, dest);
   try {
     chmodSync(dest, 0o755);
@@ -40,28 +149,32 @@ function replaceWithSymlink(dest, target) {
   }
 }
 
+function replaceWithWindowsCmd(dest, nodePath, scriptPath) {
+  mkdirSync(dirname(dest), { recursive: true });
+  unlinkQuiet(dest);
+  writeFileSync(dest, windowsCmdShim(nodePath, scriptPath));
+}
+
 /**
  * @param {{ home: string, env?: NodeJS.ProcessEnv, spec?: string }} opts
  * @returns {{
  *   ok: boolean,
  *   bin: string | null,
  *   target: string | null,
+ *   script: string,
  *   npm: boolean,
  *   message: string,
  * }}
  */
 export function installGlobalCli({ home, env = process.env, spec = PKG_ROOT }) {
+  const platform = process.platform;
   const prefix = npmGlobalPrefix(env);
-  const npmBin = prefix ? npmGlobalBin(prefix) : null;
+  const npmBin = prefix ? npmGlobalBinPath(prefix, CMD, platform) : null;
   // npm 11 refuses to replace an existing global bin (EEXIST). Last install
   // wins: drop our previous `mental` link (often leftover @mental/cli).
-  if (npmBin) {
-    try {
-      unlinkSync(npmBin);
-    } catch {
-      // missing
-    }
-  }
+  if (npmBin) unlinkQuiet(npmBin);
+  if (platform === "win32" && prefix) unlinkQuiet(join(prefix, CMD));
+
   const npm = runNpm(
     [
       "install",
@@ -74,30 +187,52 @@ export function installGlobalCli({ home, env = process.env, spec = PKG_ROOT }) {
     ],
     env,
   );
-  const pathBin = join(home, ".local", "bin", CMD);
-  const fallback = join(PKG_ROOT, "bin", "cli.mjs");
-  const target =
-    npmBin && existsSync(npmBin) ? resolve(npmBin) : resolve(fallback);
+
+  const pathBin = userPathBin(home, CMD, platform);
+  const fallbackScript = join(PKG_ROOT, "bin", "cli.mjs");
+  const globalRoot = npmGlobalRoot(env);
+  const fromNpm = globalRoot ? npmGlobalCliScript(globalRoot, NAME, platform) : null;
+  const script = resolve(fromNpm && existsSync(fromNpm) ? fromNpm : fallbackScript);
+  const npmTarget = npmBin && existsSync(npmBin) ? resolve(npmBin) : null;
 
   try {
-    if (resolve(pathBin) !== target) replaceWithSymlink(pathBin, target);
-    else if (!existsSync(pathBin) && existsSync(target)) replaceWithSymlink(pathBin, target);
+    if (platform === "win32") {
+      replaceWithWindowsCmd(pathBin, process.execPath, script);
+    } else {
+      const target = npmTarget || script;
+      if (resolve(pathBin) !== target) replaceWithUnixSymlink(pathBin, target);
+      else if (!existsSync(pathBin) && existsSync(target)) replaceWithUnixSymlink(pathBin, target);
+    }
   } catch (err) {
+    const bin = npmTarget || (existsSync(pathBin) ? pathBin : null);
+    if (bin) {
+      return {
+        ok: true,
+        bin,
+        target: bin,
+        script,
+        npm: npm.status === 0,
+        message: `${CMD} → ${bin}`,
+      };
+    }
     return {
       ok: false,
       bin: pathBin,
-      target,
+      target: npmTarget,
+      script,
       npm: npm.status === 0,
       message: err instanceof Error ? err.message : String(err),
     };
   }
 
-  const bin = existsSync(pathBin) ? pathBin : existsSync(target) ? target : null;
+  const bin = existsSync(pathBin) ? pathBin : npmTarget;
   const ok = Boolean(bin);
+  const target = npmTarget || bin;
   return {
     ok,
     bin,
     target,
+    script,
     npm: npm.status === 0,
     message: ok
       ? `${CMD} → ${target}`

@@ -77,6 +77,17 @@ test("bootstrap skill fails open, skips plugin MCP, and omits the procedure rece
   assert.doesNotMatch(setup, /🧠 \*\*Mental\*\*/);
 });
 
+test("Track skill defines renderer-safe questions and plain-text fallback", () => {
+  const track = readFileSync(join(ROOT, "optional/mental-track/SKILL.md"), "utf8");
+  assert.match(track, /one single-select question at a time/);
+  assert.match(track, /allow_multiple: false/);
+  assert.match(track, /\(Recommended\)/);
+  assert.match(track, /option labels under 40 characters/);
+  assert.match(track, /numbered options as plain text/);
+  assert.match(track, /Do not require markdown/);
+  assert.match(track, /host-specific controls/);
+});
+
 function agentPaste(md) {
   const m = md.match(/#{2,} Paste this into your agent[\s\S]*?```text\n([\s\S]*?)```/);
   assert.ok(m, "missing agent paste fence");
@@ -95,6 +106,10 @@ test("README and install-doc agent pastes stay identical and skills-only", () =>
   assert.match(readme, /npx @balacode\/mental/);
   assert.match(readme, /including when `mental` is already there/);
   assert.match(readme, /From a git checkout skip/);
+  assert.match(readme, /Never run a \.mjs file/);
+  assert.match(readme, /Always prefix `node`/);
+  assert.match(readme, /npm i -g @balacode\/mental/);
+  assert.doesNotMatch(readme, /Install Mental CLI from https:\/\//);
   assert.doesNotMatch(readme, /do not duplicate setup/);
   assert.doesNotMatch(readme, /mcp\.json/);
 });

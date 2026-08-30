@@ -2,12 +2,11 @@
  * `mental install` — copy skill + tiny rule to user agent dirs; ~/.mental skeleton.
  * `--hooks` and `--mcp` are optional and default off.
  */
-import { spawnSync } from "node:child_process";
 import { resolveBundle } from "../lib/resolve.mjs";
 import { userMentalDir } from "../lib/bindings.mjs";
 import { ensureSkeleton } from "../lib/okf.mjs";
 import { installSkills } from "../lib/install-skills.mjs";
-import { installGlobalCli } from "../lib/install-cli.mjs";
+import { installGlobalCli, spawnCli } from "../lib/install-cli.mjs";
 import { enableHooks } from "../lib/hooks.mjs";
 import { enableMcp } from "../lib/mcp-hosts.mjs";
 import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
@@ -41,8 +40,7 @@ export function cmdInstall(args, io = {}) {
     const upd = checkForUpdate({ env });
     if (upd.latest && cmpSemver(upd.latest, VERSION) > 0) {
       const bumped = installGlobalCli({ home, env, spec: NAME });
-      const newBin = bumped.bin;
-      if (bumped.npm && newBin) {
+      if (bumped.npm && bumped.script) {
         if (!args.json) {
           stdout.write(`${brandLine(`updating CLI ${VERSION} → ${upd.latest}`)}\n`);
         }
@@ -53,7 +51,7 @@ export function cmdInstall(args, io = {}) {
         if (mcp) childArgs.push("--mcp");
         if (track) childArgs.push("--track");
         if (args.dir) childArgs.push("--dir", args.dir);
-        const child = spawnSync(newBin, childArgs, {
+        const child = spawnCli(bumped.script, childArgs, {
           encoding: "utf8",
           cwd,
           env: { ...env, MENTAL_SKIP_SELF_UPDATE: "1", MENTAL_SKIP_UPDATE_CHECK: "1" },

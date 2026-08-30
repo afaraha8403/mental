@@ -70,9 +70,22 @@ export function cmdHandoff(args, io = {}) {
 
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   let timer_stop_failed = false;
+  let time = null;
+  let review = null;
   if (home && isBundleRoot(resolved.data) && isFeatureOn(home, "track", resolved.data.id || null)) {
-    const stopped = stopFocusedForPark(resolved.data.root);
+    const stopped = stopFocusedForPark(resolved.data.root, {
+      titleInternal: flagString(args.flags, "title-internal") || title,
+      bodyInternal: flagString(args.flags, "body-internal") || flagString(args.flags, "body") || undefined,
+      titleExternal: flagString(args.flags, "title-external") || undefined,
+      bodyExternal: flagString(args.flags, "body-external") || undefined,
+      projectName: flagString(args.flags, "project-name") || undefined,
+      billableHmm: flagString(args.flags, "billable") || undefined,
+    });
     if (!stopped.ok) timer_stop_failed = true;
+    else {
+      time = stopped.data || null;
+      review = stopped.review || null;
+    }
   }
 
   const body = flagString(args.flags, "body") || "";
@@ -87,7 +100,13 @@ export function cmdHandoff(args, io = {}) {
   const heartbeat = collected.ok ? collected.data : null;
   if (resolved.data.id) writeWatermark(home, resolved.data.id, env);
 
-  const data = { path: written.path, heartbeat, ...(timer_stop_failed ? { timer_stop_failed: true } : {}) };
+  const data = {
+    path: written.path,
+    ...(time ? { time } : {}),
+    ...(review ? { review } : {}),
+    heartbeat,
+    ...(timer_stop_failed ? { timer_stop_failed: true } : {}),
+  };
   printResult(stdout, args, true, data, undefined, () => {
     const mark = kindLine("journal", `handoff ${written.path}`);
     return heartbeat ? `${mark}\n${formatHeartbeat(heartbeat)}` : mark;

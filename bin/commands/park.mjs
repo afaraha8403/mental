@@ -108,9 +108,22 @@ export function cmdPark(args, io = {}) {
 
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   let timer_stop_failed = false;
+  let time = null;
+  let review = null;
   if (home && isBundleRoot(resolved.data) && isFeatureOn(home, "track", resolved.data.id || null)) {
-    const stopped = stopFocusedForPark(resolved.data.root);
+    const stopped = stopFocusedForPark(resolved.data.root, {
+      titleInternal: flagString(args.flags, "title-internal") || undefined,
+      bodyInternal: flagString(args.flags, "body-internal") || flagString(args.flags, "body") || undefined,
+      titleExternal: flagString(args.flags, "title-external") || undefined,
+      bodyExternal: flagString(args.flags, "body-external") || undefined,
+      projectName: flagString(args.flags, "project-name") || undefined,
+      billableHmm: flagString(args.flags, "billable") || undefined,
+    });
     if (!stopped.ok) timer_stop_failed = true;
+    else {
+      time = stopped.data || null;
+      review = stopped.review || null;
+    }
   }
 
   const title = flagString(args.flags, "title") || "Parked";
@@ -149,6 +162,8 @@ export function cmdPark(args, io = {}) {
   const data = {
     path: written.path,
     ...(attention ? { attention } : {}),
+    ...(time ? { time } : {}),
+    ...(review ? { review } : {}),
     heartbeat,
     ...(timer_stop_failed ? { timer_stop_failed: true } : {}),
   };

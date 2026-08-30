@@ -104,6 +104,12 @@ function runTool(name, args, ctx) {
         resume: args.resume,
         against: args.against,
         via: args.via,
+        "title-internal": args.title_internal,
+        "body-internal": args.body_internal,
+        "title-external": args.title_external,
+        "body-external": args.body_external,
+        billable: args.billable,
+        "project-name": args.project_name,
       },
     });
   }
@@ -153,6 +159,12 @@ function runTool(name, args, ctx) {
         from: args.from,
         against: args.against,
         via: args.via,
+        "title-internal": args.title_internal,
+        "body-internal": args.body_internal,
+        "title-external": args.title_external,
+        "body-external": args.body_external,
+        billable: args.billable,
+        "project-name": args.project_name,
       },
     });
   }
@@ -165,6 +177,12 @@ function runTool(name, args, ctx) {
         body: args.body,
         against: args.against,
         via: args.via,
+        "title-internal": args.title_internal,
+        "body-internal": args.body_internal,
+        "title-external": args.title_external,
+        "body-external": args.body_external,
+        billable: args.billable,
+        "project-name": args.project_name,
       },
     });
   }
@@ -182,10 +200,13 @@ function runTool(name, args, ctx) {
     if (args.title_external) flags["title-external"] = args.title_external;
     if (args.body_internal) flags["body-internal"] = args.body_internal;
     if (args.body_external) flags["body-external"] = args.body_external;
+    if (args.project_name) flags["project-name"] = args.project_name;
     if (args.task) flags.task = args.task;
     if (args.id) flags.id = args.id;
     if (args.user) flags.user = args.user;
+    if (args.billable) flags.billable = args.billable;
     if (args.all) flags.all = true;
+    if (args.new) flags.new = true;
     if (args.since) flags.since = args.since;
     if (args.until) flags.until = args.until;
     if (args.out) flags.out = args.out;

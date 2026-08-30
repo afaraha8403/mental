@@ -59,6 +59,14 @@ const VIA = v("via", { summary: "Short client token (cursor, claude-code, copilo
 const AGAINST = v("against", { summary: "Repo-relative plan path (no ..)" });
 const TITLE = v("title", { summary: "OKF title (same title updates)" });
 const BODY = v("body", { summary: "Section or file body" });
+const TIME_CAPTURE_FLAGS = [
+  v("title-internal", { mcpName: "title_internal", summary: "Internal time-entry title" }),
+  v("body-internal", { mcpName: "body_internal", summary: "Internal time-entry detail" }),
+  v("title-external", { mcpName: "title_external", summary: "Customer-ready time-entry title" }),
+  v("body-external", { mcpName: "body_external", summary: "Customer-ready time-entry detail" }),
+  v("billable", { summary: "Billable h:mm override; defaults to wall" }),
+  v("project-name", { mcpName: "project_name", summary: "Project/client label for reports and exports" }),
+];
 const RESUME = v("resume", { required: true, summary: "Exact next action — open loops: none or list" });
 const PATH = v("path", { summary: "Bundle-relative OKF path" });
 
@@ -83,7 +91,7 @@ export const CATALOG = {
       `${CMD} park --resume "Pick up the catalog next — open loops: none"`,
       `${CMD} park --resume "…" --via cursor --json`,
     ],
-    flags: [RESUME, v("title", { summary: "Journal title (default Parked)" }), BODY, v("attention", { summary: "Residue title to record with this park" }), v("kind", { enum: ["direction", "concern", "thread", "verify"] }), v("from", { summary: "Who raised the residue" }), AGAINST, VIA],
+    flags: [RESUME, v("title", { summary: "Journal title (default Parked)" }), BODY, ...TIME_CAPTURE_FLAGS, v("attention", { summary: "Residue title to record with this park" }), v("kind", { enum: ["direction", "concern", "thread", "verify"] }), v("from", { summary: "Who raised the residue" }), AGAINST, VIA],
     effects: "non_idempotent",
     mcp: true,
   },
@@ -96,7 +104,7 @@ export const CATALOG = {
       `${CMD} handoff --title "Catalog landed" --resume "Phase A tests — open loops: none"`,
       `${CMD} handoff --title "…" --resume "…" --via cursor --json`,
     ],
-    flags: [v("title", { required: true, summary: "Journal outcome title" }), RESUME, BODY, AGAINST, VIA],
+    flags: [v("title", { required: true, summary: "Journal outcome title" }), RESUME, BODY, ...TIME_CAPTURE_FLAGS, AGAINST, VIA],
     effects: "non_idempotent",
     mcp: true,
   },
@@ -234,7 +242,7 @@ export const CATALOG = {
       `${CMD} journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next — open loops: none" --against PLAN.md --via cursor`,
       `${CMD} journal --title "…" --resume "…" --json`,
     ],
-    flags: [v("title", { required: true }), RESUME, BODY, AGAINST, VIA],
+    flags: [v("title", { required: true }), RESUME, BODY, ...TIME_CAPTURE_FLAGS, AGAINST, VIA],
     effects: "non_idempotent",
     mcp: true,
   },
@@ -326,9 +334,9 @@ export const CATALOG = {
   track: {
     name: "track",
     group: "Setup",
-    summary: "Optional wall/user timers (off until option track on). One live clock; stop sets user=wall. Glance / start / stop / focus / discard / report / export.",
+    summary: "Optional wall/billable clock (off until option track on). Start is ensure-running; --new starts another. Stop sets billable=wall. Glance / start / stop / focus / discard / report / export.",
     usage: `${CMD} track [glance|start|stop|focus|discard|amend|report|export]`,
-    examples: [`${CMD} track`, `${CMD} track start --title-internal "Catalog" --json`],
+    examples: [`${CMD} track`, `${CMD} track start --via cursor --json`, `${CMD} track start --new --title-external "Auth work" --json`],
     flags: [
       v("title-internal", { mcpName: "title_internal" }),
       v("title-external", { mcpName: "title_external" }),
@@ -337,7 +345,8 @@ export const CATALOG = {
       v("project-name"),
       v("task"),
       v("id"),
-      v("user"),
+      v("billable"),
+      v("user", { summary: "Alias of --billable" }),
       v("since"),
       v("until"),
       v("out"),
@@ -345,6 +354,7 @@ export const CATALOG = {
       v("started"),
       v("format", { enum: ["csv", "md"] }),
       b("all"),
+      b("new", { summary: "Start another clock; default start is ensure-running" }),
       b("external"),
       b("accept-stale"),
       VIA,

@@ -1,9 +1,9 @@
 /**
- * `mental track` — optional wall/user timers. Isolated add-on; default off.
+ * `mental track` — optional wall/billable timers. Isolated add-on; default off.
  * Glance is not a focus ping. Hours never go to git.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { resolveBundle } from "../lib/resolve.mjs";
 import { TRACK_OFF_USAGE, isFeatureOn, loadConfig } from "../lib/config.mjs";
 import { assertLocalIgnorable } from "../lib/ignore.mjs";
@@ -30,6 +30,16 @@ function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
 }
 
+/** --billable is the name; --user is an alias. */
+function hoursHmm(flags) {
+  const billable = flagString(flags, "billable");
+  const user = flagString(flags, "user");
+  if (billable && user && billable !== user) {
+    return { ok: false, message: "pass --billable or --user, not both" };
+  }
+  return { ok: true, hmm: billable || user || undefined };
+}
+
 function trackOffResult(stdout, args) {
   printResult(stdout, args, false, undefined, { code: "usage", message: TRACK_OFF_USAGE });
   return EXIT_USAGE;
@@ -49,7 +59,7 @@ function formatGlance(data) {
   const lines = [];
   if (!data.running.length && !data.stoppedToday.length) return "no running timers";
   for (const t of data.tasks) {
-    lines.push(`${t.title_internal}  wall ${t.wall}  user ${t.user}`);
+    lines.push(`${t.title_internal}  ⏱ ${t.wall}  billable ${t.billable}`);
     for (const i of t.intervals) {
       const tag = i.neverStarted ? "never-started" : i.stale ? "stale" : i.status;
       lines.push(`  ${tag} ${i.id.slice(0, 8)}  ${i.live_wall}`);
@@ -131,16 +141,18 @@ export function cmdTrack(args, io = {}) {
       });
       return EXIT_USAGE;
     }
-    const defaultName = bundleName(where.root, where.id || "project");
+    const defaultName = (where.gitRoot && basename(where.gitRoot)) || bundleName(where.root, where.id || "project");
     const result = startInterval(where.root, {
       titleInternal: flagString(args.flags, "title-internal") || "",
       titleExternal: flagString(args.flags, "title-external") || undefined,
       bodyInternal: flagString(args.flags, "body-internal") || undefined,
+      bodyExternal: flagString(args.flags, "body-external") || undefined,
       projectName: flagString(args.flags, "project-name") || defaultName,
       against: against || "",
       via: viaParsed.via || "",
       taskId: flagString(args.flags, "task") || undefined,
       started: started || undefined,
+      forceNew: Boolean(args.flags?.new),
     });
     if (!result.ok) {
       printResult(stdout, args, false, undefined, result.error);
@@ -152,7 +164,11 @@ export function cmdTrack(args, io = {}) {
       true,
       result.data,
       undefined,
-      () => kindLine("note", `started ${result.data.title_internal}`),
+      () =>
+        kindLine(
+          "note",
+          `${result.data.ensured ? "ensured" : "started"} ${result.data.title_internal}`,
+        ),
     );
     return 0;
   }
@@ -175,12 +191,19 @@ export function cmdTrack(args, io = {}) {
       });
       return EXIT_USAGE;
     }
+    const hours = hoursHmm(args.flags);
+    if (!hours.ok) {
+      printResult(stdout, args, false, undefined, { code: "usage", message: hours.message });
+      return EXIT_USAGE;
+    }
     const result = stopIntervals(where.root, {
       id: flagString(args.flags, "id") || undefined,
       all: Boolean(args.flags?.all),
-      userHmm: flagString(args.flags, "user") || undefined,
+      userHmm: hours.hmm,
       acceptStale: Boolean(args.flags?.["accept-stale"]) && isTTY && !json,
       json,
+      titleInternal: flagString(args.flags, "title-internal") || undefined,
+      bodyInternal: flagString(args.flags, "body-internal") || undefined,
       titleExternal: flagString(args.flags, "title-external") || undefined,
       bodyExternal: flagString(args.flags, "body-external") || undefined,
       projectName: flagString(args.flags, "project-name") || undefined,
@@ -219,11 +242,18 @@ export function cmdTrack(args, io = {}) {
   }
 
   if (sub === "amend") {
+    const hours = hoursHmm(args.flags);
+    if (!hours.ok) {
+      printResult(stdout, args, false, undefined, { code: "usage", message: hours.message });
+      return EXIT_USAGE;
+    }
     const result = amendInterval(where.root, {
       id: flagString(args.flags, "id") || "",
+      titleInternal: flagString(args.flags, "title-internal") || undefined,
+      bodyInternal: flagString(args.flags, "body-internal") || undefined,
       titleExternal: flagString(args.flags, "title-external") || undefined,
       bodyExternal: flagString(args.flags, "body-external") || undefined,
-      userHmm: flagString(args.flags, "user") || undefined,
+      userHmm: hours.hmm,
       projectName: flagString(args.flags, "project-name") || undefined,
     });
     if (!result.ok) {
@@ -292,7 +322,7 @@ export function cmdTrack(args, io = {}) {
         });
       }
       printResult(stdout, args, true, { chunks }, undefined, () =>
-        chunks.map((c) => `${c.name || c.id}: wall ${c.report.wall} user ${c.report.user}`).join("\n"),
+        chunks.map((c) => `${c.name || c.id}: wall ${c.report.wall} billable ${c.report.billable}`).join("\n"),
       );
       return 0;
     }
@@ -325,7 +355,7 @@ export function cmdTrack(args, io = {}) {
       true,
       rep.data,
       undefined,
-      (d) => `wall ${d.wall}  user ${d.user}${d.overlap?.length ? "\nwarn: overlapping intervals" : ""}`,
+      (d) => `wall ${d.wall}  billable ${d.billable}${d.overlap?.length ? "\nwarn: overlapping intervals" : ""}`,
     );
     return 0;
   }
@@ -357,6 +387,26 @@ function writeExport(stdout, args, chunks, { external, project, all, cwd, gitRoo
     });
     return EXIT_USAGE;
   }
+  const skippedNeedsExternal = chunks.reduce(
+    (total, chunk) => total + Number(chunk.report.skippedNeedsExternal || 0),
+    0,
+  );
+  const intervalIds = chunks.flatMap((chunk) => chunk.report.review?.interval_ids || []);
+  const review = intervalIds.length
+    ? {
+        kind: "customer-copy",
+        interval_ids: intervalIds,
+        questions: chunks.find((chunk) => chunk.report.review)?.report.review.questions || [],
+      }
+    : null;
+  if (external && review) {
+    printResult(stdout, args, false, undefined, {
+      code: "needs-customer-copy",
+      message: `${skippedNeedsExternal} time ${skippedNeedsExternal === 1 ? "entry needs" : "entries need"} customer-ready copy`,
+      review,
+    });
+    return 1;
+  }
   let body = "";
   if (all && !project) {
     body = chunks
@@ -372,7 +422,11 @@ function writeExport(stdout, args, chunks, { external, project, all, cwd, gitRoo
     stdout,
     args,
     true,
-    { out: dest.abs, rows: chunks.reduce((n, c) => n + c.report.rows.length, 0) },
+    {
+      out: dest.abs,
+      rows: chunks.reduce((n, c) => n + c.report.rows.length, 0),
+      skippedNeedsExternal,
+    },
     undefined,
     () => kindLine("note", "exported"),
   );

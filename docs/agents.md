@@ -17,7 +17,7 @@ mental heartbeat --json
 
 `heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue (Needs eyes / In the air / Later), unsettled + settled (lists capped at 7; counts via `attentionCount` / `openDecisionCount` / `needsEyesCount` / `laterCount` / `guardrailCount` / `hopsToday`). JSON also includes `id` and `mode`. Use `mental status --json` when you also need notes. Do not call `pulse` every turn. Flag grammar: `mental <cmd> --help` or `mental schema --json`. Unknown flags fail (`error.code` `unknown-flag`, `error.hint` lists legal flags). Journal requires `--resume` (same as park/handoff). Decide create requires `--body` (same `--title` without `--body` updates).
 
-If JSON includes `data.track.enabled`, follow the Mental Track skill. Start a timer at the beginning of real work. If tracking is off, do not enable it. After `mental install` or `mental doctor`, ask about optionals (`needsConsent: true`) with a one-liner each: hooks (session-start status), MCP (`mental serve` for clients that cannot shell the CLI), time tracking (per-project timers). Check whether MCP is needed. Never run `mental option … on` or `install --hooks|--mcp|--track` until the user says yes **this turn**.
+If JSON includes `data.track.enabled`, follow the Mental Track skill. `track start --via <host>` if `runningCount` is 0 (start twice is ensure-running). If tracking is off, do not enable it. After `mental install` or `mental doctor`, ask about optionals (`needsConsent: true`) with a one-liner each: hooks (session-start status), MCP (`mental serve` for clients that cannot shell the CLI), time tracking (per-project sit-down clock). Check whether MCP is needed. Never run `mental option … on` or `install --hooks|--mcp|--track` until the user says yes **this turn**.
 
 ### Park vs handoff vs heartbeat vs pulse
 
@@ -86,7 +86,7 @@ The repo root **is** the plugin root ([spec](https://agent-plugins.org/specifica
 - `skills/mental-setup/` — bootstrap: install the CLI (immediate child of `skills/`)
 - `skill/mental/` — full procedure, copied by `mental install` (not plugin-discovered)
 
-Compatible clients (Cursor, VS Code, GitHub Copilot, ChatGPT/Codex, Kiro) load the same directory. Native plugin does **not** start MCP. Rules and hooks stay client-specific and install via `mental install` / `mental hooks on`. Optional MCP is `mental serve` / `mental install --mcp` only.
+Compatible clients (Cursor, VS Code, GitHub Copilot, ChatGPT/Codex, OpenCode, Kiro) load the same directory. Native plugin does **not** start MCP. Rules and hooks stay client-specific and install via `mental install` / `mental hooks on`. Optional MCP is `mental serve` / `mental install --mcp` only.
 
 When **releasing this repo**, git tag `vX.Y.Z`, `package.json`, and `npm view @balacode/mental version` must be the same string. Follow [`.cursor/rules/release.mdc`](../.cursor/rules/release.mdc). [README](../README.md#releasing-this-repo) restates that; the agent install paste does not.
 
@@ -112,9 +112,14 @@ Never Stop auto-journal. The skill + rule remain the real contract — Cursor `a
 
 ## Optional time tracking
 
-Default **off**. If heartbeat JSON includes `data.track.enabled`, follow the Mental Track skill: start a timer at the beginning of real work; park / handoff / journal stop it and set `user = wall`. Never ask the human for `h:mm`. Never invent a start clock or a duration. Glance and report are Read, not Time › exported.
+Default **off**. If heartbeat JSON includes `data.track.enabled`, follow the Mental Track skill. Start with short AI-generated internal and customer-ready title/body when `runningCount` is 0; start twice is ensure-running. At park/handoff/journal, regenerate customer copy from the completed work on that same command. Billable defaults to wall. Ask only when client identity, billable treatment, or safe wording is genuinely ambiguous. Renderer-safe question = one plain-text draft prompt, 2–3 short `{ id, label }` options, `(Recommended)` in the first label, and `allow_multiple: false`; use the host's structured question tool or numbered text fallback. Never invent a start clock or smaller billable duration.
 
-What it **cannot** do: reconstruct hours from git, fill a missed `start` from chat, backfill old rows, run two clocks, or print hours on TTY heartbeat / pulse. Usage "Time tracking is off" is not permission to run `mental option track on`.
+```text
+mental track start --title-internal "Auth retry" --body-internal "Tracing retry state." --title-external "Login reliability" --body-external "Improving login retry behavior." --via cursor --json
+mental handoff --title "Auth retry fixed" --body "Original error is preserved." --title-external "Improved login reliability" --body-external "Corrected retry handling for consistent login results." --resume "Commit when asked — open loops: none" --via cursor --json
+```
+
+What it **cannot** do: reconstruct hours from git, fill a missed `start` from chat, invent a smaller billable duration, or print hours on TTY heartbeat / pulse. Missing customer copy returns structured `review` JSON; generate and amend it before export. Usage "Time tracking is off" is not permission to run `mental option track on`.
 
 Human contract: [What time tracking can and cannot do](./track.md). Agent procedure: [optional/mental-track/SKILL.md](../optional/mental-track/SKILL.md).
 

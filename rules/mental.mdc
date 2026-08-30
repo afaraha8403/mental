@@ -15,7 +15,7 @@ If `mental` is missing, install the CLI first: try `npx @balacode/mental …`, t
 
 Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
 
-If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill. Start a timer at the beginning of real work. If tracking is off, do not enable it unless the user said yes this turn. After install or doctor, ask about hooks and time tracking, and whether MCP is needed, with a one-liner each.
+If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill. If `runningCount` is 0, start with short AI-generated internal and customer-ready title/body; start twice is safe. At park/handoff/journal, regenerate customer copy from the completed work on that same command. Billable defaults to wall. Ask only when client identity, billable treatment, or safe wording is genuinely ambiguous. Use one plain-text draft prompt with 2–3 short single-select options (`(Recommended)` in the first label) through the host's structured question tool, or numbered text fallback. If tracking is off, do not enable it unless the user said yes this turn. After install or doctor, ask about hooks and time tracking, and whether MCP is needed, with a one-liner each.
 
 If you invoked `mental` this turn, end the user-visible reply with `🧠 **Mental**` then a markdown bullet list: `- emoji **Kind** › *action* › title`. Read with no title omits the third slot. Never inline. No `────────`. Not `</br>`. Example in the Mental skill. Not a code fence.
 

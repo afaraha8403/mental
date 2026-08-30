@@ -212,7 +212,12 @@ test("MCP attention kind enum includes verify; via passes through journal", () =
   const listed = handle({ jsonrpc: "2.0", id: 1, method: "tools/list" }, { cwd: root, home, env: gitEnv(home) });
   const attention = listed.result.tools.find((t) => t.name === "attention");
   assert.ok(attention.inputSchema.properties.kind.enum.includes("verify"));
-  assert.ok(listed.result.tools.find((t) => t.name === "journal").inputSchema.properties.via);
+  const journal = listed.result.tools.find((t) => t.name === "journal");
+  assert.ok(journal.inputSchema.properties.via);
+  assert.ok(journal.inputSchema.properties.title_external);
+  assert.ok(journal.inputSchema.properties.body_external);
+  assert.ok(journal.inputSchema.properties.billable);
+  assert.ok(journal.inputSchema.properties.project_name);
 
   const ctx = { cwd: root, home, env: gitEnv(home) };
   const wrote = runTool("journal", { title: "MCP via", resume: "Go — open loops: none", via: "mcp" }, ctx);

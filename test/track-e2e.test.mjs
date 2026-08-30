@@ -29,7 +29,7 @@ function getRow(root, id) {
   return row;
 }
 
-test("e2e: park sets user = wall without --user", () => {
+test("e2e: park sets billable = wall without an override", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
@@ -73,7 +73,7 @@ test("e2e: last_seen ≈ started after 3+ min still clocks wall on park", () => 
   assert.ok((row.wall_minutes || 0) >= 3);
 });
 
-test("e2e: journal stops the focused timer with user = wall", () => {
+test("e2e: journal stops the focused timer with billable = wall", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
@@ -94,24 +94,77 @@ test("e2e: journal stops the focused timer with user = wall", () => {
   assert.equal(row.needs_user, 0);
 });
 
-test("e2e: second start stops the first; one live clock", () => {
+test("e2e: handoff records AI-generated internal and customer copy in one command", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const started = parseOk(
+    mental(home, root, [
+      "track",
+      "start",
+      "--json",
+      "--title-internal",
+      "Investigate auth retry",
+      "--title-external",
+      "Login reliability",
+    ]),
+    "start",
+  );
+  const handoff = parseOk(
+    mental(home, root, [
+      "handoff",
+      "--json",
+      "--title",
+      "Auth retry fixed",
+      "--body",
+      "Retry now preserves the original error.",
+      "--resume",
+      "Commit when asked — open loops: none",
+      "--title-external",
+      "Improved login reliability",
+      "--body-external",
+      "Corrected retry handling so failed login attempts return consistent results.",
+      "--project-name",
+      "Acme",
+      "--via",
+      "cursor",
+    ]),
+    "handoff",
+  );
+  assert.equal(handoff.data.review, undefined);
+  assert.equal(handoff.data.time.title_internal, "Auth retry fixed");
+  assert.equal(handoff.data.time.body_internal, "Retry now preserves the original error.");
+  assert.equal(handoff.data.time.title_external, "Improved login reliability");
+  assert.equal(
+    handoff.data.time.body_external,
+    "Corrected retry handling so failed login attempts return consistent results.",
+  );
+  assert.equal(handoff.data.time.project_name, "Acme");
+  assert.equal(handoff.data.time.billable, handoff.data.time.wall);
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  assert.equal(getRow(slice, started.data.id).status, "stopped");
+});
+
+test("e2e: second start same day is ensure-running; wall stays one clock", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
   const a = parseOk(
-    mental(home, root, ["track", "start", "--json", "--title-internal", "Host A"]),
+    mental(home, root, ["track", "start", "--json", "--via", "cursor", "--title-internal", "Host A"]),
     "start A",
   );
   const b = parseOk(
-    mental(home, root, ["track", "start", "--json", "--title-internal", "Host B"]),
+    mental(home, root, ["track", "start", "--json", "--via", "opencode", "--title-internal", "Host B"]),
     "start B",
   );
   const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
-  assert.equal(getRow(slice, a.data.id).status, "stopped");
-  assert.equal(getRow(slice, a.data.id).user, getRow(slice, a.data.id).wall);
+  assert.equal(b.data.ensured, true);
+  assert.equal(a.data.id, b.data.id);
+  assert.equal(getRow(slice, a.data.id).status, "running");
+  assert.equal(getRow(slice, a.data.id).via, "cursor");
   const glance = parseOk(mental(home, root, ["track", "--json"]), "glance");
   assert.equal(glance.data.running.length, 1);
-  assert.equal(glance.data.running[0].id, b.data.id);
+  assert.equal(glance.data.running[0].id, a.data.id);
 });
 
 test("e2e: leftover overnight flags stale_stop and keeps full wall, not last_seen clip", () => {
@@ -156,6 +209,37 @@ test("e2e: heartbeat unclocked then report commit-gap days", () => {
   assert.equal(after.data.unclockedCommitDays.includes(today), false);
 });
 
+test("e2e: --new runs a second clock; park stops focused only", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const a = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Client A"]),
+    "start A",
+  );
+  const b = parseOk(
+    mental(home, root, [
+      "track",
+      "start",
+      "--json",
+      "--new",
+      "--title-internal",
+      "Client B",
+      "--title-external",
+      "Discovery call",
+    ]),
+    "start B",
+  );
+  assert.notEqual(a.data.id, b.data.id);
+  parseOk(mental(home, root, ["park", "--json", "--resume", "Switch back"]), "park focused");
+  const glance = parseOk(mental(home, root, ["track", "--json"]), "glance");
+  assert.equal(glance.data.running.length, 1);
+  assert.equal(glance.data.running[0].id, a.data.id);
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  assert.equal(getRow(slice, b.data.id).status, "stopped");
+  assert.equal(getRow(slice, b.data.id).user, getRow(slice, b.data.id).wall);
+});
+
 test("e2e: git commit on an unclocked day shows up as a date, not hours", () => {
   const home = tempHome();
   const { root } = initRepo(home);
@@ -187,9 +271,39 @@ test("e2e: two running intervals overlap through now", () => {
         task_id, stale_stop, discarded, needs_user, needs_external
       ) VALUES (?, 'Time', 'running', 'Second', '', '', '', '', ?, NULL, ?, 0, '', '', ?, ?, 0, 0, 0, 0)`,
     )
-    .run(randomUUID(), a.data.started, nowIso, nowIso, randomUUID());
+    .run(randomUUID(), a.data.started, nowIso, nowIso, a.data.task_id);
   opened.db.close();
   const glance = parseOk(mental(home, root, ["track", "--json"]), "glance overlap");
   assert.equal(glance.data.running.length, 2);
   assert.ok(glance.data.overlap.length >= 1, JSON.stringify(glance.data.overlap));
+});
+
+test("e2e: leftover from yesterday closes at last_seen on next start", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const a = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Yesterday"]),
+    "start",
+  );
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const m = String(a.data.started).match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) - 1);
+  const pad = (n) => String(n).padStart(2, "0");
+  const startedY = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}${m[4]}`;
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  opened.db
+    .prepare("UPDATE intervals SET started = ?, last_seen_at = ? WHERE id = ?")
+    .run(startedY, startedY, a.data.id);
+  opened.db.close();
+  const b = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Today"]),
+    "start today",
+  );
+  assert.notEqual(a.data.id, b.data.id);
+  assert.equal(b.data.ensured, false);
+  const old = getRow(slice, a.data.id);
+  assert.equal(old.status, "stopped");
+  assert.equal(old.stopped, startedY);
+  assert.equal(old.user, old.wall);
 });

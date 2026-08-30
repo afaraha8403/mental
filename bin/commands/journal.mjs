@@ -10,6 +10,10 @@ import { isFeatureOn } from "../lib/config.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { stopFocusedForPark } from "../lib/time.mjs";
 
+function flagString(flags, key) {
+  return typeof flags?.[key] === "string" ? flags[key] : null;
+}
+
 /**
  * @param {{ json: boolean, dir?: string, flags?: Record<string, string | boolean>, cwd?: string, home?: string, env?: NodeJS.ProcessEnv }} args
  * @returns {number}
@@ -65,14 +69,34 @@ export function cmdJournal(args, io = {}) {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
   let timer_stop_failed = false;
+  let time = null;
+  let review = null;
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   if (home && isBundleRoot(resolved.data) && isFeatureOn(home, "track", resolved.data.id || null)) {
-    const stopped = stopFocusedForPark(resolved.data.root);
+    const stopped = stopFocusedForPark(resolved.data.root, {
+      titleInternal: flagString(args.flags, "title-internal") || title,
+      bodyInternal: flagString(args.flags, "body-internal") || body || undefined,
+      titleExternal: flagString(args.flags, "title-external") || undefined,
+      bodyExternal: flagString(args.flags, "body-external") || undefined,
+      projectName: flagString(args.flags, "project-name") || undefined,
+      billableHmm: flagString(args.flags, "billable") || undefined,
+    });
     if (!stopped.ok) timer_stop_failed = true;
+    else {
+      time = stopped.data || null;
+      review = stopped.review || null;
+    }
   }
   const written = appendJournal(resolved.data.root, { title, body, resume, against, via: viaParsed.via });
   const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
-  const data = { ...resolved.data, ...written, indexed, ...(timer_stop_failed ? { timer_stop_failed: true } : {}) };
+  const data = {
+    ...resolved.data,
+    ...written,
+    ...(time ? { time } : {}),
+    ...(review ? { review } : {}),
+    indexed,
+    ...(timer_stop_failed ? { timer_stop_failed: true } : {}),
+  };
   printResult(stdout, args, true, data, undefined, () => kindLine("journal", `appended ${written.path}`));
   return 0;
 }

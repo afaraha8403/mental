@@ -49,12 +49,16 @@ skill and rule. Journals stay. Do not re-run this client's plugin marketplace
 unless doctor says the host plugin is behind. Then follow the Mental skill.
 
 From a git checkout (unpublished commits): `node bin/cli.mjs install` — that
-tree does not clobber PATH with an older registry build.
+tree does not clobber PATH with an older registry build. Always prefix `node`.
+Never execute a `.mjs` file as a command (Windows shows "how do you want to
+open this file?"). Do not clone the GitHub repo just to install — `npm i -g`
+is the install path.
 
 ## If `mental` is missing
 
 1. Try `npx @balacode/mental where --json`. If that works, continue with npx
-   for this turn and tell the user to install.
+   for this turn and tell the user to install. Never run `bin/cli.mjs` or any
+   other `.mjs` file as a command.
 2. Tell the user to run:
 
 ```bash
@@ -67,9 +71,10 @@ mental doctor
    Do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette
    steps from this session.
 4. After `mental doctor`, ask whether they want optional hooks or time
-   tracking, and whether MCP is needed (`mental install --mcp` for
-   tool-only agents that cannot shell the CLI). Skip MCP if this client can
-   run `mental`. Never run `mental option … on` until they say yes **this turn**.
+   tracking (sit-down clock, default off), and whether MCP is needed
+   (`mental install --mcp` for tool-only agents that cannot shell the CLI).
+   Skip MCP if this client can run `mental`. Never run `mental option … on`
+   until they say yes **this turn**.
 
 Do not start a plugin MCP server. Do not silent-global-install from a hook.
 Missing Mental must not block the user's coding task (fail open).

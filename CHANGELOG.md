@@ -7,19 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-30
+
 ### Features
 
-- Track stop (park, handoff, journal) sets `user = wall`. Agents never ask for `h:mm`. A new `start` stops every running interval first. Heartbeat JSON `track.unclocked` flags a hop today with no interval. Report `unclockedCommitDays` lists git dates with commits and no clocked slice (dates only, not hours). `--via opencode` is a documented host token.
+- Track automatically records AI-generated private and customer-ready title/body fields alongside wall and billable time. Start is ensure-running; `--new` starts another clock. Park, journal, and handoff refresh the customer copy and default billable to wall in the same command. Missing copy returns a renderer-safe single-select question (`id`, plain prompt, short `{ id, label }` options, `allow_multiple: false`) with numbered-text fallback. Dated external exports contain customer descriptions, wall, and billable while omitting private detail. Existing user-time values migrate to first-class billable columns; `--user` remains a compatibility alias.
 
 ### Changes
 
-- README, install, CLI, agents, and why docs spell out what optional time tracking can and cannot do. Human contract: `docs/track.md`.
+- README, install, CLI, agents, why, and the agent procedure describe automated time capture, low-friction defaults, native structured questions only for genuine ambiguity, and steerable customer copy.
 
 ### Fixes
 
 - Never-started is short wall (start → now under 2 minutes), not `last_seen ≈ started`. Overnight leftover still flags `stale_stop` without wiping user. Overlap detection treats a running interval as open through now.
 
 - Update notice learns a new npm version within 24h when this CLI thinks it is current. The 7-day cache applies only while already behind. TTY prints the hint once per day; `--json` still includes `update` on every call. Failed npm lookups back off instead of retrying every command. Prerelease sorts below the matching release.
+
+- Windows install no longer ShellExecutes `.mjs` files (the "how do you want to open this file?" dialog). `mental install` writes a `mental.cmd` shim that runs `node`, and self-upgrade re-invokes via `process.execPath`. The agent paste leads with `npm i -g` and forbids running `.mjs` as a command.
 
 ## [0.7.1] - 2026-08-29
 

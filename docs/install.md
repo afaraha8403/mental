@@ -14,7 +14,7 @@ mental install
 mental doctor
 ```
 
-`mental install` puts `mental` on PATH (typically `~/.local/bin/mental`), copies the skill and a tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton.
+`mental install` puts `mental` on PATH (`~/.local/bin/mental` on Unix; npm's `mental.cmd` on Windows), copies the skill and a tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton.
 
 That skill is what makes agents journal, decide, and record residue **for you**. You do not keep the log by hand. It does **not** turn on hooks or MCP, and it does not delete journals.
 
@@ -45,6 +45,8 @@ cd /path/to/mental
 node bin/cli.mjs install
 ```
 
+Always prefix `node`. Never run `bin/cli.mjs` or `./bin/cli.mjs` as a command — Windows ignores the shebang and shows "how do you want to open this file?".
+
 That checkout is the source of truth until you publish. It does not replace PATH with an older registry build.
 
 **Agents after this CLI:** `mental decide --title` create requires `--body`. Search JSON includes `tokens` and `op`. Journal hops may appear as `journal/YYYY-MM-DD.md#HH:MM`. Heartbeat lists **Later** for `--status later` residue. Existing decision files on disk are unchanged.
@@ -56,19 +58,19 @@ That checkout is the source of truth until you publish. It does not replace PATH
 Copy the block into Cursor, Claude Code, Copilot, Codex, or any other coding agent:
 
 ```text
-Install Mental CLI from https://github.com/afaraha8403/mental.
-
-Mental CLI is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air. After install, you write it on my behalf — I do not journal by hand.
-
-The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. Hosts load skills/mental-setup (install the CLI). The full procedure lives in skill/mental and is copied by `mental install` — not plugin-discovered. Native plugin does not start MCP. Do not start a plugin MCP server.
-
-If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH — including when `mental` is already there (that upgrades npm and recopies the skill):
+Install Mental CLI with npm. Do not clone the GitHub repo to install. Never run a .mjs file — Windows will ask what to open it with.
 
   npm i -g @balacode/mental
   mental install
   mental doctor
 
-From a git checkout skip `npm i -g` — run `node bin/cli.mjs install` from that tree so npm does not replace it with an older registry build.
+Mental CLI is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air. After install, you write it on my behalf — I do not journal by hand.
+
+The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. Hosts load skills/mental-setup (install the CLI). The full procedure lives in skill/mental and is copied by `mental install` — not plugin-discovered. Native plugin does not start MCP. Do not start a plugin MCP server.
+
+If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH — including when `mental` is already there (that upgrades npm and recopies the skill). Run the three commands above.
+
+From a git checkout skip `npm i -g` — run `node bin/cli.mjs install` from that tree so npm does not replace it with an older registry build. Always prefix `node`. Never execute `bin/cli.mjs` or any other `.mjs` file as a command.
 
 The plugin is discovery. npm + `mental install` are the source of truth for the binary and the procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by `mental install` — not the plugin bootstrap.
 
@@ -78,7 +80,7 @@ After doctor, ask whether I want optional hooks or time tracking, and whether MC
 
 - hooks: session-start snippets so a new chat loads Mental status (default off)
 - MCP: register `mental serve` for tool-only agents that cannot shell the CLI (skip if this client can run `mental`)
-- time tracking: optional per-project wall/user timers (default off)
+- time tracking: optional automated project record — wall/billable, private + customer-ready descriptions, dated client export (default off)
 ```
 
 ## Install as a plugin (you, this host)
@@ -140,6 +142,8 @@ cd /path/to/mental
 node bin/cli.mjs install --json
 ```
 
+Always prefix `node`. Never execute the `.mjs` file directly.
+
 A git checkout installs that tree and does not clobber it with the registry.
 
 ## What `mental install` does
@@ -151,14 +155,14 @@ Optional:
 ```bash
 mental install --mcp    # register `mental serve` in ~/.cursor/mcp.json + ~/.claude.json
 mental hooks on         # session-start hooks; default off
-mental option track on  # per-UUID timers; never from install paste unless the user asked
+mental option track on  # per-UUID sit-down clock; never from install paste unless the user asked
 mental doctor           # PATH, bindings, ignore, skills, npm update, host plugin lag, optionals[]
 mental doctor --fix-ignore   # add .mental/ and .mental-id to your global git excludes
 ```
 
 Install and doctor JSON include `optionals[]` (`id`, `enabled`, `scope`, `command`, `isNew`, `needsConsent: true`). After doctor, agents ask about hooks and time tracking, and whether MCP is needed, with a one-liner each. Do not pass `--hooks` / `--mcp` / `--track` until the user says yes this turn.
 
-Time tracking is off by default. It clocks one sit-down at a time (`user = wall` on stop). It does **not** reconstruct hours from git, guess a duration, or print hours on the TTY pulse. Hours live in bundle `time.sqlite` (never git). The track skill is copied from `optional/mental-track/` only when track is enabled — not from plugin `skills/`. Full contract: [What time tracking can and cannot do](./track.md).
+Time tracking is off by default. When enabled, agents generate private and customer-ready descriptions from current work, clock wall/billable time, and refresh the record at park, journal, or handoff. Billable defaults to wall. Genuine ambiguity uses one plain-text draft prompt with short single-select options through the host's native question renderer, or the same numbered-text fallback. `--new` starts another clock. Customer exports contain dated work descriptions and hours, never private detail. It does **not** reconstruct hours from git, guess a duration, or print hours on the TTY pulse. Hours live in bundle `time.sqlite` (never git). The track skill is copied from `optional/mental-track/` only when track is enabled — not from plugin `skills/`. Full contract: [What time tracking can and cannot do](./track.md).
 
 ## Uninstall
 
