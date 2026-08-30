@@ -1,6 +1,6 @@
-# CLI reference
+# Mental CLI reference
 
-After `mental install`, **agents write on your behalf** (journal, decisions, residue). You type `mental` when you want the pulse yourself. Agents always pass `--json`. Named commands are one-shot: print or write, then exit.
+**I type mental.** After `mental install`, **agents write on your behalf** (journal, decisions, residue). You type `mental` when you want the pulse yourself. Agents always pass `--json`. Named commands are one-shot: print or write, then exit.
 
 ```bash
 mental                 # heartbeat on a TTY; help + exit 2 otherwise
@@ -30,8 +30,8 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 
 | Command | What it does |
 | --- | --- |
-| `mental` | Heartbeat (TTY): resume, last outcome, git, hops today, residue, unsettled + settled; then exit |
-| `mental heartbeat` | Same cheap reload; agents pass `--json`. Read-only — does not write the pulse watermark. Delta is counts only. `hopsToday` is parks since local midnight |
+| `mental` | Heartbeat (TTY): resume, last outcome, git, hops today, Needs eyes, In the air, Later, unsettled + settled; then exit |
+| `mental heartbeat` | Same cheap reload; agents pass `--json`. Read-only — does not write the pulse watermark. Delta is counts only. `hopsToday` is parks since local midnight. `later` / `laterCount` are `--status later` residue |
 | `mental pulse` | Cross-project compact rows from `bindings.json` (id, name, resume, attentionCount, openDecisionCount). No journal bodies. Writes watermark for the active bundle |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only; does not create identity) |
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
@@ -44,14 +44,14 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental journal --title --body --resume [--against] [--via]` | Append today’s journal section. `--resume` is required (same as park/handoff) |
 | `mental schema [command]` | Dump the command catalog as JSON (`mental schema heartbeat --json` for one command) |
 | `mental completion bash\|zsh\|fish` | Print a completion script (do not auto-write shell rc files) |
-| `mental attention --title --kind` | Create or update residue (`direction` \| `concern` \| `thread` \| `verify`; `--status resolved` closes it). `--via` optional |
+| `mental attention --title --kind` | Create or update residue (`direction` \| `concern` \| `thread` \| `verify`; `--status later` is come-back-to-this, not a note; `--status resolved` closes). `--via` optional |
 | `mental decide --title --body` | Create or update a decision. Create requires `--body` (the why). Same `--title` without `--body` updates; `--status decided` closes by title; `--path` targets a file. `--via` optional |
-| `mental note --title` | Scaffold a note |
+| `mental note --title` | Scaffold a durable fact (not "come back to this" — that is `attention --status later`) |
 | `mental local [--import \| --move]` | Project `./.mental` after ignore check |
 | `mental remap [--to id]` | List or retarget this clone’s UUID |
 | `mental split [--copy]` | New UUID for this clone (`mental new` is an alias) |
 | `mental link --to <id>` | Point this clone at an existing UUID |
-| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH; `--mcp` registers MCP; `--hooks` / `--track` only after the user says yes this turn. JSON includes `optionals[]` (`needsConsent: true`) |
+| `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH. From a published install, upgrades when npm is ahead then re-runs so skills match. `--mcp` registers MCP; `--hooks` / `--track` only after the user says yes this turn. JSON includes `optionals[]` (`needsConsent: true`) |
 | `mental uninstall` | Remove installed skill / rule / hooks / MCP / mental-track copies |
 | `mental option` | List or set optional features (`track` per UUID; `mcp` / `hooks` user-global). `--all` sets track default on. `--this` before a UUID is usage |
 | `mental track` | Optional wall/user timers (off until `option track on`). `start` / `stop` / `focus` / `discard` / `report` / `export`. Export `--out` must be outside the git worktree |
@@ -67,6 +67,7 @@ Same `--title` updates the existing decision or attention file (paths are identi
 mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none" --against PLAN.md --via cursor
 mental decide --title "Heartbeat only, no standing TUI" --body "Default TTY mental prints a one-shot heartbeat and exits." --status decided --via cursor
 mental attention --title "Tom said ship the pointer not the dump" --kind direction --from Tom --via cursor
+mental attention --title "Come back to MCP" --kind thread --status later --via cursor
 mental attention --title "Resolver tests not reviewed" --kind verify --via cursor
 mental attention --title "Tom said ship the pointer not the dump" --status resolved
 mental note --title "Identity is a UUID in bindings.json"
@@ -91,6 +92,7 @@ mental where
 mental search overlay
 mental list --type Decision --kind direction
 mental show notes/some-fact.md
+mental show journal/2026-08-29.md#22:36
 ```
 
 Typed filters (`--type`, `--status`, `--tag`, `--kind`) apply before the result cap. Search uses SQLite FTS5 with bm25 when Node’s `node:sqlite` includes FTS5; otherwise it uses SQLite LIKE (or a markdown scan if sqlite is missing). Title matches rank above buried body mentions; Decision/Note rank above Journal. Space-separated words are AND prefixes (`overlay leftover` must match both) unless `--any` (OR). Quotes are shell glue, not a phrase operator. JSON includes `tokens` and `op`. Journal hops index as `journal/YYYY-MM-DD.md#HH:MM`. Search one concept per query; before proposing an approach, search that name. MCP `q` may be a string array (union).
@@ -122,6 +124,6 @@ Index: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` (rebuildable). Hours a
 Optional timers: `mental option track on` then `mental track start --title-internal "…"`. Export `--out` must be outside the git worktree. TTY heartbeat and pulse never show hours.
 Pulse watermark: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json` (`{ at: iso }` — rebuildable, not SoT). Written after delta by `pulse` / `park` / `handoff`; **heartbeat never writes it**.
 
-Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount`. Extra open decisions: `mental list --type Decision --status open`.
+Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount` / `laterCount`. Extra later: `mental list --type Attention --status later`. Extra open decisions: `mental list --type Decision --status open`.
 
 See [identity](./identity.md) for UUID / local / leftover import, and [agents](./agents.md) for the `--json` contract.

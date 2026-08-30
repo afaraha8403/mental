@@ -1,17 +1,17 @@
 ---
-description: Project continuity is Mental. Orient and hand off via the CLI; never grep OKF.
+description: Project continuity is Mental CLI. Orient and hand off via the CLI; never grep OKF.
 alwaysApply: true
 ---
 
-Continuity is Mental. On start/finish of real work, or orientation questions, use the Mental skill.
+Continuity is Mental CLI. On start/finish of real work, or orientation questions, use the Mental skill.
 
 Run `mental where` then `mental heartbeat --json` (or `mental status --json` when notes are needed). Do not grep `.mental` or `~/.mental`. Do not parse YAML frontmatter yourself.
 
-If `--json` includes `update`, tell the user once this session to run `mental install`. Do not block work.
+If `--json` includes `update`, or the user asks to upgrade, tell the user once this session to run `npm i -g @balacode/mental` then `mental install` then `mental doctor`. Do not block work.
 
-Mid-chat, not just start/finish: before proposing a concrete approach, flag, crate, or env var, `mental search <that name> --json` as its own query (space-separated words are AND). Also `mental list --type Decision --json` (all statuses). When residue surfaces ("X said…", a concern, "park this", unverified agent output), record `mental attention … --json` immediately — do not wait for the handoff. Interrupted mid-hop: `mental park --resume … --json`. Cross-project overview: `mental pulse --json` (compact rows, no journal dump). Cheap mid-chat reload stays `mental heartbeat --json`. Writes pass `--via cursor` (short client token, never a session id).
+Mid-chat, not just start/finish: before proposing a concrete approach, flag, crate, or env var, `mental search <that name> --json` as its own query (space-separated words are AND). Also `mental list --type Decision --json` (all statuses). When residue surfaces ("X said…", a concern, "park this", "come back to this" / "for later", unverified agent output), record `mental attention … --json` immediately — do not wait for the handoff. "For later" / "come back to this" → `--status later --kind thread`. Never `note`. Interrupted mid-hop: `mental park --resume … --json`. Cross-project overview: `mental pulse --json` (compact rows, no journal dump). Cheap mid-chat reload stays `mental heartbeat --json`. Writes pass `--via cursor` (short client token, never a session id).
 
-If `mental` is missing, install the CLI first: try `npx @balacode/mental …`, then tell the user `npm i -g @balacode/mental` and `mental install`. After that, follow the Mental skill. Missing Mental must not block work. The plugin does not start MCP.
+If `mental` is missing, install the CLI first: try `npx @balacode/mental …`, then tell the user `npm i -g @balacode/mental` and `mental install`. After that, follow the Mental skill. Missing Mental CLI must not block work. The plugin does not start MCP.
 
 Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
 

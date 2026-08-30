@@ -1,8 +1,8 @@
 ---
 name: mental
 description: >-
-  Local-first continuity CLI for coding agents (Cursor, Claude Code, Copilot,
-  Codex, MCP). Maintains a project-continuity log via the Mental CLI.
+  Mental CLI — local-first continuity for coding agents (Cursor, Claude Code, Copilot,
+  Codex, MCP). Maintains a project-continuity log via the CLI.
   Reconstructs where work stands from git, the latest journal handoff, open
   decisions, and attention residue; records why consequential decisions were
   made; extracts residue from a meeting dump or plan-progress question; and
@@ -26,7 +26,8 @@ when_to_use: |
     "what did I get done last week?", "what was that plan / where did I get?".
   - The user pastes a meeting transcript or asks "what do I have to get done
     from this?"
-  - The user states a concern, "Tom said X", or "park this for later".
+  - The user states a concern, "Tom said X", "park this for later",
+    "come back to this", or "note that for later".
   - A substantive task reaches a verified handoff point.
   - A consequential decision is made, deferred, or awaiting user input.
   - Mid-task: you are about to change an approach, residue surfaces, or other
@@ -38,12 +39,12 @@ when_to_use: |
   - The information is cross-repository, personal, or secret.
 ---
 
-# Mental — project continuity (CLI-first)
+# Mental CLI — project continuity (CLI-first)
 
 > **Leading words:** derive, do not maintain; task boundary; exact handoff;
 > decisions explain git; CLI is the write path; optional, never required.
 
-Mental exists to make a later human or agent session continue without
+Mental CLI exists to make a later human or agent session continue without
 reconstructing intent from chat history. Git records what changed. Mental
 records the small amount git cannot explain: current focus, consequential
 decisions and their rationale, durable repository-specific knowledge, attention
@@ -55,7 +56,7 @@ about observed versus inferred information.
 **OKF markdown is the source of truth.** Agents must call the CLI with `--json`.
 Do not grep `.mental`, `~/.mental`, or YAML frontmatter. Humans on a TTY can run `mental` with no args for a one-shot heartbeat (resume, last outcome, git, residue, open decisions). Agents use `mental heartbeat --json` for the same cheap reload — not `status` unless they need notes. Do not call `pulse` every turn or dump journals into context.
 
-If the JSON envelope includes `update` (`current`, `latest`, `hint`), tell the user **once this session** that a newer Mental CLI is on npm and they can run `mental install`. Do not block work. Do not put this on the Mental receipt.
+If the JSON envelope includes `update` (`current`, `latest`, `hint`), or the user asks to upgrade, tell the user **once this session** to run `npm i -g @balacode/mental` then `mental install` then `mental doctor`. That upgrades the published CLI when npm is ahead and recopies the skill and rule. Journals stay. The search index rebuilds on the next search. Do not re-run the host plugin marketplace unless doctor says the plugin is behind. Do not block work. Do not put this on the Mental receipt.
 
 If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill (optional hours). If tracking is off, do not enable it. Usage "Time tracking is off for this project" is not permission to turn it on. After `mental install` or `mental doctor`, ask the user about optionals (`needsConsent: true`) with a one-liner each: hooks (session-start status), MCP (`mental serve` for clients that cannot shell the CLI), time tracking (per-project timers). Check whether MCP is needed — skip it if this client can run `mental`. Never run `mental option … on` or `mental install --hooks|--mcp|--track` until the user says yes **this turn**.
 
@@ -88,6 +89,7 @@ mental park --resume "…" --via cursor --json
 mental handoff --title "…" --resume "…" --via cursor --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --via cursor --json
 mental attention --title "…" --kind direction --status open --via cursor --json
+mental attention --title "…" --kind thread --status later --via cursor --json
 mental decide --title "…" --body "…" --status open --via cursor --json
 mental note --title "…" --json
 ```
@@ -167,11 +169,13 @@ mental where --json
 mental heartbeat --json
 ```
 
-Heartbeat shows hops today, Needs eyes (`verify`), In the air, Unsettled, and
-Settled (newest decided titles, cap 7). Lists capped at 7; counts via
-`attentionCount` / `openDecisionCount` / `needsEyesCount` / `guardrailCount` /
-`hopsToday`. Extra open decisions: `mental list --type Decision --status open
---json`. Use `mental status --json` when you also need notes.
+Heartbeat shows hops today, Needs eyes (`verify`), In the air, Later
+(`--status later`), Unsettled, and Settled (newest decided titles, cap 7).
+Lists capped at 7; counts via `attentionCount` / `openDecisionCount` /
+`needsEyesCount` / `laterCount` / `guardrailCount` / `hopsToday`. Extra open
+decisions: `mental list --type Decision --status open --json`. Extra later:
+`mental list --type Attention --status later --json`. Use `mental status
+--json` when you also need notes.
 `status` refreshes `status/current.md` as a disposable cache — not SoT. Never
 block work if Mental errors; mention it and continue.
 
@@ -216,8 +220,12 @@ working memory after a hop but is not a choice-fork and not a durable fact:
 - `kind: verify` — agent produced this; human has not looked. Resolve when
   reviewed (accepted or rejected). Not a review queue. Cap still 7; verify
   sorts first on the heartbeat ("Needs eyes").
-- `status: open` | `later` | `resolved` — **must resolve**; residue that cannot
-  close is a graveyard. Cap ≤7 on the heartbeat. Merge duplicates.
+- `status: open` — in the air now
+- `status: later` — "note that for later", "come back to this", "let's do this
+  later". Default kind `thread`. Not park (park is an interruption and needs
+  `--resume`). Never use `note` for "for later".
+- `status: resolved` — **must resolve**; residue that cannot close is a
+  graveyard. Cap ≤7 on the heartbeat. Merge duplicates.
 
 On every write, pass `--via cursor` (or `claude-code`, `copilot`, `codex`,
 `mcp`, `cli`). Short client token only. Never a session id, email, URL, path,
@@ -225,13 +233,14 @@ or machine name.
 
 ```text
 mental attention --title "…" --kind direction --status open --from "Tom" --via cursor --json
+mental attention --title "…" --kind thread --status later --via cursor --json
 mental attention --title "…" --kind verify --status open --via cursor --json
 mental attention --title "…" --status resolved --json
 ```
 
 Create a note only for a durable, non-obvious, repository-specific fact likely
 to save future investigation. If deleting the note would not cost future time,
-do not write it. Never use `note` for meeting leftovers.
+do not write it. Never use `note` for meeting leftovers. Never use `note` for "for later".
 
 ```text
 mental note --title "…" --json
@@ -248,7 +257,7 @@ Do not copy the plan into Mental.
 
 ### Mid-chat re-entry (between orient and close)
 
-Mental is not only a start/finish ritual. Step back in cheaply whenever:
+Mental CLI is not only a start/finish ritual. Step back in cheaply whenever:
 
 - **Structured lookup** — open decisions, residue of a kind, a status:
   `mental list --type Decision --status open --json` (or `--kind direction`).
@@ -263,9 +272,10 @@ Mental is not only a start/finish ritual. Step back in cheaply whenever:
 - **Approach change** — before abandoning or switching an approach, search that
   name then `mental show <path> --json` for the hit (backlinks are on `show`).
   If the switch constrains the future, record it with `mental decide` at once.
-- **Residue surfaces** — "Tom said X", a worry, "park this": record
-  `mental attention` **now**, not at handoff. Chat memory fades; the OKF file
-  does not.
+- **Residue surfaces** — "Tom said X", a worry, "park this", "come back to
+  this", "note that for later": record `mental attention` **now**, not at
+  handoff. "For later" / "come back to this" → `--status later --kind thread`.
+  Chat memory fades; the OKF file does not.
 - **Parallel agents** — other sessions share the same home slice. If time
   passed or another agent may have written, re-call `mental heartbeat --json`
   before acting on stale assumptions. It derives git live and costs little.
@@ -317,7 +327,8 @@ if notes matter) and answer from that evidence:
 - Current branch and worktree state
 - Latest completed outcome
 - Plan pointer (`against`) when set — then read that file; do not invent a backlog
-- Residue still in the air (open / later attention)
+- Residue still in the air (open attention)
+- Later (`--status later` — come back to this)
 - Open or deferred decisions
 - Active notes (only from `status`)
 - Exact resume action

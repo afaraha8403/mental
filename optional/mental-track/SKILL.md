@@ -1,7 +1,7 @@
 ---
 name: mental-track
 description: >-
-  Optional wall/user time tracking for Mental. Isolated add-on; default off.
+  Optional wall/user time tracking for Mental CLI. Isolated add-on; default off.
   Use only when heartbeat JSON includes data.track.enabled. Never enable
   tracking, never invent hours, never copy internal titles into customer export.
 license: MIT
@@ -25,7 +25,7 @@ when_to_use: |
 
 # Mental Track — optional hours (CLI-first)
 
-Mental is continuity, not a timesheet. This skill is an **isolated add-on**.
+Mental CLI is continuity, not a timesheet. This skill is an **isolated add-on**.
 Default **off**. If tracking is off, do nothing and do not suggest enabling it.
 
 Durations: **wall** (sum of in-session elapsed; nights between sessions are not

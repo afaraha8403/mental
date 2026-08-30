@@ -1,9 +1,10 @@
 ---
 name: mental-setup
 description: >-
-  Install the Mental CLI when the Mental plugin is present, mental is missing
-  from PATH, or the user asks to set up continuity. Use when installing Mental
-  from a marketplace or plugin UI. Do not use once mental is on PATH — follow
+  Install or upgrade the Mental CLI when the Mental plugin is present, mental is
+  missing from PATH, the user asks to set up or upgrade continuity, or doctor /
+  JSON says the CLI is behind npm. Use when installing Mental CLI from a
+  marketplace or plugin UI. For daily continuity once the CLI is current, follow
   the Mental skill copied by mental install.
 license: MIT
 compatibility: Requires Node.js >=18. Does not start MCP. Agent Plugins 1.0.0.
@@ -14,22 +15,41 @@ when_to_use: |
   USE WHEN:
   - The user installed the Mental plugin from a marketplace or host UI.
   - `mental` is missing from PATH.
-  - Continuity is needed but the CLI is not installed.
+  - The user asks to install or upgrade Mental CLI.
+  - JSON includes `update`, or `mental doctor` says the CLI, copied skill, or
+    host plugin is behind.
 
   DO NOT USE WHEN:
-  - `mental` is already on PATH — follow the Mental skill instead.
+  - `mental` is on PATH, the user did not ask to upgrade, and there is no
+    `update` hint — follow the Mental skill instead.
 ---
 
 # Mental setup — install the CLI
 
-The Mental **plugin** is discovery only. It does not run Mental. The product is
+The Mental **plugin** is discovery only. It does not run Mental CLI. The product is
 the CLI on PATH.
 
 ## If `mental` is already on PATH
 
-Do not duplicate the procedure. Follow the **Mental** skill (copied by
-`mental install` into `~/.cursor/skills/mental`, `~/.claude/skills/mental`,
+Daily work: follow the **Mental** skill (copied by `mental install` into
+`~/.cursor/skills/mental`, `~/.claude/skills/mental`,
 `~/.agents/skills/mental`). Use `mental … --json`. Stop.
+
+Upgrade (the user asked, JSON includes `update`, or doctor says the CLI / copied
+skill / host plugin is behind):
+
+```bash
+npm i -g @balacode/mental
+mental install
+mental doctor
+```
+
+`mental install` upgrades the published CLI when npm is ahead, then recopies the
+skill and rule. Journals stay. Do not re-run this client's plugin marketplace
+unless doctor says the host plugin is behind. Then follow the Mental skill.
+
+From a git checkout (unpublished commits): `node bin/cli.mjs install` — that
+tree does not clobber PATH with an older registry build.
 
 ## If `mental` is missing
 

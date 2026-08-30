@@ -1,5 +1,5 @@
 ---
-name: Mental standalone CLI
+name: Mental CLI
 overview: "New product repo at `/home/ali/Development/Projects/mental` (own git root, public github.com/afaraha8403/mental — not balacodeio). Ship the CLI, then deprecate and remove Mental from Balakit so Balakit no longer owns or ships it."
 todos:
   - id: phase-0-repo
@@ -47,7 +47,7 @@ todos:
 isProject: false
 ---
 
-# Mental — standalone product (verbose execution plan)
+# Mental CLI — standalone product (verbose execution plan)
 
 This document is the **source of truth for the next agent session**. After approval, that session must:
 
@@ -80,7 +80,7 @@ Today Mental is a **Balakit personal capability**: skill + always-on rule + giti
 
 ### Product
 
-**Mental** is a local-first continuity layer for a human and their coding agents:
+**Mental CLI** is a local-first continuity layer for a human and their coding agents:
 
 - **OKF markdown + YAML frontmatter** is the only source of truth.
 - A **derived SQLite index** answers structured queries (type, status, tags, FTS, links).
@@ -225,7 +225,7 @@ Port templates from [skill/mental/references/templates.md](skill/mental/referenc
 | Status            | `status/current.md`            | regenerated cache, not SoT                     |
 
 
-Frontmatter: `type` required; recommend `title`, `description`, `timestamp`, `tags`. Attention also has `kind` (`direction` | `concern` | `thread` | `verify`) and optional `from` / `against` / `via`. Paths are identities (don’t rename to “archive”). Links are relative markdown links. Attention is residue, not a todo list — heartbeat shows at most 7 open+later items (`verify` first).
+Frontmatter: `type` required; recommend `title`, `description`, `timestamp`, `tags`. Attention also has `kind` (`direction` | `concern` | `thread` | `verify`) and optional `from` / `against` / `via`. Paths are identities (don’t rename to “archive”). Links are relative markdown links. Attention is residue, not a todo list — heartbeat shows at most 7 open+later items (`verify` first as Needs eyes; `--status later` as Later, not a note and not a new command).
 
 **Journal section contract** (keep):
 
@@ -336,8 +336,8 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 
 | Command                                        | Behavior                                                                                                                                                |
 | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mental` (no args, TTY)                    | Print heartbeat (resume, last outcome, git, residue, unsettled decisions) and exit                                                                                    |
-| `mental heartbeat`                             | Same cheap reload as TTY no-args; agents pass `--json`. Read-only for pulse watermark; delta is counts only. Lists capped at 7. |
+| `mental` (no args, TTY)                    | Print heartbeat (resume, last outcome, git, hops, Needs eyes, In the air, Later, unsettled, settled) and exit                                                                                    |
+| `mental heartbeat`                             | Same cheap reload as TTY no-args; agents pass `--json`. Read-only for pulse watermark; delta is counts only. Lists capped at 7. `later` / `laterCount` are `--status later` residue. |
 | `mental pulse`                                 | Cross-project compact rows from bindings (id, name, resume, counts). No journal bodies. Writes pulse watermark for the active bundle. |
 | `mental where`                                 | Active root, uuid, mode, reason. Read-only: does not create a binding or ingest leftover.                                                                 |
 | `mental status`                                | Regenerated view: git snapshot + latest Resume + residue + open/deferred decisions + notes. Writes `status/current.md` as cache. Creates identity + leftover ingest on first write. |
@@ -397,7 +397,7 @@ From [skills/authoring-skills-and-rules](skills/authoring-skills-and-rules/SKILL
 
 Approximate text:
 
-- Continuity is Mental. On start/finish of real work, or orientation questions, use the Mental skill.
+- Continuity is Mental CLI. On start/finish of real work, or orientation questions, use the Mental skill.
 - Run `mental where` then `mental status --json` (or `search --json`). Do not grep `.mental` or `~/.mental`.
 - If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, continue the user’s coding task and mention install.
 - Never commit Mental data. Never write secrets. Never edit gitignore; tell the user to run `mental doctor`.
@@ -438,7 +438,7 @@ Never Stop auto-journal.
 The repo root **is** the plugin root ([Agent Plugins 1.0.0](https://agent-plugins.org/specification)). Skills-only: missing `mcp.json` is not an error.
 
 - `plugin.json` — closed manifest (`$schema` + `name` required). No inline MCP, hooks, or rules in this file.
-- `skills/mental-setup/SKILL.md` — discovered as the immediate child of `skills/`. Bootstrap: install the CLI (`npm i -g` + `mental install`). Not a second procedure.
+- `skills/mental-setup/SKILL.md` — discovered as the immediate child of `skills/`. Bootstrap: install or upgrade the CLI (`npm i -g` + `mental install` + `mental doctor`). Not a second procedure. Do not skip `mental install` just because `mental` is already on PATH.
 - `skill/mental/` — full CLI-first procedure + `references/`. Copied by `mental install` only. **Not** under `skills/` (same reason track lives in `optional/`).
 - No `mcp.json` / `.mcp.json`. Native plugin does **not** start MCP. Optional MCP is PATH `mental serve` via `mental install --mcp` only.
 

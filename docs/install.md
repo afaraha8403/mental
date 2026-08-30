@@ -1,6 +1,6 @@
-# Install
+# Install Mental CLI
 
-Mental is `@balacode/mental` on npm. The CLI binary is `mental`.
+Mental CLI is `@balacode/mental` on npm. The binary is `mental`.
 
 The unscoped package [`mental`](https://www.npmjs.com/package/mental) is a **different project**. Do not install that one.
 
@@ -18,26 +18,61 @@ mental doctor
 
 That skill is what makes agents journal, decide, and record residue **for you**. You do not keep the log by hand. It does **not** turn on hooks or MCP, and it does not delete journals.
 
+## Upgrade (already installed)
+
+Journals, decisions, notes, and identity stay. Nothing to migrate.
+
+```bash
+npm i -g @balacode/mental
+mental install
+mental doctor
+mental --version
+```
+
+For a published install, `mental --version` should match `npm view @balacode/mental version` (no leading `v`).
+
+What that does:
+
+1. `npm i -g` puts the published CLI on PATH (last install wins; npm 11 overwrites the existing bin).
+2. `mental install` from a published install also self-upgrades when npm is ahead, then recopies the skill and always-on rule so agents match this CLI. It does **not** turn on hooks, MCP, or time tracking. It does **not** refresh the host plugin cache.
+3. The derived search index (`${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite`) rebuilds on the next search or write when the index version changes. `mental reindex` is optional.
+4. `mental doctor` reports PATH, npm lag, copied-skill lag, and host-plugin lag.
+
+From a git checkout (unpublished commits on this tree):
+
+```bash
+cd /path/to/mental
+node bin/cli.mjs install
+```
+
+That checkout is the source of truth until you publish. It does not replace PATH with an older registry build.
+
+**Agents after this CLI:** `mental decide --title` create requires `--body`. Search JSON includes `tokens` and `op`. Journal hops may appear as `journal/YYYY-MM-DD.md#HH:MM`. Heartbeat lists **Later** for `--status later` residue. Existing decision files on disk are unchanged.
+
+**Plugin:** after a release, also update the host plugin (Claude / Copilot marketplace update, Cursor reload). `mental install` does not refresh that cache. `mental doctor` warns when it is behind.
+
 ## Paste this into your agent
 
 Copy the block into Cursor, Claude Code, Copilot, Codex, or any other coding agent:
 
 ```text
-Install Mental from https://github.com/afaraha8403/mental.
+Install Mental CLI from https://github.com/afaraha8403/mental.
 
-Mental is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air. After install, you write it on my behalf — I do not journal by hand.
+Mental CLI is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air. After install, you write it on my behalf — I do not journal by hand.
 
 The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. Hosts load skills/mental-setup (install the CLI). The full procedure lives in skill/mental and is copied by `mental install` — not plugin-discovered. Native plugin does not start MCP. Do not start a plugin MCP server.
 
-If `mental` is already on PATH, do not duplicate setup. Follow the Mental skill copied by `mental install`. Use `mental … --json`. Missing Mental must not block my coding task (fail open): try `npx @balacode/mental` this turn, then tell me to install.
-
-If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH:
+If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH — including when `mental` is already there (that upgrades npm and recopies the skill):
 
   npm i -g @balacode/mental
   mental install
   mental doctor
 
-The plugin is discovery. npm + `mental install` are the source of truth for the binary and the procedure. After doctor, tell me what it reports.
+From a git checkout skip `npm i -g` — run `node bin/cli.mjs install` from that tree so npm does not replace it with an older registry build.
+
+The plugin is discovery. npm + `mental install` are the source of truth for the binary and the procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by `mental install` — not the plugin bootstrap.
+
+Missing Mental must not block my coding task (fail open): try `npx @balacode/mental` this turn, then tell me to install.
 
 After doctor, ask whether I want optional hooks or time tracking, and whether MCP is needed for this client. Give a one-liner for each, then wait — never run `mental option … on` until I say yes this turn.
 
@@ -59,7 +94,7 @@ mkdir -p ~/.cursor/plugins/local
 ln -sfn /path/to/mental ~/.cursor/plugins/local/mental
 ```
 
-Then reload the window. `/add-plugin mental` is the marketplace slash **after** Mental is listed on [cursor.com/marketplace](https://cursor.com/marketplace) — it is not a documented GitHub-URL installer. Cursor CLI has no marketplace install (`--plugin-dir` only). Teams/Enterprise: Dashboard → Plugins → Import from Repo.
+Then reload the window. `/add-plugin mental` is the marketplace slash **after** Mental CLI is listed on [cursor.com/marketplace](https://cursor.com/marketplace) — it is not a documented GitHub-URL installer. Cursor CLI has no marketplace install (`--plugin-dir` only). Teams/Enterprise: Dashboard → Plugins → Import from Repo.
 
 **Claude Code** — in a session (opens the plugin panel):
 
@@ -88,7 +123,7 @@ copilot plugin install mental@mental
 
 After a release: `copilot plugin marketplace update` then `copilot plugin update mental`.
 
-Mental is packaged as a portable [Agent Plugins 1.0.0](https://agent-plugins.org/specification) plugin — the vendor-neutral format maintained by Amazon, Cursor, Microsoft, OpenAI, and Vercel. Compatible clients load the same directory.
+Mental CLI is packaged as a portable [Agent Plugins 1.0.0](https://agent-plugins.org/specification) plugin — the vendor-neutral format maintained by Amazon, Cursor, Microsoft, OpenAI, and Vercel. Compatible clients load the same directory.
 
 | Piece | Where | Role |
 | --- | --- | --- |
@@ -109,7 +144,7 @@ A git checkout installs that tree and does not clobber it with the registry.
 
 ## What `mental install` does
 
-Last install wins: an existing global `mental` bin is overwritten (npm 11 no longer fails with `EEXIST`). From a published install it also **upgrades** the CLI when npm has a newer version, then re-runs so skills match. It **removes leftover Balakit Mental skill/rule copies** (the old `npx balakit doctor` pointer) so they cannot fight the new rule.
+Last install wins: an existing global `mental` bin is overwritten (npm 11 no longer fails with `EEXIST`). From a published install it also **upgrades** the CLI when npm has a newer version, then re-runs so skills match. It **removes leftover Balakit Mental skill/rule copies** (the old `npx balakit doctor` pointer) so they cannot fight the new rule. Already installed? See [Upgrade](#upgrade-already-installed).
 
 Optional:
 

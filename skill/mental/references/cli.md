@@ -1,4 +1,4 @@
-# CLI flags
+# Mental CLI flags
 
 Do not memorize flag tables. After `mental install`, run:
 

@@ -241,6 +241,86 @@ test("formatHeartbeat caps In the air at 7", () => {
   assert.match(text, /Unsettled/);
 });
 
+test("attention --status later is Later, not a note, not In the air", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const wrote = mental(home, root, [
+    "attention",
+    "--json",
+    "--title",
+    "Come back to MCP",
+    "--kind",
+    "thread",
+    "--status",
+    "later",
+    "--via",
+    "cursor",
+  ]);
+  assert.equal(wrote.status, 0, wrote.stderr || wrote.stdout);
+  const body = JSON.parse(wrote.stdout);
+  assert.equal(body.ok, true);
+
+  const hb = JSON.parse(mental(home, root, ["heartbeat", "--json"]).stdout);
+  assert.equal(hb.data.laterCount, 1);
+  assert.equal(hb.data.later[0].title, "Come back to MCP");
+  assert.equal(hb.data.later[0].status, "later");
+  assert.equal(hb.data.attention.length, 1);
+  assert.equal(hb.data.attention[0].status, "later");
+
+  const text = formatHeartbeat(hb.data, new Date(2026, 7, 29));
+  assert.match(text, /^Later$/m);
+  assert.match(text, /\[thread\] Come back to MCP/);
+  assert.doesNotMatch(text, /In the air\n  \[thread\] Come back to MCP/);
+  assert.doesNotMatch(text, /\[later\] Come back to MCP/);
+
+  const st = JSON.parse(mental(home, root, ["status", "--json"]).stdout);
+  assert.equal(st.data.attention[0].status, "later");
+  const cache = readFileSync(join(st.data.root, "status", "current.md"), "utf8");
+  assert.match(cache, /## Later/);
+  assert.match(cache, /Come back to MCP/);
+  assert.doesNotMatch(cache, /## In the air\n- \[Come back to MCP\]/);
+});
+
+test("formatHeartbeat splits Later from In the air; omits Later when empty", () => {
+  const text = formatHeartbeat(
+    {
+      git: { branch: "main", dirty: false, recent: [] },
+      gitRoot: "/tmp/repo",
+      handoff: { resume: "Keep going — open loops: none", outcome: "Split", file: null, when: null },
+      against: null,
+      attention: [
+        { status: "open", kind: "direction", title: "Tom said ship" },
+        { status: "later", kind: "thread", title: "Come back to MCP" },
+      ],
+      later: [{ status: "later", kind: "thread", title: "Come back to MCP" }],
+      laterCount: 1,
+      attentionCount: 2,
+      openDecisions: [],
+    },
+    new Date(2026, 7, 29),
+  );
+  assert.match(text, /In the air\n  \[direction\] Tom said ship/);
+  assert.match(text, /Later\n  \[thread\] Come back to MCP/);
+  assert.doesNotMatch(text, /In the air\n  \[direction\] Tom said ship\n  \[thread\] Come back to MCP/);
+
+  const empty = formatHeartbeat(
+    {
+      git: { branch: "main", dirty: false, recent: [] },
+      gitRoot: "/tmp/repo",
+      handoff: { resume: "Keep going — open loops: none", outcome: "Empty later", file: null, when: null },
+      against: null,
+      attention: [{ status: "open", kind: "direction", title: "Tom said ship" }],
+      later: [],
+      laterCount: 0,
+      attentionCount: 1,
+      openDecisions: [],
+    },
+    new Date(2026, 7, 29),
+  );
+  assert.match(empty, /In the air\n  \[direction\] Tom said ship/);
+  assert.doesNotMatch(empty, /^Later$/m);
+});
+
 test("transcript-shaped extract writes residue not a journal dump", () => {
   const home = tempHome();
   const { root } = initRepo(home);

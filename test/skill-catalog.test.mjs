@@ -20,6 +20,13 @@ function mentionedCommands(text) {
   return names;
 }
 
+test("skill maps for-later phrases to attention --status later, not note", () => {
+  const skill = stripFrontmatter(readFileSync(join(ROOT, "skill/mental/SKILL.md"), "utf8"));
+  assert.match(skill, /--status later/);
+  assert.match(skill, /come back to this/i);
+  assert.match(skill, /Never use `note` for "for later"/);
+});
+
 test("skill and rule command names are in the catalog", () => {
   const skill = stripFrontmatter(readFileSync(join(ROOT, "skill/mental/SKILL.md"), "utf8"));
   const rule = stripFrontmatter(readFileSync(join(ROOT, "rules/mental.mdc"), "utf8"));
@@ -86,5 +93,8 @@ test("README and install-doc agent pastes stay identical and skills-only", () =>
   assert.match(readme, /Do not start a plugin MCP server/);
   assert.match(readme, /fail open/);
   assert.match(readme, /npx @balacode\/mental/);
+  assert.match(readme, /including when `mental` is already there/);
+  assert.match(readme, /From a git checkout skip/);
+  assert.doesNotMatch(readme, /do not duplicate setup/);
   assert.doesNotMatch(readme, /mcp\.json/);
 });

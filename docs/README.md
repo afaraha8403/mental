@@ -1,16 +1,16 @@
-# Mental docs
+# Mental CLI docs
 
-Mental is a local-first continuity layer for you and your coding agents. This hub is the map. The [README](../README.md) is the landing page.
+Mental CLI is a local-first continuity layer for you and your coding agents. **I type mental.** This hub is the map. The [README](../README.md) is the landing page.
 
 | Doc | Start here if you want… |
 | --- | --- |
-| [Why Mental](./why.md) | The problem, the contract, and what we refuse to be |
+| [Why Mental CLI](./why.md) | The problem, the contract, and what we refuse to be |
 | [The research](./research.md) | Verification load, supervisory work, stealth switching (2024–2026) |
-| [Install](./install.md) | npm, Agent Plugins, Cursor, Claude Code, Copilot, a git clone |
-| [CLI reference](./cli.md) | Every command, flag, and exit code |
-| [Agents](./agents.md) | Skill, rule, `--json`, MCP, receipts, fail-open |
-| [Identity](./identity.md) | UUID bindings, remap / split / link, `mental local` |
-| [Benchmarks](./benchmarks.md) | Measured numbers and how to reproduce them |
+| [Install Mental CLI](./install.md) | npm, Agent Plugins, Cursor, Claude Code, Copilot, a git clone, upgrade |
+| [Mental CLI reference](./cli.md) | Every command, flag, and exit code |
+| [Mental CLI for agents](./agents.md) | Skill, rule, `--json`, MCP, receipts, fail-open |
+| [Mental CLI identity](./identity.md) | UUID bindings, remap / split / link, `mental local` |
+| [Mental CLI benchmarks](./benchmarks.md) | Measured numbers and how to reproduce them |
 
 Also in-repo, not rewritten here:
 

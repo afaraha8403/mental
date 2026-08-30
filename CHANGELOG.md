@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Search JSON includes `tokens` and `op` (`and` or `or`). Space-separated words are AND prefixes unless `--any`. MCP `q` may be a string array (union of queries). Quotes are not a phrase operator.
 - Journal hops (`## HH:MM — title`) index as their own search rows (`journal/YYYY-MM-DD.md#HH:MM`). `mental show` that path returns the section. `list` stays one file per day.
 - Search ranks Decision, then Note, then Attention, then Journal.
+- Heartbeat TTY splits **Later** (`attention --status later`) from In the air. JSON adds `later` / `laterCount`. "Come back to this" / "note that for later" is this status — not a note.
 
 ### Fixes
 
@@ -21,7 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changes
 
 - Skill and always-on rule: before proposing a flag, crate, or approach, search that name; rejected approaches are Decisions with a searchable title. Journal is not the graveyard of failed ideas.
+- Skill and rule: "come back to this" / "for later" → `attention --status later --kind thread`. Never `note` for leftovers.
+- Existing users upgrade with `npm i -g @balacode/mental` then `mental install` then `mental doctor`. Agent paste no longer skips those steps when Mental is already on PATH. Search index rebuilds on the next search; journals stay. Host plugin is a second channel.
 - Agent install paste names `skills/mental-setup` vs `skill/mental`, fail-open, and no plugin MCP. README and install-doc pastes stay identical.
+- Official product name is **Mental CLI** (short forms Mental / `mental`). Docs and agent skill/rule copy; binary, npm package, and repo stay `mental`.
+- Official slogan is **I type mental**. Landing docs; npm/plugin descriptions still lead with the continuity promise.
 
 ## [0.7.0] - 2026-08-28
 

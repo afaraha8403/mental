@@ -169,15 +169,18 @@ export function renderStatus({ name, date, ts, now, inFlight, decisions, attenti
     attention.length > ATTENTION_HEARTBEAT_CAP
       ? `\n- (+${attention.length - ATTENTION_HEARTBEAT_CAP} more)`
       : "";
+  const laterShown = shownAttention.filter((a) => a.status === "later");
+  const airShown = shownAttention.filter((a) => a.status !== "later");
+  const attLine = (a) => {
+    const tag = a.kind || a.status;
+    return `- [${a.title}](../attention/${a.file}) — ${tag}`;
+  };
   const airLines =
-    shownAttention.length === 0
+    airShown.length === 0 ? "- None" : airShown.map(attLine).join("\n") + (laterShown.length === 0 ? extraAir : "");
+  const laterLines =
+    laterShown.length === 0
       ? "- None"
-      : shownAttention
-          .map((a) => {
-            const tag = a.status === "later" ? "later" : a.kind || a.status;
-            return `- [${a.title}](../attention/${a.file}) — ${tag}`;
-          })
-          .join("\n") + extraAir;
+      : laterShown.map(attLine).join("\n") + (airShown.length === 0 ? extraAir : "");
   const noteLines =
     notes.length === 0
       ? "- None"
@@ -208,6 +211,9 @@ ${inFlight}
 ${againstLine}
 ## In the air
 ${airLines}
+
+## Later
+${laterLines}
 
 ## Unsettled
 ${decLines}

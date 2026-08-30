@@ -1,6 +1,6 @@
-# Benchmarks
+# Mental CLI benchmarks
 
-Mental is a pulse, not a daemon. The number that matters is “how long until I know where I left off?”
+Mental CLI is a pulse, not a daemon. The number that matters is “how long until I know where I left off?”
 
 These numbers are measured, not estimated. Reproduce them:
 
@@ -13,7 +13,7 @@ npm run bench
 
 ## Snapshot (this repo)
 
-Measured **2026-08-27** on Node **v22.14.0** (linux/x64, 4 CPUs), Mental **0.2.3**. Each row is the **p50 of 21 runs** after 3 warmup runs. p95 in parentheses.
+Measured **2026-08-27** on Node **v22.14.0** (linux/x64, 4 CPUs), Mental CLI **0.2.3**. Each row is the **p50 of 21 runs** after 3 warmup runs. p95 in parentheses.
 
 This Node build’s `node:sqlite` has **no FTS5 module**. The index still writes a SQLite `concepts` + `links` table; search uses **LIKE** with title-first ranking. When FTS5 is present, search uses `MATCH` + `bm25` instead. Either way, `--type` / `--status` / `--tag` / `--kind` apply before the result cap.
 
@@ -38,13 +38,13 @@ That is why agents that can keep `mental serve` warm (MCP) should: the work is c
 
 ## What we measure
 
-- **CLI rows** — `spawnSync(process.execPath, ["bin/cli.mjs", …])`. This is how humans and shell-using agents invoke Mental.
+- **CLI rows** — `spawnSync(process.execPath, ["bin/cli.mjs", …])`. This is how humans and shell-using agents invoke Mental CLI.
 - **In-process rows** — `import` of `collectHeartbeat` / `searchBundle`. This is how `mental serve` runs after the MCP process is up.
 - **Search** — query `needleword` with `--type Note` against N seeded notes (every 17th note is a hit). Hits reported are what the CLI returned, capped at 50.
 
 ## What we do not claim
 
-- Not a comparison against another product. Mental’s job is continuity, not grep-replacement throughput.
+- Not a comparison against another product. Mental CLI’s job is continuity, not grep-replacement throughput.
 - Not an FTS5 bm25 number on this host. This Node binary has no `fts5` module. The fallback is tested and the numbers above use it.
 - Not your laptop. Cold disk, antivirus, and a larger journal will move the p50. Run `npm run bench` and believe that output.
 
@@ -54,6 +54,6 @@ That is why agents that can keep `mental serve` warm (MCP) should: the work is c
 npm test
 ```
 
-**193** automated tests on this revision: identity (move, SSH ≡ HTTPS, two clones, fork, worktree, monorepo), leftover import, search filters and title ranking, plugin schemas, version lockstep, install / doctor / uninstall, heartbeat, MCP tools, optional time tracking.
+**203** automated tests on this revision: identity (move, SSH ≡ HTTPS, two clones, fork, worktree, monorepo), leftover import, search filters and title ranking, plugin schemas, version lockstep, install / doctor / uninstall, heartbeat, MCP tools, optional time tracking.
 
 Zero runtime npm dependencies. Node `>=18`.

@@ -75,7 +75,7 @@ test("mental install follows a symlink skill dir (claude → agents)", () => {
   const body = JSON.parse(r.stdout);
   assert.equal(body.ok, true);
   const skill = readFileSync(join(agents, "SKILL.md"), "utf8");
-  assert.match(skill, /Mental — project continuity/);
+  assert.match(skill, /Mental CLI — project continuity/);
   assert.doesNotMatch(skill, /balakit/i);
   assert.equal(readFileSync(join(home, ".claude", "skills", "mental", "SKILL.md"), "utf8"), skill);
 });
@@ -173,7 +173,7 @@ test("install copies the full procedure skill, not the plugin bootstrap", () => 
   for (const skill of [cursor, claude]) {
     assert.match(skill, /^name:\s*mental\s*$/m);
     assert.doesNotMatch(skill, /^name:\s*mental-setup\s*$/m);
-    assert.match(skill, /Mental — project continuity/);
+    assert.match(skill, /Mental CLI — project continuity/);
     assert.doesNotMatch(skill, /Mental setup — install the CLI/);
   }
   assert.equal(existsSync(join(home, ".cursor", "skills", "mental", "references", "cli.md")), true);
@@ -206,7 +206,7 @@ test("install --project vendors the procedure skill into the repo", () => {
   const vendored = join(root, ".github", "skills", "mental");
   assert.equal(existsSync(join(vendored, "SKILL.md")), true);
   const skill = readFileSync(join(vendored, "SKILL.md"), "utf8");
-  assert.match(skill, /Mental — project continuity/);
+  assert.match(skill, /Mental CLI — project continuity/);
   assert.doesNotMatch(skill, /Mental setup — install the CLI/);
   assert.equal(existsSync(join(vendored, "references", "cli.md")), true);
   assert.equal(existsSync(join(root, ".github", "skills", "mental-setup")), false);

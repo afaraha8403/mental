@@ -74,7 +74,10 @@ Against <PLAN.md>
 
 ## In the air
 - [<title>](../attention/<file>.md) — direction
-- [<title>](../attention/<file>.md) — later
+- None
+
+## Later
+- [<title>](../attention/<file>.md) — thread
 - None
 
 ## Unsettled

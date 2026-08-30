@@ -27,13 +27,14 @@ function formatGit(git, gitRoot) {
 }
 
 function formatHuman(data) {
-  const air =
-    data.attention.length === 0
-      ? "  none"
-      : data.attention.map((a) => {
-          const tag = a.status === "later" ? "later" : a.kind || a.status;
-          return `  - [${tag}] ${a.title} (${a.path})`;
-        }).join("\n");
+  const airItems = data.attention.filter((a) => a.status !== "later");
+  const laterItems = data.attention.filter((a) => a.status === "later");
+  const formatAtt = (a) => {
+    const tag = a.kind || a.status;
+    return `  - [${tag}] ${a.title} (${a.path})`;
+  };
+  const air = airItems.length === 0 ? "  none" : airItems.map(formatAtt).join("\n");
+  const later = laterItems.length === 0 ? "  none" : laterItems.map(formatAtt).join("\n");
   const dec =
     data.openDecisions.length === 0
       ? "  none"
@@ -42,6 +43,7 @@ function formatHuman(data) {
     data.notes.length === 0
       ? "  none"
       : data.notes.map((n) => `  - ${n.title} (${n.path})`).join("\n");
+  const laterBlock = laterItems.length ? [`later:`, later] : [];
   return [
     `root:    ${data.root}`,
     `mode:    ${data.mode}`,
@@ -51,6 +53,7 @@ function formatHuman(data) {
     `now:     ${data.latestOutcome || "—"}`,
     `in the air:`,
     air,
+    ...laterBlock,
     `unsettled:`,
     dec,
     `notes:`,

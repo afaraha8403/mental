@@ -36,6 +36,8 @@ export const HEARTBEAT_JSON_FIELDS = [
   "openDecisionCount",
   "needsEyes",
   "needsEyesCount",
+  "later",
+  "laterCount",
   "guardrails",
   "guardrailCount",
   "hopsToday",
@@ -92,6 +94,7 @@ export function collectHeartbeat(args) {
   const attentionAll = root ? listOpenAttention(root) : [];
   const attention = capHeartbeatAttention(attentionAll);
   const needsEyesAll = attentionAll.filter((a) => a.kind === "verify");
+  const laterAll = attentionAll.filter((a) => a.status === "later");
   const guardrailsAll = root ? listDecidedGuardrails(root) : [];
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const env = args.env ?? process.env;
@@ -113,6 +116,8 @@ export function collectHeartbeat(args) {
     openDecisionCount: openDecisions.length,
     needsEyes: attention.filter((a) => a.kind === "verify"),
     needsEyesCount: needsEyesAll.length,
+    later: attention.filter((a) => a.status === "later"),
+    laterCount: laterAll.length,
     guardrails: guardrailsAll.slice(0, DECISION_HEARTBEAT_CAP),
     guardrailCount: guardrailsAll.length,
     hopsToday,
@@ -128,7 +133,7 @@ export function collectHeartbeat(args) {
 }
 
 function formatAirItem(a) {
-  const tag = a.status === "later" ? "later" : a.kind || a.status || "open";
+  const tag = a.kind || a.status || "open";
   return `  [${tag}] ${a.title}`;
 }
 
@@ -159,14 +164,29 @@ export function formatHeartbeat(data, now = new Date(), env = process.env, args 
   const attentionTotal = data.attentionCount ?? attention.length;
   const shown = attention.slice(0, ATTENTION_HEARTBEAT_CAP);
   const eyes = shown.filter((a) => a.kind === "verify");
-  const rest = shown.filter((a) => a.kind !== "verify");
+  const laterShown = shown.filter((a) => a.status === "later" && a.kind !== "verify");
+  const rest = shown.filter((a) => a.kind !== "verify" && a.status !== "later");
   const eyesTotal = data.needsEyesCount ?? eyes.length;
-  const extraEyes = eyes.length && rest.length === 0 ? extraLine(eyes.length, attentionTotal) : "";
+  const laterTotal = data.laterCount ?? laterShown.length;
+  const extraEyes =
+    eyes.length && rest.length === 0 && laterShown.length === 0 ? extraLine(eyes.length, attentionTotal) : "";
+  const extraLater = !rest.length && laterShown.length ? extraLine(shown.length, attentionTotal) : "";
   const extraAir =
-    rest.length || eyes.length === 0 ? extraLine(shown.length, attentionTotal) : "";
+    rest.length || (eyes.length === 0 && laterShown.length === 0)
+      ? extraLine(shown.length, attentionTotal)
+      : "";
   const eyesBlock =
     eyesTotal > 0
       ? ["Needs eyes", eyes.length === 0 ? "  none" : eyes.map(formatAirItem).join("\n") + extraEyes]
+      : [];
+  const laterBlock =
+    laterTotal > 0
+      ? [
+          "Later",
+          laterShown.length === 0
+            ? "  none"
+            : laterShown.map(formatAirItem).join("\n") + extraLater,
+        ]
       : [];
   const air = attentionTotal === 0 ? "  none" : rest.map(formatAirItem).join("\n") + extraAir || "  none";
   const decisions = data.openDecisions ?? [];
@@ -188,6 +208,6 @@ export function formatHeartbeat(data, now = new Date(), env = process.env, args 
 
   const lines = [`${brandMark(env, args)} ${resume}`];
   if (against) lines.push(`Against ${against}`);
-  lines.push("", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, `Hops    ${parks}`, ...eyesBlock, "In the air", air, "Unsettled", open, ...settled);
+  lines.push("", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, `Hops    ${parks}`, ...eyesBlock, "In the air", air, ...laterBlock, "Unsettled", open, ...settled);
   return lines.join("\n");
 }

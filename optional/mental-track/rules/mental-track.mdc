@@ -1,5 +1,5 @@
 ---
-description: Optional Mental time tracking. Self-gates on heartbeat track.enabled. Never prompt to enable.
+description: Optional Mental CLI time tracking. Self-gates on heartbeat track.enabled. Never prompt to enable.
 alwaysApply: false
 ---
 

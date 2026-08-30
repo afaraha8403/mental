@@ -1,6 +1,6 @@
-# Identity
+# Mental CLI identity
 
-Identity is a UUID in `~/.mental/bindings.json`. Origin is a hint (SSH ≡ HTTPS). The folder path is not the id. `mental where` reports the active bundle and does **not** create a UUID. First write (`status`, `journal`, `install`, …) does.
+Mental CLI identity is a UUID in `~/.mental/bindings.json`. Origin is a hint (SSH ≡ HTTPS). The folder path is not the id. `mental where` reports the active bundle and does **not** create a UUID. First write (`status`, `journal`, `install`, …) does.
 
 Two clones of the same origin share one brain until you split.
 

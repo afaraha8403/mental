@@ -67,7 +67,7 @@ export const CATALOG = {
   heartbeat: {
     name: "heartbeat",
     group: "Daily",
-    summary: "Cheap in-repo reload: resume, last outcome, git, hops, residue, unsettled + settled. No notes. Does not write the pulse watermark.",
+    summary: "Cheap in-repo reload: resume, last outcome, git, hops, residue (Needs eyes / In the air / Later), unsettled + settled. No notes. Does not write the pulse watermark.",
     usage: `${CMD} heartbeat`,
     examples: [`${CMD} heartbeat`, `${CMD} heartbeat --json`, `${CMD} heartbeat --json --fields resume,attention`],
     flags: [v("fields", { takesValue: "optional", summary: "JSON field mask (comma-separated). Omit the value to list legal names." })],
@@ -124,17 +124,18 @@ export const CATALOG = {
   attention: {
     name: "attention",
     group: "Daily",
-    summary: "Create or update residue still in the air. Create needs --title + --kind; close with --status resolved.",
+    summary: "Create or update residue still in the air. --status later for \"come back to this\" (not a note). Create needs --title + --kind; close with --status resolved.",
     usage: `${CMD} attention --title <text> --kind <kind>`,
     examples: [
       `${CMD} attention --title "Tom said ship the pointer" --kind direction --from Tom --via cursor`,
+      `${CMD} attention --title "Come back to MCP" --kind thread --status later --via cursor`,
       `${CMD} attention --title "…" --status resolved --json`,
     ],
     flags: [
       TITLE,
       PATH,
       v("kind", { enum: ["direction", "concern", "thread", "verify"] }),
-      v("status", { enum: ["open", "later", "resolved"] }),
+      v("status", { enum: ["open", "later", "resolved"], summary: "open | later (come back to this) | resolved" }),
       v("from"),
       v("description"),
       BODY,
@@ -296,7 +297,7 @@ export const CATALOG = {
   install: {
     name: "install",
     group: "Setup",
-    summary: "Skill + rule + PATH. Optional --hooks / --mcp / --track only after the user says yes this turn.",
+    summary: "Skill + rule + PATH. From a published install, upgrades when npm is ahead then recopies skills. Optional --hooks / --mcp / --track only after the user says yes this turn.",
     usage: `${CMD} install`,
     examples: [`${CMD} install`, `${CMD} install --json`],
     flags: [b("project"), b("hooks"), b("mcp"), b("track")],

@@ -49,6 +49,14 @@ test("handoff --help is per-command, not the remap wall", () => {
   assert.doesNotMatch(r.stdout, /install/);
 });
 
+test("attention --help names later for come-back residue", () => {
+  const home = tempHome();
+  const r = mental(home, home, ["attention", "--help"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.match(r.stdout, /--status later/);
+  assert.match(r.stdout, /come back to this/i);
+});
+
 test("mental -h is Daily short; --help is grouped", () => {
   const home = tempHome();
   const short = mental(home, home, ["-h"]);
@@ -237,6 +245,8 @@ test("heartbeat --fields lists names or masks JSON", () => {
   assert.equal(names.status, 0, names.stderr || names.stdout);
   const listed = JSON.parse(names.stdout);
   assert.ok(listed.data.fields.includes("resume") || listed.data.fields.includes("handoff"));
+  assert.ok(listed.data.fields.includes("later"));
+  assert.ok(listed.data.fields.includes("laterCount"));
 
   const masked = mental(home, root, ["heartbeat", "--json", "--fields", "mode,id"]);
   assert.equal(masked.status, 0, masked.stderr || masked.stdout);
