@@ -8,7 +8,7 @@ license: MIT
 compatibility: Requires Node.js >=18, git, and Mental CLI. Optional; not part of Agent Plugins skills/.
 metadata:
   author: Ali Farahat
-  version: "0.7.0"
+  version: "0.7.1"
   tags: mental,time-tracking,continuity
 user-invocable: true
 disable-model-invocation: false

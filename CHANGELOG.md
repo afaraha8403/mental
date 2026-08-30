@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-29
+
 ### Features
 
 - `mental decide` create requires `--body` (the why). Same `--title` without `--body` still updates. Decision files are title plus body — no Context/Options/Outcome placeholders.
