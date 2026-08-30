@@ -7,6 +7,7 @@ Mental CLI is a local-first continuity layer for you and your coding agents. **I
 | [Why Mental CLI](./why.md) | The problem, the contract, and what we refuse to be |
 | [The research](./research.md) | Verification load, supervisory work, stealth switching (2024–2026) |
 | [Install Mental CLI](./install.md) | npm, Agent Plugins, Cursor, Claude Code, Copilot, a git clone, upgrade |
+| [Optional time tracking](./track.md) | What hours can and cannot do (default off) |
 | [Mental CLI reference](./cli.md) | Every command, flag, and exit code |
 | [Mental CLI for agents](./agents.md) | Skill, rule, `--json`, MCP, receipts, fail-open |
 | [Mental CLI identity](./identity.md) | UUID bindings, remap / split / link, `mental local` |

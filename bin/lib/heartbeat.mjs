@@ -125,7 +125,11 @@ export function collectHeartbeat(args) {
   };
 
   if (root && home && isBundleRoot(where) && isFeatureOn(home, "track", where.id || null)) {
-    const track = heartbeatTrack(root, { pingFocused: true });
+    const track = heartbeatTrack(root, {
+      pingFocused: true,
+      hopsToday,
+      hopToday: Boolean(handoff?.when?.date && handoff.when.date === localDate()),
+    });
     if (track.ok) data.track = track.data;
   }
 

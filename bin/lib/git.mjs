@@ -147,3 +147,24 @@ export function gitSnapshot(gitRoot, { env = process.env } = {}) {
       : [];
   return { branch, dirty: porcelain.trim().length > 0, porcelain, recent };
 }
+
+/**
+ * Unique commit calendar dates (git log --date=short). Empty if git fails.
+ * Does not convert commits into hours.
+ * @param {string | null} gitRoot
+ * @param {{ since?: string, until?: string, env?: NodeJS.ProcessEnv }} [opts]
+ */
+export function commitShortDates(gitRoot, { since, until, env = process.env } = {}) {
+  if (!gitRoot) return [];
+  const args = ["log", "--format=%ad", "--date=short"];
+  if (since) args.push(`--since=${since} 00:00:00`);
+  if (until) args.push(`--until=${until} 23:59:59`);
+  const log = runGit(gitRoot, args, { env });
+  if (log.status !== 0) return [];
+  const days = new Set();
+  for (const line of (log.stdout || "").split(/\r?\n/)) {
+    const d = line.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) days.add(d);
+  }
+  return [...days].sort();
+}

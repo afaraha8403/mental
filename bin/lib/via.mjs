@@ -5,10 +5,10 @@
 export const VIA_MAX = 24;
 
 export const VIA_USAGE =
-  "--via must be a short client token (cursor, claude-code, copilot, codex, mcp, cli). No emails, URLs, paths, or session ids.";
+  "--via must be a short client token (cursor, claude-code, copilot, codex, opencode, mcp, cli). No emails, URLs, paths, or session ids.";
 
 export const VIA_HINT =
-  "Pass --via cursor (or claude-code, copilot, codex, mcp, cli). Not a session id.";
+  "Pass --via cursor (or claude-code, copilot, codex, opencode, mcp, cli). Not a session id.";
 
 /**
  * @param {unknown} raw

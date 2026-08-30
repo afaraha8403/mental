@@ -38,7 +38,7 @@ function getRow(root, id) {
   return row;
 }
 
-test("multiple runners; stop without --id hits focused only", () => {
+test("new start stops every running interval; one live clock", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
@@ -52,43 +52,40 @@ test("multiple runners; stop without --id hits focused only", () => {
   );
   assert.notEqual(a.data.id, b.data.id);
   assert.equal(b.data.focused, true);
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const prior = getRow(slice, a.data.id);
+  assert.equal(prior.status, "stopped");
+  assert.equal(prior.needs_user, 0);
+  assert.ok(prior.user);
+  const glance = parseOk(mental(home, root, ["track", "--json"]), "glance");
+  assert.equal(glance.data.running.length, 1);
+  assert.equal(glance.data.running[0].id, b.data.id);
   const stopped = parseOk(mental(home, root, ["track", "stop", "--json"]), "stop focused");
   assert.equal(stopped.data.stopped.length, 1);
   assert.equal(stopped.data.stopped[0].id, b.data.id);
-  const glance = parseOk(mental(home, root, ["track", "--json"]), "glance");
-  assert.equal(glance.data.running.length, 1);
-  assert.equal(glance.data.running[0].id, a.data.id);
-  const miss = parseErr(mental(home, root, ["track", "stop", "--json"]), "stop no focus");
-  assert.equal(miss.error.code, "usage");
+  const after = parseOk(mental(home, root, ["track", "--json"]), "glance empty");
+  assert.equal(after.data.running.length, 0);
 });
 
-test("heartbeat pings focused last_seen only; glance is not a ping", () => {
+test("heartbeat pings focused last_seen; glance is not a ping", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
   const a = parseOk(
-    mental(home, root, ["track", "start", "--json", "--title-internal", "Background"]),
-    "start A",
-  );
-  const b = parseOk(
     mental(home, root, ["track", "start", "--json", "--title-internal", "Focused"]),
-    "start B",
+    "start",
   );
   const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
   const old = "2026-08-28T10:00:00-04:00";
   ageLastSeen(slice, a.data.id, old);
-  ageLastSeen(slice, b.data.id, old);
   parseOk(mental(home, root, ["heartbeat", "--json"]), "heartbeat");
-  const aAfter = getRow(slice, a.data.id);
-  const bAfter = getRow(slice, b.data.id);
-  assert.equal(aAfter.last_seen_at, old, "unfocused must not be laundered");
-  assert.notEqual(bAfter.last_seen_at, old, "focused heartbeat refreshes last_seen");
-  ageLastSeen(slice, b.data.id, old);
+  assert.notEqual(getRow(slice, a.data.id).last_seen_at, old, "focused heartbeat refreshes last_seen");
+  ageLastSeen(slice, a.data.id, old);
   parseOk(mental(home, root, ["track", "--json"]), "glance");
-  assert.equal(getRow(slice, b.data.id).last_seen_at, old, "glance is not a focus ping");
+  assert.equal(getRow(slice, a.data.id).last_seen_at, old, "glance is not a focus ping");
 });
 
-test("stale suggested user is display-only until --user; --accept-stale rejected on --json", () => {
+test("stale stop sets user = wall and flags stale_stop; --accept-stale rejected on --json", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
@@ -107,29 +104,17 @@ test("stale suggested user is display-only until --user; --accept-stale rejected
   const glance = parseOk(mental(home, root, ["track", "--json"]), "glance stale");
   const row = glance.data.running[0];
   assert.equal(row.stale, true);
-  assert.equal(row.suggested_user, "1:00");
   const accept = parseErr(
     mental(home, root, ["track", "stop", "--json", "--accept-stale"]),
     "accept-stale json",
   );
   assert.match(accept.error.message, /TTY-only/);
   const stopped = parseOk(mental(home, root, ["track", "stop", "--json"]), "stop stale no user");
-  assert.equal(stopped.data.stopped[0].needs_user, true);
-  assert.equal(stopped.data.stopped[0].user, null);
-  parseOk(
-    mental(home, root, [
-      "track",
-      "amend",
-      "--json",
-      "--id",
-      started.data.id,
-      "--user",
-      "1:00",
-      "--title-external",
-      "Forgot timer",
-    ]),
-    "amend user",
-  );
+  assert.equal(stopped.data.stopped[0].needs_user, false);
+  assert.equal(stopped.data.stopped[0].stale_stop, true);
+  assert.ok(stopped.data.stopped[0].user);
+  assert.ok((stopped.data.stopped[0].wall_minutes || 0) >= 239);
+  assert.equal(stopped.data.stopped[0].user, stopped.data.stopped[0].wall);
 });
 
 test("false start discard is excluded from report", () => {
@@ -142,22 +127,24 @@ test("false start discard is excluded from report", () => {
   assert.equal(report.data.rows.length, 0);
 });
 
-test("park stops focused only; other runners stay", () => {
+test("park stops the focused runner; new start already closed the previous", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
-  const a = parseOk(
-    mental(home, root, ["track", "start", "--json", "--title-internal", "Keep"]),
-    "start A",
+  parseOk(mental(home, root, ["track", "start", "--json", "--title-internal", "Keep"]), "start A");
+  const b = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Park me"]),
+    "start B",
   );
-  parseOk(mental(home, root, ["track", "start", "--json", "--title-internal", "Park me"]), "start B");
   parseOk(mental(home, root, ["park", "--json", "--resume", "Continue after hop"]), "park");
   const glance = parseOk(mental(home, root, ["track", "--json"]), "glance");
-  assert.equal(glance.data.running.length, 1);
-  assert.equal(glance.data.running[0].id, a.data.id);
+  assert.equal(glance.data.running.length, 0);
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  assert.equal(getRow(slice, b.data.id).status, "stopped");
+  assert.ok(getRow(slice, b.data.id).user);
 });
 
-test("stop --all from --json without --user is usage when a runner is stale", () => {
+test("stop --all from --json does not require --user when a runner is stale", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
@@ -165,7 +152,6 @@ test("stop --all from --json without --user is usage when a runner is stale", ()
     mental(home, root, ["track", "start", "--json", "--title-internal", "Stale one"]),
     "start",
   );
-  parseOk(mental(home, root, ["track", "start", "--json", "--title-internal", "Fresh"]), "start 2");
   const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
   const startedAt = new Date(Date.now() - 4 * 3600 * 1000).toISOString();
   const lastSeen = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
@@ -174,8 +160,9 @@ test("stop --all from --json without --user is usage when a runner is stale", ()
     .prepare("UPDATE intervals SET started = ?, last_seen_at = ? WHERE id = ?")
     .run(startedAt, lastSeen, a.data.id);
   opened.db.close();
-  const all = parseErr(mental(home, root, ["track", "stop", "--all", "--json"]), "stop --all json");
-  assert.match(all.error.message, /--user/);
+  const all = parseOk(mental(home, root, ["track", "stop", "--all", "--json"]), "stop --all json");
+  assert.equal(all.data.stopped.length, 1);
+  assert.equal(all.data.stopped[0].user, all.data.stopped[0].wall);
 });
 
 test("heartbeat JSON has compact track; TTY heartbeat and pulse have no hours", () => {
@@ -185,6 +172,7 @@ test("heartbeat JSON has compact track; TTY heartbeat and pulse have no hours", 
   parseOk(mental(home, root, ["track", "start", "--json", "--title-internal", "Secret title"]), "start");
   const hb = parseOk(mental(home, root, ["heartbeat", "--json"]), "hb json");
   assert.equal(hb.data.track.enabled, true);
+  assert.equal(hb.data.track.unclocked, false);
   assert.equal(hb.data.track.runningCount, 1);
   assert.equal(typeof hb.data.track.running[0].id, "string");
   assert.equal(hb.data.track.running[0].title_internal, undefined);
@@ -199,6 +187,39 @@ test("heartbeat JSON has compact track; TTY heartbeat and pulse have no hours", 
   const pulseTty = mental(home, root, ["pulse"]);
   assert.doesNotMatch(pulseTty.stdout, /\bwall\b/);
   assert.doesNotMatch(pulseTty.stdout, /Secret title/);
+});
+
+test("heartbeat unclocked is true after a hop today with no interval", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const before = parseOk(mental(home, root, ["heartbeat", "--json"]), "hb before start");
+  assert.equal(before.data.track.enabled, true);
+  assert.equal(before.data.track.unclocked, true);
+  parseOk(mental(home, root, ["track", "start", "--json", "--title-internal", "Clocked"]), "start");
+  const after = parseOk(mental(home, root, ["heartbeat", "--json"]), "hb after start");
+  assert.equal(after.data.track.unclocked, false);
+});
+
+test("last_seen matching started is not never-started; stop still sets user = wall", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const started = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "No later ping"]),
+    "start",
+  );
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const startedAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  opened.db
+    .prepare("UPDATE intervals SET started = ?, last_seen_at = ? WHERE id = ?")
+    .run(startedAt, startedAt, started.data.id);
+  opened.db.close();
+  const stopped = parseOk(mental(home, root, ["track", "stop", "--json"]), "stop no ping");
+  assert.equal(stopped.data.stopped[0].needs_user, false);
+  assert.equal(stopped.data.stopped[0].user, stopped.data.stopped[0].wall);
+  assert.ok((stopped.data.stopped[0].wall_minutes || 0) >= 4);
 });
 
 test("export --external strips internal columns; --out inside repo is usage", () => {

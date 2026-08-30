@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { commitShortDates } from "./git.mjs";
 
 function isBundleRoot(where) {
   if (where.mode === "env" || where.mode === "local" || where.mode === "personal") return true;
@@ -16,7 +17,7 @@ export const TIME_DB = "time.sqlite";
 export const TIME_SCHEMA_VERSION = 1;
 export const STALE_LAST_SEEN_MS = 2 * 60 * 60 * 1000;
 export const STALE_STARTED_MS = 12 * 60 * 60 * 1000;
-/** last_seen ≈ started → never started (discard path), not 0:05 of user time. */
+/** Wall shorter than this is a false start (0:00 minutes), not last_seen ≈ started. */
 export const NEVER_STARTED_MS = 120 * 1000;
 export const HEARTBEAT_RUNNING_CAP = 7;
 export const PROJECT_NAME_MAX = 80;
@@ -137,14 +138,15 @@ export function csvEscape(raw) {
 }
 
 /**
- * @param {string} iso
- * @param {Date} now
+ * Short wall: hop elapsed (start → now) under 2 minutes. last_seen is not the test.
+ * @param {string} isoStarted
+ * @param {string} [_isoLastSeen] unused; kept so call sites stay stable
+ * @param {Date} [now]
  */
-export function isNeverStarted(isoStarted, isoLastSeen, now = new Date()) {
+export function isNeverStarted(isoStarted, _isoLastSeen, now = new Date()) {
   const a = Date.parse(isoStarted);
-  const b = Date.parse(isoLastSeen);
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return true;
-  return Math.abs(b - a) < NEVER_STARTED_MS;
+  if (!Number.isFinite(a)) return true;
+  return now.getTime() - a < NEVER_STARTED_MS;
 }
 
 /**
@@ -421,7 +423,13 @@ export function startInterval(root, opts) {
       const taskId = opts.taskId || randomUUID();
       const id = randomUUID();
       const ts = isoWithOffset(now);
-      clearFocus(db);
+      const live = db
+        .prepare("SELECT * FROM intervals WHERE status = 'running' AND discarded = 0")
+        .all()
+        .map(mapRow);
+      for (const prior of live) {
+        applyStopRow(db, prior, { now, userMinutes: null, acceptStale: true });
+      }
       db.prepare(
         `INSERT INTO intervals (
           id, type, status, title_internal, title_external, body_internal, body_external,
@@ -482,33 +490,18 @@ export function focusInterval(root, { id, now = new Date() }) {
   }
 }
 
-function applyStopRow(db, row, { now, userMinutes, acceptStale, titleExternal, bodyExternal, projectName }) {
+function applyStopRow(db, row, { now, userMinutes, acceptStale: _acceptStale, titleExternal, bodyExternal, projectName }) {
   const stopped = isoWithOffset(now);
   const wallMin = elapsedMinutes(row.started, stopped);
-  const never = isNeverStarted(row.started, row.last_seen_at, now);
   const stale = isStaleRow(row, now);
-  let userMin = null;
-  let needsUser = 0;
-  let staleStop = 0;
+  let userMin = wallMin;
+  const needsUser = 0;
+  const staleStop = stale ? 1 : 0;
   if (userMinutes != null) {
     if (userMinutes > wallMin) {
       throw Object.assign(new Error("user must be <= wall"), { code: "usage" });
     }
     userMin = userMinutes;
-  } else if (never) {
-    needsUser = 1;
-    staleStop = 1;
-  } else if (stale) {
-    if (acceptStale) {
-      userMin = suggestedUserMinutes(row);
-      if (userMin > wallMin) userMin = wallMin;
-      staleStop = 1;
-    } else {
-      needsUser = 1;
-      staleStop = 1;
-    }
-  } else {
-    userMin = wallMin;
   }
   const ext = titleExternal != null ? String(titleExternal) : row.title_external;
   const bodyExt = bodyExternal != null ? String(bodyExternal) : row.body_external;
@@ -578,15 +571,6 @@ export function stopIntervals(root, opts = {}) {
       let targets = [];
       if (opts.all) {
         targets = db.prepare("SELECT * FROM intervals WHERE status = 'running' AND discarded = 0").all().map(mapRow);
-        if (opts.json) {
-          const needsAsk = targets.filter((r) => isNeverStarted(r.started, r.last_seen_at, now) || isStaleRow(r, now));
-          if (needsAsk.length && userMinutes == null) {
-            throw Object.assign(
-              new Error("stop --all from --json requires --user when any runner is stale or never-started"),
-              { code: "usage" },
-            );
-          }
-        }
       } else if (opts.id) {
         const row = getById(db, opts.id);
         if (!row || row.discarded) throw Object.assign(new Error(`no interval ${opts.id}`), { code: "usage" });
@@ -773,28 +757,40 @@ export function pingFocusedLastSeen(root, { now = new Date() } = {}) {
   }
 }
 
+function trackUnclocked({ hopsToday, hopToday, runningCount, stoppedToday }) {
+  return Boolean((hopsToday > 0 || hopToday) && runningCount === 0 && stoppedToday === 0);
+}
+
 /**
- * Compact heartbeat sibling. No titles, bodies, or hours.
+ * Compact heartbeat sibling. No titles, bodies, or hours. `unclocked` is a gap flag only.
  * @param {string} root
- * @param {{ now?: Date, pingFocused?: boolean }} [opts]
+ * @param {{ now?: Date, pingFocused?: boolean, hopsToday?: number, hopToday?: boolean }} [opts]
  */
-export function heartbeatTrack(root, { now = new Date(), pingFocused = true } = {}) {
+export function heartbeatTrack(root, { now = new Date(), pingFocused = true, hopsToday = 0, hopToday = false } = {}) {
+  const empty = {
+    enabled: true,
+    runningCount: 0,
+    staleCount: 0,
+    focusedId: null,
+    running: [],
+    unclocked: trackUnclocked({ hopsToday, hopToday, runningCount: 0, stoppedToday: 0 }),
+  };
   const file = timeDbPath(root);
   if (!existsSync(file)) {
-    return { ok: true, data: { enabled: true, runningCount: 0, staleCount: 0, focusedId: null, running: [] } };
+    return { ok: true, data: empty };
   }
   if (pingFocused) {
     const ping = pingFocusedLastSeen(root, { now });
     if (!ping.ok && ping.error?.code === "busy") {
-      return { ok: true, data: { enabled: true, error: "busy" } };
+      return { ok: true, data: { enabled: true, error: "busy", unclocked: false } };
     }
   }
   const opened = openTimeDb(file, { write: false });
   if (!opened.ok) {
     if (opened.error?.code === "missing") {
-      return { ok: true, data: { enabled: true, runningCount: 0, staleCount: 0, focusedId: null, running: [] } };
+      return { ok: true, data: empty };
     }
-    return { ok: true, data: { enabled: true, error: opened.error?.code || "busy" } };
+    return { ok: true, data: { enabled: true, error: opened.error?.code || "busy", unclocked: false } };
   }
   const { db } = opened;
   try {
@@ -802,6 +798,11 @@ export function heartbeatTrack(root, { now = new Date(), pingFocused = true } = 
       .prepare("SELECT id, started, last_seen_at, focused, status FROM intervals WHERE status = 'running' AND discarded = 0")
       .all();
     const runningCount = rows.length;
+    const today = calendarDateFromIso(isoWithOffset(now));
+    const stoppedToday = db
+      .prepare("SELECT started, stopped FROM intervals WHERE status = 'stopped' AND discarded = 0")
+      .all()
+      .filter((r) => calendarDateFromIso(r.stopped || r.started) === today).length;
     const annotated = rows.map((r) => {
       const never = isNeverStarted(r.started, r.last_seen_at, now);
       const stale = never || isStaleRow(r, now);
@@ -819,11 +820,12 @@ export function heartbeatTrack(root, { now = new Date(), pingFocused = true } = 
         staleCount,
         focusedId: focused?.id ?? null,
         running,
+        unclocked: trackUnclocked({ hopsToday, hopToday, runningCount, stoppedToday }),
       },
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    return { ok: true, data: { enabled: true, error: message } };
+    return { ok: true, data: { enabled: true, error: message, unclocked: false } };
   } finally {
     db.close();
   }
@@ -855,7 +857,17 @@ function inDateRange(iso, since, until) {
   return true;
 }
 
-function overlappingPairs(rows) {
+function intervalEndMs(row, now) {
+  if (row.stopped) {
+    const t = Date.parse(row.stopped);
+    return Number.isFinite(t) ? t : 0;
+  }
+  if (row.status === "running") return now.getTime();
+  const t = Date.parse(row.started);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function overlappingPairs(rows, now = new Date()) {
   /** @type {Array<[string, string]>} */
   const pairs = [];
   for (let i = 0; i < rows.length; i++) {
@@ -863,9 +875,9 @@ function overlappingPairs(rows) {
       const a = rows[i];
       const b = rows[j];
       const a0 = Date.parse(a.started);
-      const a1 = Date.parse(a.stopped || a.started);
+      const a1 = intervalEndMs(a, now);
       const b0 = Date.parse(b.started);
-      const b1 = Date.parse(b.stopped || b.started);
+      const b1 = intervalEndMs(b, now);
       if (!Number.isFinite(a0) || !Number.isFinite(b0)) continue;
       if (a0 < b1 && b0 < a1) pairs.push([a.id, b.id]);
     }
@@ -914,7 +926,7 @@ export function glanceTime(root, { now = new Date(), since, until } = {}) {
     const tasks = [...byTask.entries()].map(([task_id, intervals]) => {
       const wallMin = intervals.reduce((s, i) => s + (i.status === "running" ? i.live_wall_minutes : i.wall_minutes || 0), 0);
       const userMin = intervals.reduce((s, i) => {
-        if (i.status === "running") return s + (i.neverStarted ? 0 : i.suggested_user_minutes);
+        if (i.status === "running") return s + (i.live_wall_minutes || 0);
         return s + (i.user_minutes || 0);
       }, 0);
       const title = intervals[0]?.title_internal || "";
@@ -932,7 +944,7 @@ export function glanceTime(root, { now = new Date(), since, until } = {}) {
         tasks,
         running,
         stoppedToday,
-        overlap: overlappingPairs(running),
+        overlap: overlappingPairs(running, now),
       },
     };
   } finally {
@@ -942,16 +954,42 @@ export function glanceTime(root, { now = new Date(), since, until } = {}) {
 
 /**
  * @param {string} root
- * @param {{ since?: string, until?: string, external?: boolean, project?: string, now?: Date, bundleId?: string }} [opts]
+ * @param {{ since?: string, until?: string, external?: boolean, project?: string, now?: Date, bundleId?: string, gitRoot?: string | null, env?: NodeJS.ProcessEnv }} [opts]
  */
 export function reportTime(root, opts = {}) {
   const now = opts.now ?? new Date();
   const file = timeDbPath(root);
-  if (!existsSync(file)) return { ok: true, data: { rows: [], wall: "0:00", user: "0:00", overlap: [], skippedNeedsExternal: 0 } };
+  const clockedDays = new Set();
+  const emptyUnclocked = () => {
+    const commitDays = commitShortDates(opts.gitRoot || null, {
+      since: opts.since,
+      until: opts.until,
+      env: opts.env,
+    });
+    return commitDays.filter((d) => !clockedDays.has(d));
+  };
+  if (!existsSync(file)) {
+    return {
+      ok: true,
+      data: {
+        rows: [],
+        wall: "0:00",
+        user: "0:00",
+        overlap: [],
+        skippedNeedsExternal: 0,
+        unclockedCommitDays: emptyUnclocked(),
+      },
+    };
+  }
   const opened = openTimeDb(file, { write: false });
   if (!opened.ok) return opened;
   try {
-    let rows = allIntervals(opened.db)
+    const all = allIntervals(opened.db);
+    for (const r of all) {
+      const d = calendarDateFromIso(r.started);
+      if (d) clockedDays.add(d);
+    }
+    let rows = all
       .filter((r) => r.status === "stopped")
       .filter((r) => inDateRange(r.started, opts.since, opts.until) || (!opts.since && !opts.until));
     if (opts.project) {
@@ -971,7 +1009,7 @@ export function reportTime(root, opts = {}) {
     }
     const wallMin = rows.reduce((s, r) => s + (r.wall_minutes || 0), 0);
     const userMin = rows.reduce((s, r) => s + (r.user_minutes || 0), 0);
-    const overlap = overlappingPairs(rows);
+    const overlap = overlappingPairs(rows, now);
     return {
       ok: true,
       data: {
@@ -983,6 +1021,7 @@ export function reportTime(root, opts = {}) {
         user_minutes: userMin,
         overlap,
         skippedNeedsExternal,
+        unclockedCommitDays: emptyUnclocked(),
       },
     };
   } finally {

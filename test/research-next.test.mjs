@@ -33,6 +33,7 @@ function writeOkf(root, rel, data, body) {
 test("sanitizeVia rejects fingerprints and accepts short tokens", () => {
   assert.equal(sanitizeVia("cursor"), "cursor");
   assert.equal(sanitizeVia("Claude-Code"), "claude-code");
+  assert.equal(sanitizeVia("opencode"), "opencode");
   assert.equal(sanitizeVia(""), undefined);
   assert.equal(sanitizeVia(null), undefined);
   assert.equal(sanitizeVia("user@host"), null);

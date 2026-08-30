@@ -14,4 +14,4 @@ Agents always pass `--json`. Humans on a TTY type `mental` for a one-shot heartb
 Daily: `heartbeat`, `park`, `handoff`, `decide`, `attention`, `search`.
 Identity (`remap`, `split`, `link`, `local`) and setup (`install`, `doctor`, …) stay CLI — not MCP.
 
-`--via` is a short client token (`cursor`, `claude-code`, `copilot`, `codex`, `mcp`, `cli`). Never a session id, email, or URL.
+`--via` is a short client token (`cursor`, `claude-code`, `copilot`, `codex`, `opencode`, `mcp`, `cli`). Never a session id, email, or URL.

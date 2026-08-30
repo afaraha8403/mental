@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Track stop (park, handoff, journal) sets `user = wall`. Agents never ask for `h:mm`. A new `start` stops every running interval first. Heartbeat JSON `track.unclocked` flags a hop today with no interval. Report `unclockedCommitDays` lists git dates with commits and no clocked slice (dates only, not hours). `--via opencode` is a documented host token.
+
+### Changes
+
+- README, install, CLI, agents, and why docs spell out what optional time tracking can and cannot do. Human contract: `docs/track.md`.
+
 ### Fixes
+
+- Never-started is short wall (start → now under 2 minutes), not `last_seen ≈ started`. Overnight leftover still flags `stale_stop` without wiping user. Overlap detection treats a running interval as open through now.
 
 - Update notice learns a new npm version within 24h when this CLI thinks it is current. The 7-day cache applies only while already behind. TTY prints the hint once per day; `--json` still includes `update` on every call. Failed npm lookups back off instead of retrying every command. Prerelease sorts below the matching release.
 

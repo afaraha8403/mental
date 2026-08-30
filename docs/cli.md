@@ -54,7 +54,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental install` | User skill + rule; `~/.mental` skeleton; CLI on PATH. From a published install, upgrades when npm is ahead then re-runs so skills match. `--mcp` registers MCP; `--hooks` / `--track` only after the user says yes this turn. JSON includes `optionals[]` (`needsConsent: true`) |
 | `mental uninstall` | Remove installed skill / rule / hooks / MCP / mental-track copies |
 | `mental option` | List or set optional features (`track` per UUID; `mcp` / `hooks` user-global). `--all` sets track default on. `--this` before a UUID is usage |
-| `mental track` | Optional wall/user timers (off until `option track on`). `start` / `stop` / `focus` / `discard` / `report` / `export`. Export `--out` must be outside the git worktree |
+| `mental track` | Optional wall/user timers (off until `option track on`). One live clock; stop sets `user = wall`. Export `--out` must be outside the git worktree. [What it can and cannot do](./track.md) |
 | `mental hooks on\|off` | Optional session hooks (default off; alias of `option hooks`) |
 | `mental serve` | Optional MCP stdio (session verbs: heartbeat, journal, park, …). Identity/setup stay CLI |
 | `mental doctor` | PATH, bindings, ignore, skills, npm update, host plugin / skill-copy lag, decision budget, stale residue, `optionals[]`, `time.sqlite` never git-tracked (exit 3). `--fix-ignore` adds `.mental/` to global excludes. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns). `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips host CLIs. |
@@ -121,9 +121,10 @@ time.sqlite                # optional hours (off until `mental option track on`;
 
 Index: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` (rebuildable). Hours are **not** in the index — they live in bundle `time.sqlite`.
 
-Optional timers: `mental option track on` then `mental track start --title-internal "…"`. Export `--out` must be outside the git worktree. TTY heartbeat and pulse never show hours.
+Optional timers are default **off**. When on: start at hop begin; park / handoff / journal set `user = wall`; heartbeat JSON may include `track.unclocked` (gap flag, not hours); report may include `unclockedCommitDays` (git dates with no slice — not hours). TTY heartbeat and pulse never show hours. What Track [can and cannot do](./track.md).
+
 Pulse watermark: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json` (`{ at: iso }` — rebuildable, not SoT). Written after delta by `pulse` / `park` / `handoff`; **heartbeat never writes it**.
 
 Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount` / `laterCount`. Extra later: `mental list --type Attention --status later`. Extra open decisions: `mental list --type Decision --status open`.
 
-See [identity](./identity.md) for UUID / local / leftover import, and [agents](./agents.md) for the `--json` contract.
+See [identity](./identity.md) for UUID / local / leftover import, [agents](./agents.md) for the `--json` contract, and [optional time tracking](./track.md) for what hours can and cannot do.

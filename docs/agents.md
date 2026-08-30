@@ -17,7 +17,7 @@ mental heartbeat --json
 
 `heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue (Needs eyes / In the air / Later), unsettled + settled (lists capped at 7; counts via `attentionCount` / `openDecisionCount` / `needsEyesCount` / `laterCount` / `guardrailCount` / `hopsToday`). JSON also includes `id` and `mode`. Use `mental status --json` when you also need notes. Do not call `pulse` every turn. Flag grammar: `mental <cmd> --help` or `mental schema --json`. Unknown flags fail (`error.code` `unknown-flag`, `error.hint` lists legal flags). Journal requires `--resume` (same as park/handoff). Decide create requires `--body` (same `--title` without `--body` updates).
 
-If JSON includes `data.track.enabled`, follow the Mental Track skill. If tracking is off, do not enable it. After `mental install` or `mental doctor`, ask about optionals (`needsConsent: true`) with a one-liner each: hooks (session-start status), MCP (`mental serve` for clients that cannot shell the CLI), time tracking (per-project timers). Check whether MCP is needed. Never run `mental option … on` or `install --hooks|--mcp|--track` until the user says yes **this turn**.
+If JSON includes `data.track.enabled`, follow the Mental Track skill. Start a timer at the beginning of real work. If tracking is off, do not enable it. After `mental install` or `mental doctor`, ask about optionals (`needsConsent: true`) with a one-liner each: hooks (session-start status), MCP (`mental serve` for clients that cannot shell the CLI), time tracking (per-project timers). Check whether MCP is needed. Never run `mental option … on` or `install --hooks|--mcp|--track` until the user says yes **this turn**.
 
 ### Park vs handoff vs heartbeat vs pulse
 
@@ -108,7 +108,15 @@ mental hooks on         # Cursor sessionStart + Claude SessionStart/PreCompact �
 mental hooks off
 ```
 
-Never Stop auto-journal. The skill + rule remain the real contract — Cursor `additional_context` can drop.
+Never Stop auto-journal. The skill + rule remain the real contract — Cursor `additional_context` can drop. Hooks do **not** start or stop a timer.
+
+## Optional time tracking
+
+Default **off**. If heartbeat JSON includes `data.track.enabled`, follow the Mental Track skill: start a timer at the beginning of real work; park / handoff / journal stop it and set `user = wall`. Never ask the human for `h:mm`. Never invent a start clock or a duration. Glance and report are Read, not Time › exported.
+
+What it **cannot** do: reconstruct hours from git, fill a missed `start` from chat, backfill old rows, run two clocks, or print hours on TTY heartbeat / pulse. Usage "Time tracking is off" is not permission to run `mental option track on`.
+
+Human contract: [What time tracking can and cannot do](./track.md). Agent procedure: [optional/mental-track/SKILL.md](../optional/mental-track/SKILL.md).
 
 ## JSON envelope
 

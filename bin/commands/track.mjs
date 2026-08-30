@@ -52,8 +52,7 @@ function formatGlance(data) {
     lines.push(`${t.title_internal}  wall ${t.wall}  user ${t.user}`);
     for (const i of t.intervals) {
       const tag = i.neverStarted ? "never-started" : i.stale ? "stale" : i.status;
-      const extra = i.status === "running" ? ` suggested user ${i.suggested_user}` : "";
-      lines.push(`  ${tag} ${i.id.slice(0, 8)}  ${i.live_wall}${extra}`);
+      lines.push(`  ${tag} ${i.id.slice(0, 8)}  ${i.live_wall}`);
     }
   }
   if (data.overlap?.length) lines.push("warn: overlapping running intervals (same clock twice)");
@@ -272,7 +271,15 @@ export function cmdTrack(args, io = {}) {
           : false;
         if (!on) continue;
         const root = pulseRootForBinding(home, b) || projectSliceDir(home, b.id);
-        const rep = reportTime(root, { since, until, external, project, bundleId: b.id });
+        const rep = reportTime(root, {
+          since,
+          until,
+          external,
+          project,
+          bundleId: b.id,
+          gitRoot: where.gitRoot,
+          env: args.env ?? process.env,
+        });
         if (rep.ok) chunks.push({ id: b.id, name: b.name, report: rep.data });
       }
       if (sub === "export") {
@@ -290,7 +297,15 @@ export function cmdTrack(args, io = {}) {
       return 0;
     }
 
-    const rep = reportTime(where.root, { since, until, external, project, bundleId: uuid });
+    const rep = reportTime(where.root, {
+      since,
+      until,
+      external,
+      project,
+      bundleId: uuid,
+      gitRoot: where.gitRoot,
+      env: args.env ?? process.env,
+    });
     if (!rep.ok) {
       printResult(stdout, args, false, undefined, rep.error);
       return 1;

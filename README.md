@@ -117,6 +117,7 @@ equals that `package.json` string (no `v`). Agent rule: [`.cursor/rules/release.
 - **Markdown is the source of truth.** OKF files in `~/.mental`. SQLite is a derived cache. Deleting the db loses nothing.
 - **Identity survives a move.** UUID in `bindings.json`, not the folder path. Two clones of the same origin share one brain until you `split`.
 - **Fail open. Private by default.** Missing Mental CLI must not block coding. Never commit the store. Never write secrets.
+- **Hours are optional.** Default off. One sit-down, one clock, `user = wall` on stop. Not a timesheet and not git→hours. [What Track can and cannot do](docs/track.md).
 
 ## Who writes
 
@@ -191,6 +192,9 @@ Agents try `npx @balacode/mental`. If that fails they continue the coding task a
 **Where does data live?**
 `~/.mental` (never commit). Project `./.mental` only after `mental local`. Uninstall does not delete OKF unless you type `DELETE`. [Identity](docs/identity.md) · [Privacy](#privacy)
 
+**Does Mental CLI track my hours?**
+Only if you turn it on (`mental option track on`). It clocks **this sit-down** (this chat / host / day). Stop (park, handoff, journal) sets user = wall — nobody asks you for `h:mm`. It cannot reconstruct the past from git, guess a duration, or print hours on the TTY pulse. [What it can and cannot do](docs/track.md).
+
 ## Docs
 
 | | |
@@ -198,6 +202,7 @@ Agents try `npx @balacode/mental`. If that fails they continue the coding task a
 | [Why Mental CLI](docs/why.md) | Contract, non-goals, architecture |
 | [The research](docs/research.md) | Verification load, supervisory work, 2024–2026 citations |
 | [Install Mental CLI](docs/install.md) | npm, plugins, clone, upgrade, doctor, uninstall |
+| [Optional time tracking](docs/track.md) | What hours can and cannot do |
 | [Mental CLI reference](docs/cli.md) | Commands, flags, exit codes |
 | [Mental CLI for agents](docs/agents.md) | `--json`, skill, MCP, receipts |
 | [Mental CLI identity](docs/identity.md) | UUID, remap / split / local |
@@ -212,7 +217,7 @@ Agents try `npx @balacode/mental`. If that fails they continue the coding task a
 - Never store secrets, tokens, or private keys
 - `mental uninstall` does not delete OKF unless you type `DELETE`
 
-Optional: `mental install --mcp` · `mental hooks on` — default **off**. Skill + rule are the contract.
+Optional: `mental install --mcp` · `mental hooks on` · `mental option track on` — default **off**. Skill + rule are the contract. Hours never go in git. [Track](docs/track.md).
 
 ---
 

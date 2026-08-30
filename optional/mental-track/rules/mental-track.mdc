@@ -3,4 +3,4 @@ description: Optional Mental CLI time tracking. Self-gates on heartbeat track.en
 alwaysApply: false
 ---
 
-If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill for wall/user timers. If tracking is off, do nothing. Do not run `mental option track on` unless the user named track or hours **this turn**. Usage "Time tracking is off" is not permission to enable it. Never invent a start clock or a duration. Never `git add` `time.sqlite` or a timesheet export.
+If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill for wall/user timers. When tracking is on, start a timer at the beginning of substantive work. If tracking is off, do nothing. Do not run `mental option track on` unless the user named track or hours **this turn**. Usage "Time tracking is off" is not permission to enable it. Never invent a start clock or a duration. Never ask the human for `h:mm`. Never `git add` `time.sqlite` or a timesheet export.

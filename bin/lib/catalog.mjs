@@ -55,7 +55,7 @@ const FILTER_FLAGS = [
   v("kind", { summary: "Attention kind", enum: ["direction", "concern", "thread", "verify"] }),
 ];
 
-const VIA = v("via", { summary: "Short client token (cursor, claude-code, copilot, codex, mcp, cli). Not a session id." });
+const VIA = v("via", { summary: "Short client token (cursor, claude-code, copilot, codex, opencode, mcp, cli). Not a session id." });
 const AGAINST = v("against", { summary: "Repo-relative plan path (no ..)" });
 const TITLE = v("title", { summary: "OKF title (same title updates)" });
 const BODY = v("body", { summary: "Section or file body" });
@@ -326,7 +326,7 @@ export const CATALOG = {
   track: {
     name: "track",
     group: "Setup",
-    summary: "Optional wall/user timers (off until option track on). Glance / start / stop / focus / discard / report / export.",
+    summary: "Optional wall/user timers (off until option track on). One live clock; stop sets user=wall. Glance / start / stop / focus / discard / report / export.",
     usage: `${CMD} track [glance|start|stop|focus|discard|amend|report|export]`,
     examples: [`${CMD} track`, `${CMD} track start --title-internal "Catalog" --json`],
     flags: [

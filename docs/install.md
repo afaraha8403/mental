@@ -158,7 +158,7 @@ mental doctor --fix-ignore   # add .mental/ and .mental-id to your global git ex
 
 Install and doctor JSON include `optionals[]` (`id`, `enabled`, `scope`, `command`, `isNew`, `needsConsent: true`). After doctor, agents ask about hooks and time tracking, and whether MCP is needed, with a one-liner each. Do not pass `--hooks` / `--mcp` / `--track` until the user says yes this turn.
 
-Time tracking is off by default. Hours live in bundle `time.sqlite` (never git). The track skill is copied from `optional/mental-track/` only when track is enabled — not from plugin `skills/`.
+Time tracking is off by default. It clocks one sit-down at a time (`user = wall` on stop). It does **not** reconstruct hours from git, guess a duration, or print hours on the TTY pulse. Hours live in bundle `time.sqlite` (never git). The track skill is copied from `optional/mental-track/` only when track is enabled — not from plugin `skills/`. Full contract: [What time tracking can and cannot do](./track.md).
 
 ## Uninstall
 

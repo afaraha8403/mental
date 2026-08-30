@@ -6,6 +6,9 @@ import { appendJournal, bundleName, ensureSkeleton, repoRelativePath } from "../
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, EXIT_USAGE, kindLine } from "../lib/output.mjs";
 import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
+import { isFeatureOn } from "../lib/config.mjs";
+import { isBundleRoot } from "../lib/heartbeat.mjs";
+import { stopFocusedForPark } from "../lib/time.mjs";
 
 /**
  * @param {{ json: boolean, dir?: string, flags?: Record<string, string | boolean>, cwd?: string, home?: string, env?: NodeJS.ProcessEnv }} args
@@ -61,10 +64,15 @@ export function cmdJournal(args, io = {}) {
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
-  const written = appendJournal(resolved.data.root, { title, body, resume, against, via: viaParsed.via });
+  let timer_stop_failed = false;
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
+  if (home && isBundleRoot(resolved.data) && isFeatureOn(home, "track", resolved.data.id || null)) {
+    const stopped = stopFocusedForPark(resolved.data.root);
+    if (!stopped.ok) timer_stop_failed = true;
+  }
+  const written = appendJournal(resolved.data.root, { title, body, resume, against, via: viaParsed.via });
   const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
-  const data = { ...resolved.data, ...written, indexed };
+  const data = { ...resolved.data, ...written, indexed, ...(timer_stop_failed ? { timer_stop_failed: true } : {}) };
   printResult(stdout, args, true, data, undefined, () => kindLine("journal", `appended ${written.path}`));
   return 0;
 }

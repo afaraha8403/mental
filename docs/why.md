@@ -51,6 +51,7 @@ Layers never invert: files → resolver → CLI → index → skill / rule / hoo
 - Not a secret store
 - Not a hosted SaaS, vector database, or graph as source of truth
 - Not a standing TUI. `mental` prints a pulse and exits.
+- Not a timesheet. Optional hours are a separate, default-off add-on. They cannot reconstruct the past from git. [Track](./track.md).
 
 ## Vocabulary
 
