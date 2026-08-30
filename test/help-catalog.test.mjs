@@ -96,6 +96,8 @@ test("search -- -foo queries -foo", () => {
   const body = JSON.parse(r.stdout);
   assert.equal(body.ok, true);
   assert.equal(body.data.q, "-label");
+  assert.equal(body.data.op, "and");
+  assert.ok(Array.isArray(body.data.tokens));
   assert.equal(typeof body.data.truncated, "boolean");
   assert.equal(typeof body.data.total, "number");
 });
@@ -130,6 +132,18 @@ test("journal without --resume is usage exit 2 with hint", () => {
   assert.equal(body.error.code, "usage");
   assert.match(body.error.message, /--resume/);
   assert.match(body.error.hint, /--resume/);
+});
+
+test("decide create without --body is usage exit 2 with hint", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const r = mental(home, root, ["decide", "--json", "--title", "Stay WebKitGTK"]);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, false);
+  assert.equal(body.error.code, "usage");
+  assert.match(body.error.message, /--body/);
+  assert.match(body.error.hint, /--body/);
 });
 
 test("unknown command --json does not run a neighbor; hint lists Daily", () => {

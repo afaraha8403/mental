@@ -35,7 +35,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental pulse` | Cross-project compact rows from `bindings.json` (id, name, resume, attentionCount, openDecisionCount). No journal bodies. Writes watermark for the active bundle |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only; does not create identity) |
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
-| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`); hits include `description` + `snippet` |
+| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op` |
 | `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`) |
 | `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`) |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
@@ -45,7 +45,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental schema [command]` | Dump the command catalog as JSON (`mental schema heartbeat --json` for one command) |
 | `mental completion bash\|zsh\|fish` | Print a completion script (do not auto-write shell rc files) |
 | `mental attention --title --kind` | Create or update residue (`direction` \| `concern` \| `thread` \| `verify`; `--status resolved` closes it). `--via` optional |
-| `mental decide --title` | Create or update a decision (`--status decided` closes by title; `--path` targets a file). `--via` optional |
+| `mental decide --title --body` | Create or update a decision. Create requires `--body` (the why). Same `--title` without `--body` updates; `--status decided` closes by title; `--path` targets a file. `--via` optional |
 | `mental note --title` | Scaffold a note |
 | `mental local [--import \| --move]` | Project `./.mental` after ignore check |
 | `mental remap [--to id]` | List or retarget this clone’s UUID |
@@ -65,7 +65,7 @@ Same `--title` updates the existing decision or attention file (paths are identi
 
 ```bash
 mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none" --against PLAN.md --via cursor
-mental decide --title "Heartbeat only, no standing TUI" --status decided --via cursor
+mental decide --title "Heartbeat only, no standing TUI" --body "Default TTY mental prints a one-shot heartbeat and exits." --status decided --via cursor
 mental attention --title "Tom said ship the pointer not the dump" --kind direction --from Tom --via cursor
 mental attention --title "Resolver tests not reviewed" --kind verify --via cursor
 mental attention --title "Tom said ship the pointer not the dump" --status resolved
@@ -93,7 +93,7 @@ mental list --type Decision --kind direction
 mental show notes/some-fact.md
 ```
 
-Typed filters (`--type`, `--status`, `--tag`, `--kind`) apply before the result cap. Search uses SQLite FTS5 with bm25 when Node’s `node:sqlite` includes FTS5; otherwise it uses SQLite LIKE (or a markdown scan if sqlite is missing). Title matches rank above buried body mentions either way.
+Typed filters (`--type`, `--status`, `--tag`, `--kind`) apply before the result cap. Search uses SQLite FTS5 with bm25 when Node’s `node:sqlite` includes FTS5; otherwise it uses SQLite LIKE (or a markdown scan if sqlite is missing). Title matches rank above buried body mentions; Decision/Note rank above Journal. Space-separated words are AND prefixes (`overlay leftover` must match both) unless `--any` (OR). Quotes are shell glue, not a phrase operator. JSON includes `tokens` and `op`. Journal hops index as `journal/YYYY-MM-DD.md#HH:MM`. Search one concept per query; before proposing an approach, search that name. MCP `q` may be a string array (union).
 
 ## Exit codes
 

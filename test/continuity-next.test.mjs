@@ -295,7 +295,7 @@ test("heartbeat --json has counts, no notes dump", () => {
     mental(home, root, ["attention", "--json", "--title", "A residue", "--kind", "concern"]),
     "attention",
   );
-  parseOk(mental(home, root, ["decide", "--json", "--title", "An open fork"]), "decide");
+  parseOk(mental(home, root, ["decide", "--json", "--title", "An open fork", "--body", "Needs a user pick."]), "decide");
   parseOk(mental(home, root, ["note", "--json", "--title", "A durable fact", "--body", "NOTE_BODY_MUST_NOT_APPEAR"]), "note");
 
   const hb = parseOk(mental(home, root, ["heartbeat", "--json"]), "heartbeat counts");

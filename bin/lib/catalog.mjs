@@ -106,15 +106,15 @@ export const CATALOG = {
     summary: "Create or update a decision. Same title updates; --status decided closes. Not a per-turn reload.",
     usage: `${CMD} decide --title <text>`,
     examples: [
-      `${CMD} decide --title "Keep lean MCP" --status decided --via cursor`,
-      `${CMD} decide --title "…" --status open --json`,
+      `${CMD} decide --title "Keep lean MCP" --body "MCP stays optional; CLI is the write path." --status decided --via cursor`,
+      `${CMD} decide --title "…" --body "…" --status open --json`,
     ],
     flags: [
       TITLE,
       PATH,
       v("status", { enum: ["open", "deferred", "decided", "superseded"] }),
       v("description"),
-      BODY,
+      v("body", { summary: "Why this choice (required when creating)" }),
       v("slug"),
       VIA,
     ],
@@ -148,10 +148,17 @@ export const CATALOG = {
   search: {
     name: "search",
     group: "Daily",
-    summary: "Query notes/journal/decisions/attention (sqlite or scan). After --, remainder is the query (including leading dashes).",
+    summary: "Query notes/journal/decisions/attention (sqlite or scan). Space-separated words are AND prefixes unless --any (OR). One concept per query, or MCP q as string[]. Journal hops index as path#HH:MM. After --, remainder is the query (including leading dashes).",
     usage: `${CMD} search <q>`,
-    examples: [`${CMD} search overlay`, `${CMD} search --json "lean MCP"`, `${CMD} search -- -label`],
-    flags: FILTER_FLAGS,
+    examples: [
+      `${CMD} search overlay`,
+      `${CMD} search compositing --json`,
+      `${CMD} search leftover overlay --any --json`,
+      `${CMD} search -- -label`,
+    ],
+    flags: FILTER_FLAGS.concat([
+      b("any", { summary: "OR tokens instead of AND (union of words in one query)" }),
+    ]),
     effects: "read_only",
     rest: { name: "q", summary: "Search query", mcpName: "q", required: true },
     mcp: true,
@@ -536,7 +543,14 @@ export function mcpInputSchema(c) {
   /** @type {string[]} */
   const required = [];
   if (c.rest?.mcpName) {
-    properties[c.rest.mcpName] = { type: "string", description: c.rest.summary || c.rest.name };
+    if (c.name === "search") {
+      properties[c.rest.mcpName] = {
+        description: `${c.rest.summary || c.rest.name}. string[] is a union of queries.`,
+        anyOf: [{ type: "string" }, { type: "array", items: { type: "string" } }],
+      };
+    } else {
+      properties[c.rest.mcpName] = { type: "string", description: c.rest.summary || c.rest.name };
+    }
     if (c.rest.required) required.push(c.rest.mcpName);
   }
   if (c.name === "option") {

@@ -35,7 +35,7 @@ export function cmdShow(args, io = {}) {
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const backlinks = listBacklinks({
     root: resolved.data.root,
-    path: file.data.path,
+    path: file.data.path.split("#")[0],
     id: resolved.data.id,
     home,
     env: args.env ?? process.env,

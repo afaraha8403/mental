@@ -81,14 +81,14 @@ mental where --json
 mental heartbeat --json
 mental pulse --json
 mental status --json
-mental search "…" --json
+mental search overlay --json
 mental list --type Decision --json
 mental show <path> --json
 mental park --resume "…" --via cursor --json
 mental handoff --title "…" --resume "…" --via cursor --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --via cursor --json
 mental attention --title "…" --kind direction --status open --via cursor --json
-mental decide --title "…" --status open --via cursor --json
+mental decide --title "…" --body "…" --status open --via cursor --json
 mental note --title "…" --json
 ```
 
@@ -189,7 +189,11 @@ block work if Mental errors; mention it and continue.
 ### 2. Record selectively
 
 Create a decision only when a choice changes the project's direction, constrains
-future work, or is explicitly deferred:
+future work, or is explicitly deferred. A rejected or abandoned approach
+constrains the future (do not retry it): record a Decision titled with the words
+a later agent will search (`Do not retry WEBKIT_DISABLE_COMPOSITING`), with
+`--body` why it died. Do not bury that in a journal section. Create requires
+`--body`; same `--title` without `--body` updates.
 
 - `open`: options require a user decision.
 - `deferred`: intentionally parked; state what it awaits.
@@ -197,8 +201,8 @@ future work, or is explicitly deferred:
 - `superseded`: preserve the file and link the replacement.
 
 ```text
-mental decide --title "…" --status open --json
-mental decide --title "…" --status decided --json
+mental decide --title "…" --body "…" --status open --json
+mental decide --title "…" --body "…" --status decided --json
 ```
 
 Same `--title` updates the existing file (paths are identities). `--path` targets a specific file.
@@ -249,9 +253,15 @@ Mental is not only a start/finish ritual. Step back in cheaply whenever:
 - **Structured lookup** — open decisions, residue of a kind, a status:
   `mental list --type Decision --status open --json` (or `--kind direction`).
   Do not search and do not grep YAML for field filters.
-- **Approach change** — before abandoning or switching an approach,
-  `mental search "…" --json` then `mental show <path> --json` for the hit
-  (backlinks are on `show`). Also `mental list --type Decision --json`.
+- **Before proposing** a concrete approach, flag, crate, or env var:
+  `mental search <that name> --json` as its own query (not glued to other words).
+  Space-separated words are AND prefixes (`--any` is OR). MCP `q` may be a string
+  array for a union in one round-trip. Also `mental list --type Decision --json`
+  (all statuses — titles, not only open). `mental show` any plausible hit
+  (journal hits may be `journal/YYYY-MM-DD.md#HH:MM`); follow `backlinks`.
+  Orient-search on the user's topic is not enough.
+- **Approach change** — before abandoning or switching an approach, search that
+  name then `mental show <path> --json` for the hit (backlinks are on `show`).
   If the switch constrains the future, record it with `mental decide` at once.
 - **Residue surfaces** — "Tom said X", a worry, "park this": record
   `mental attention` **now**, not at handoff. Chat memory fades; the OKF file
@@ -264,7 +274,7 @@ Mental is not only a start/finish ritual. Step back in cheaply whenever:
   not park.
 - **Cross-project** — orchestrating several repos: `mental pulse --json` once
   for compact rows. Do not dump journals. Stay on `heartbeat` inside one repo.
-- **"Why is it like this?"** — `mental search "…" --json`, then `show` the
+- **"Why is it like this?"** — `mental search <the thing> --json`, then `show` the
   path; a decision or note may already hold the answer. Follow `backlinks`
   instead of grepping.
 

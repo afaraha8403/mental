@@ -15,7 +15,7 @@ mental where --json
 mental heartbeat --json
 ```
 
-`heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue, unsettled + settled (lists capped at 7; counts via `attentionCount` / `openDecisionCount` / `needsEyesCount` / `guardrailCount` / `hopsToday`). JSON also includes `id` and `mode`. Use `mental status --json` when you also need notes. Do not call `pulse` every turn. Flag grammar: `mental <cmd> --help` or `mental schema --json`. Unknown flags fail (`error.code` `unknown-flag`, `error.hint` lists legal flags). Journal requires `--resume` (same as park/handoff).
+`heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue, unsettled + settled (lists capped at 7; counts via `attentionCount` / `openDecisionCount` / `needsEyesCount` / `guardrailCount` / `hopsToday`). JSON also includes `id` and `mode`. Use `mental status --json` when you also need notes. Do not call `pulse` every turn. Flag grammar: `mental <cmd> --help` or `mental schema --json`. Unknown flags fail (`error.code` `unknown-flag`, `error.hint` lists legal flags). Journal requires `--resume` (same as park/handoff). Decide create requires `--body` (same `--title` without `--body` updates).
 
 If JSON includes `data.track.enabled`, follow the Mental Track skill. If tracking is off, do not enable it. After `mental install` or `mental doctor`, ask about optionals (`needsConsent: true`) with a one-liner each: hooks (session-start status), MCP (`mental serve` for clients that cannot shell the CLI), time tracking (per-project timers). Check whether MCP is needed. Never run `mental option … on` or `install --hooks|--mcp|--track` until the user says yes **this turn**.
 
@@ -37,17 +37,17 @@ mental pulse --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --via cursor --json
 mental attention --title "…" --kind concern --status open --via cursor --json
 mental attention --title "…" --kind verify --status open --via cursor --json
-mental decide --title "…" --status open --via cursor --json
+mental decide --title "…" --body "…" --status open --via cursor --json
 mental decide --title "…" --status decided --json
-mental search "…" --json
-mental list --type Decision --status open --json
+mental search overlay --json
+mental list --type Decision --kind direction --json
 mental show notes/some-fact.md --json
 mental status --json
 ```
 
 Mid-chat, not just start/finish:
 
-- Search decisions before changing an approach
+- Before proposing a concrete approach, flag, crate, or env var: `mental search <that name> --json` as its own query (space-separated words are AND; `--any` is OR). Also `mental list --type Decision --json` (all statuses).
 - Record attention the moment residue surfaces
 - Park when interrupted mid-hop; handoff only at a planned close
 - Re-call `mental heartbeat --json` whenever other agents may have written — it derives git live. On this repo’s bench machine a CLI heartbeat is **51 ms** p50; in-process (MCP) it is **11 ms**. See [benchmarks](./benchmarks.md).
@@ -62,7 +62,7 @@ Mid-chat, not just start/finish:
 
 Source: [skill/mental/SKILL.md](../skill/mental/SKILL.md) and [rules/mental.mdc](../rules/mental.mdc).
 
-Mental is **not** a todo app. Do not store transcripts. Do not duplicate `PLAN.md`. Create a decision only when it constrains the future. Attention is residue, not a backlog.
+Mental is **not** a todo app. Do not store transcripts. Do not duplicate `PLAN.md`. Create a decision only when it constrains the future — including a rejected approach titled with the words a later agent will search. Attention is residue, not a backlog.
 
 ## Mental receipt
 

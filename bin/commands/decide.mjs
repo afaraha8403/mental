@@ -75,20 +75,36 @@ export function cmdDecide(args, io = {}) {
     return 1;
   }
 
+  const body = flagString(args.flags, "body");
+  if (!existing && !(body && body.trim())) {
+    printResult(
+      stdout,
+      args,
+      false,
+      undefined,
+      {
+        code: "usage",
+        message: "mental decide create requires --body",
+        hint: "Pass --body with the why. Same --title without --body updates an existing decision.",
+      },
+    );
+    return EXIT_USAGE;
+  }
+
   try {
     const written = existing
       ? updateDecision(resolved.data.root, existing.path, {
           title: title || undefined,
           status: statusFlag || undefined,
           description: flagString(args.flags, "description") || undefined,
-          body: flagString(args.flags, "body") || undefined,
+          body: body || undefined,
           via: viaParsed.via,
         })
       : writeDecision(resolved.data.root, {
           title,
           status,
           description: flagString(args.flags, "description") || "",
-          body: flagString(args.flags, "body") || "",
+          body,
           via: viaParsed.via,
           slug: flagString(args.flags, "slug") || undefined,
         });
@@ -108,6 +124,6 @@ export function cmdDecide(args, io = {}) {
     const message = err instanceof Error ? err.message : String(err);
     const code = /** @type {{ code?: string }} */ (err).code || "write";
     printResult(stdout, args, false, undefined, { code, message });
-    return 1;
+    return code === "usage" ? EXIT_USAGE : 1;
   }
 }

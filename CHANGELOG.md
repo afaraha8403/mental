@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- `mental decide` create requires `--body` (the why). Same `--title` without `--body` still updates. Decision files are title plus body — no Context/Options/Outcome placeholders.
+- Search JSON includes `tokens` and `op` (`and` or `or`). Space-separated words are AND prefixes unless `--any`. MCP `q` may be a string array (union of queries). Quotes are not a phrase operator.
+- Journal hops (`## HH:MM — title`) index as their own search rows (`journal/YYYY-MM-DD.md#HH:MM`). `mental show` that path returns the section. `list` stays one file per day.
+- Search ranks Decision, then Note, then Attention, then Journal.
+
+### Fixes
+
+- Attention create no longer writes `<why this would cost a reload if forgotten>` into the file. Title-only residue is allowed.
+
 ### Changes
 
+- Skill and always-on rule: before proposing a flag, crate, or approach, search that name; rejected approaches are Decisions with a searchable title. Journal is not the graveyard of failed ideas.
 - Agent install paste names `skills/mental-setup` vs `skill/mental`, fail-open, and no plugin MCP. README and install-doc pastes stay identical.
 
 ## [0.7.0] - 2026-08-28

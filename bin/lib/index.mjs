@@ -7,13 +7,27 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
-import { parseFrontmatter } from "./okf.mjs";
+import { journalHops, parseFrontmatter } from "./okf.mjs";
 
 const require = createRequire(import.meta.url);
 /** Bump when the concepts table shape changes; mismatch drops and recreates. */
-export const INDEX_VERSION = "3";
+export const INDEX_VERSION = "4";
 
 const SNIPPET_CHARS = 160;
+
+/**
+ * Split a search needle into AND tokens. Punctuation is dropped; words are
+ * prefix-matched. Quotes are not a phrase operator.
+ * @param {string} needle
+ * @returns {string[]}
+ */
+export function tokenizeQuery(needle) {
+  return String(needle || "")
+    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
 
 /**
  * @param {string} home
@@ -158,6 +172,54 @@ function walk(base, dir, out) {
   }
 }
 
+/**
+ * Journal hops (`## HH:MM — title`) as their own search rows. `list` stays file-level.
+ * @param {ReturnType<typeof listConcepts>} concepts
+ */
+export function expandJournalSections(concepts) {
+  /** @type {ReturnType<typeof listConcepts>} */
+  const out = [];
+  for (const c of concepts) {
+    if (c.type !== "Journal") {
+      out.push(c);
+      continue;
+    }
+    const hops = journalHops(c.body);
+    if (hops.length === 0) {
+      out.push(c);
+      continue;
+    }
+    for (const hop of hops) {
+      const searchable = [hop.title, hop.body].filter(Boolean).join("\n");
+      out.push({
+        ...c,
+        path: `${c.path}#${hop.fragment}`,
+        title: hop.title,
+        description: "",
+        body: hop.body,
+        searchable,
+      });
+    }
+  }
+  return out;
+}
+
+function typeRank(type) {
+  const t = String(type || "").toLowerCase();
+  if (t === "decision") return 0;
+  if (t === "note") return 1;
+  if (t === "attention") return 2;
+  if (t === "journal") return 3;
+  return 4;
+}
+
+const TYPE_ORDER_SQL = `CASE lower(c.type)
+  WHEN 'decision' THEN 0
+  WHEN 'note' THEN 1
+  WHEN 'attention' THEN 2
+  WHEN 'journal' THEN 3
+  ELSE 4 END`;
+
 function inferType(rel) {
   if (rel.startsWith("journal/")) return "Journal";
   if (rel.startsWith("decisions/")) return "Decision";
@@ -257,7 +319,8 @@ export function reindexBundle({ root, id, home, env = process.env }) {
   if (!DatabaseSync) {
     return { ok: false, path: file, concepts: 0, backend: "none", error: "node:sqlite unavailable" };
   }
-  const concepts = listConcepts(root);
+  const files = listConcepts(root);
+  const concepts = expandJournalSections(files);
   try {
     mkdirSync(dirname(file), { recursive: true });
     const db = new DatabaseSync(file);
@@ -290,7 +353,9 @@ export function reindexBundle({ root, id, home, env = process.env }) {
         c.searchable,
       );
       insF?.run(c.path, c.title, c.searchable);
-      for (const l of extractLinks(c.path, c.body)) insL.run(l.src, l.dest, l.raw);
+    }
+    for (const f of files) {
+      for (const l of extractLinks(f.path, f.body)) insL.run(l.src, l.dest, l.raw);
     }
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("version", INDEX_VERSION);
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("root", root);
@@ -354,6 +419,7 @@ function filterSql(filters) {
  *   tag?: string,
  *   kind?: string,
  *   limit?: number,
+ *   any?: boolean,
  * }} opts
  */
 export function searchBundle({
@@ -367,8 +433,12 @@ export function searchBundle({
   tag,
   kind,
   limit = 50,
+  any = false,
 }) {
   const needle = q.trim().toLowerCase();
+  const tokens = tokenizeQuery(needle);
+  const op = any ? "or" : "and";
+  const parsed = { tokens, op };
   const filters = { type, status, tag, kind };
   if (id && home) {
     const file = indexPath(home, id, env);
@@ -376,15 +446,49 @@ export function searchBundle({
     if (DatabaseSync && existsSync(file)) {
       maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file });
       try {
-        const found = searchSqlite(DatabaseSync, file, needle, { ...filters, limit });
-        return { backend: "sqlite", hits: found.hits, total: found.total };
+        const found = searchSqlite(DatabaseSync, file, needle, { ...filters, limit, any, tokens });
+        return { backend: "sqlite", hits: found.hits, total: found.total, ...parsed };
       } catch {
         // fall through to scan
       }
     }
   }
-  const found = searchScan(listConcepts(root), needle, { ...filters, limit });
-  return { backend: "scan", hits: found.hits, total: found.total };
+  const found = searchScan(expandJournalSections(listConcepts(root)), needle, { ...filters, limit, any, tokens });
+  return { backend: "scan", hits: found.hits, total: found.total, ...parsed };
+}
+
+/**
+ * Union of several searches (MCP `q` as string[]). Each query keeps its own AND tokens.
+ * @param {Array<ReturnType<typeof searchBundle>>} batches
+ * @param {number} [limit]
+ */
+export function mergeSearchResults(batches, limit = 50) {
+  const seen = new Set();
+  /** @type {Array<ReturnType<typeof searchBundle>["hits"][number]>} */
+  const hits = [];
+  /** @type {string[]} */
+  const tokens = [];
+  const tokenSeen = new Set();
+  let backend = batches[0]?.backend ?? "scan";
+  for (const b of batches) {
+    if (b.backend === "scan") backend = "scan";
+    for (const t of b.tokens || []) {
+      if (tokenSeen.has(t)) continue;
+      tokenSeen.add(t);
+      tokens.push(t);
+    }
+    for (const h of b.hits) {
+      if (seen.has(h.path)) continue;
+      seen.add(h.path);
+      hits.push(h);
+    }
+  }
+  hits.sort((a, b) => {
+    const tr = typeRank(a.type) - typeRank(b.type);
+    if (tr) return tr;
+    return a.path.localeCompare(b.path);
+  });
+  return { backend, hits: hits.slice(0, limit), total: hits.length, tokens, op: "or" };
 }
 
 /**
@@ -408,18 +512,18 @@ function maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file }) {
 /**
  * @param {typeof import("node:sqlite").DatabaseSync} DatabaseSync
  */
-function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, limit }) {
+function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, limit, any = false, tokens = [] }) {
   const db = new DatabaseSync(file);
   try {
     const { sql: extra, params: filterParams } = filterSql({ type, status, tag, kind });
+    const likeBits = tokenLikeClause(tokens.length ? tokens : [needle], any);
     const like = db.prepare(
       `SELECT c.path AS path, c.type AS type, c.title AS title, c.description AS description,
               c.status AS status, c.kind AS kind, c.tags_json AS tags_json, c.body_text AS body_text
        FROM concepts c
-       WHERE (lower(c.title) LIKE ? OR lower(c.body_text) LIKE ? OR lower(c.path) LIKE ?)${extra}
-       ORDER BY CASE WHEN lower(c.title) LIKE ? THEN 0 ELSE 1 END, c.path`,
+       WHERE ${likeBits.sql}${extra}
+       ORDER BY ${TYPE_ORDER_SQL}, CASE WHEN lower(c.title) LIKE ? THEN 0 ELSE 1 END, c.path`,
     );
-    const pat = `%${needle}%`;
     let rows = [];
     try {
       const fts = db.prepare(
@@ -429,21 +533,18 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
          FROM concepts_fts
          JOIN concepts c ON c.path = concepts_fts.path
          WHERE concepts_fts MATCH ?${extra}
-         ORDER BY bm25(concepts_fts)`,
+         ORDER BY ${TYPE_ORDER_SQL}, bm25(concepts_fts)`,
       );
-      const tokens = needle
-        .replace(/[^\p{L}\p{N}\s]+/gu, " ")
-        .trim()
-        .split(/\s+/)
-        .filter(Boolean);
-      const q = tokens.length ? tokens.map((t) => `${t}*`).join(" AND ") : needle;
+      const join = any ? " OR " : " AND ";
+      const q = tokens.length ? tokens.map((t) => `${t}*`).join(join) : needle;
       rows = fts.all(q, ...filterParams);
     } catch {
       rows = [];
     }
     if (!rows || rows.length === 0) {
       try {
-        rows = like.all(pat, pat, pat, ...filterParams, pat);
+        const titlePat = `%${(tokens[0] || needle).replace(/%/g, "")}%`;
+        rows = like.all(...likeBits.params, ...filterParams, titlePat);
       } catch {
         rows = [];
       }
@@ -453,6 +554,20 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
   } finally {
     db.close();
   }
+}
+
+/**
+ * @param {string[]} tokens
+ * @param {boolean} any
+ */
+function tokenLikeClause(tokens, any) {
+  const per = tokens.map(() => `(lower(c.title) LIKE ? OR lower(c.body_text) LIKE ? OR lower(c.path) LIKE ?)`);
+  const sql = `(${per.join(any ? " OR " : " AND ")})`;
+  const params = tokens.flatMap((t) => {
+    const p = `%${String(t).replace(/%/g, "")}%`;
+    return [p, p, p];
+  });
+  return { sql, params };
 }
 
 /**
@@ -500,9 +615,14 @@ function scanSnippet(text, needle, max = SNIPPET_CHARS) {
   return s;
 }
 
-function searchScan(concepts, needle, { type, status, tag, kind, limit }) {
+function searchScan(concepts, needle, { type, status, tag, kind, limit, any = false, tokens = [] }) {
+  const terms = tokens.length ? tokens : needle ? [needle] : [];
   const hits = filterConcepts(concepts, { type, status, tag, kind })
-    .filter((c) => `${c.title}\n${c.searchable}`.toLowerCase().includes(needle))
+    .filter((c) => {
+      const hay = `${c.title}\n${c.searchable}`.toLowerCase();
+      if (!terms.length) return true;
+      return any ? terms.some((t) => hay.includes(t)) : terms.every((t) => hay.includes(t));
+    })
     .map((c) => ({
       path: c.path,
       type: c.type,
@@ -511,9 +631,11 @@ function searchScan(concepts, needle, { type, status, tag, kind, limit }) {
       status: c.status,
       kind: c.kind,
       tags: c.tags,
-      snippet: scanSnippet(c.searchable, needle),
+      snippet: scanSnippet(c.searchable, terms[0] || needle),
     }))
     .sort((a, b) => {
+      const tr = typeRank(a.type) - typeRank(b.type);
+      if (tr) return tr;
       const at = a.title.toLowerCase().includes(needle) ? 0 : 1;
       const bt = b.title.toLowerCase().includes(needle) ? 0 : 1;
       if (at !== bt) return at - bt;

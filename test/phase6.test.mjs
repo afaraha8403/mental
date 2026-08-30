@@ -144,7 +144,7 @@ test("MCP heartbeat + attention round-trip (mid-chat parity)", () => {
   const resolved = runTool("attention", { title: "Tom said ship the pointer", status: "resolved" }, ctx);
   assert.equal(resolved.code, 0, JSON.stringify(resolved.body));
 
-  const decided = runTool("decide", { title: "MCP parity ships", status: "decided" }, ctx);
+  const decided = runTool("decide", { title: "MCP parity ships", status: "decided", body: "CLI JSON is the write path." }, ctx);
   assert.equal(decided.code, 0, JSON.stringify(decided.body));
 
   const closed = runTool("decide", { title: "MCP parity ships", status: "superseded" }, ctx);

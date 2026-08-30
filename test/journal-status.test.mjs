@@ -60,11 +60,24 @@ test("journal + status --json write today's section and resume cache", () => {
 test("decide --json scaffolds an open decision that status lists", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const d = mental(home, root, ["decide", "--json", "--title", "Use UUID identity", "--status", "open"]);
+  const d = mental(home, root, [
+    "decide",
+    "--json",
+    "--title",
+    "Use UUID identity",
+    "--status",
+    "open",
+    "--body",
+    "Identity lives in bindings.json, not the folder path.",
+  ]);
   assert.equal(d.status, 0, d.stderr || d.stdout);
   const body = JSON.parse(d.stdout);
   assert.equal(body.ok, true);
   assert.match(body.data.path, /^decisions\/\d{4}-\d{2}-\d{2}-use-uuid-identity\.md$/);
+  const md = readFileSync(join(body.data.root, body.data.path), "utf8");
+  assert.match(md, /Identity lives in bindings\.json/);
+  assert.doesNotMatch(md, /why this choice matters/);
+  assert.doesNotMatch(md, /option A/);
 
   const s = mental(home, root, ["status", "--json"]);
   const st = JSON.parse(s.stdout);
@@ -76,7 +89,16 @@ test("decide --json scaffolds an open decision that status lists", () => {
 test("decide --status decided updates by title and drops from heartbeat", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  mental(home, root, ["decide", "--json", "--title", "Use UUID identity", "--status", "open"]);
+  mental(home, root, [
+    "decide",
+    "--json",
+    "--title",
+    "Use UUID identity",
+    "--status",
+    "open",
+    "--body",
+    "Identity lives in bindings.json, not the folder path.",
+  ]);
   const closed = mental(home, root, [
     "decide",
     "--json",
@@ -104,7 +126,16 @@ test("decide --path updates the named file; missing path is not-found", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   const created = JSON.parse(
-    mental(home, root, ["decide", "--json", "--title", "Fork heuristic", "--status", "open"]).stdout,
+    mental(home, root, [
+      "decide",
+      "--json",
+      "--title",
+      "Fork heuristic",
+      "--status",
+      "open",
+      "--body",
+      "Open until remap UX is picked.",
+    ]).stdout,
   );
   const path = created.data.path;
   const r = mental(home, root, [

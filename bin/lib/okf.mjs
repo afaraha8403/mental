@@ -257,6 +257,47 @@ export function latestJournalHandoff(root) {
 }
 
 /**
+ * Split a journal file body into hop sections (skip the `# YYYY-MM-DD` preamble).
+ * @param {string} body
+ * @returns {Array<{ heading: string, title: string, body: string, fragment: string }>}
+ */
+export function journalHops(body) {
+  const parts = String(body || "").split(/^## /m);
+  /** @type {Array<{ heading: string, title: string, body: string, fragment: string }>} */
+  const hops = [];
+  const used = new Set();
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const heading = (part.split(/\r?\n/, 1)[0] || "").trim();
+    if (!heading) continue;
+    if (i === 0 && !/^\d{1,2}:\d{2}\b/.test(heading)) continue;
+    const title = heading.replace(/^\d{1,2}:\d{2}\s+—\s+/, "").trim() || heading;
+    const rest = part.slice(heading.length).replace(/^\r?\n/, "");
+    hops.push({ heading, title, body: rest, fragment: journalFragment(heading, used) });
+  }
+  return hops;
+}
+
+/**
+ * @param {string} heading
+ * @param {Set<string>} used
+ */
+function journalFragment(heading, used) {
+  const time = heading.match(/^(\d{1,2}:\d{2})/);
+  const base = time
+    ? time[1]
+    : heading.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 40) || "section";
+  let frag = base;
+  let n = 2;
+  while (used.has(frag)) {
+    frag = `${base}-${n}`;
+    n += 1;
+  }
+  used.add(frag);
+  return frag;
+}
+
+/**
  * Newest journal sections first (dated files only). One entry per `## ` heading.
  *
  * @param {string} root
@@ -525,7 +566,8 @@ export function writeAttention(root, { title, status = "open", kind, from, again
   mkdirSync(dirname(file), { recursive: true });
   if (existsSync(file)) throw Object.assign(new Error(`Attention already exists: ${rel}`), { code: "exists" });
   const ts = now.toISOString();
-  const text = body.trim() || "<why this would cost a reload if forgotten>";
+  const text = body.trim();
+  const markdown = text ? `# ${title}\n\n${text}\n` : `# ${title}\n`;
   writeFileSync(
     file,
     stringifyFrontmatter(
@@ -541,10 +583,7 @@ export function writeAttention(root, { title, status = "open", kind, from, again
         against: against || undefined,
         via: via || undefined,
       },
-      `# ${title}
-
-${text}
-`,
+      markdown,
     ),
   );
   return { path: rel, updated: false };
@@ -627,11 +666,17 @@ ${section}`,
 }
 
 /**
+ * Create a decision file. `body` is the why — required; never a scaffold of placeholders.
  * @param {string} root
  * @param {{ title: string, status?: string, description?: string, body?: string, via?: string, slug?: string, now?: Date }} opts
+ * @throws {{ code: string }} `usage` when `body` is missing or whitespace.
  */
 export function writeDecision(root, { title, status = "open", description = "", body = "", via, slug, now = new Date() }) {
   ensureSkeleton(root);
+  const text = String(body || "").trim();
+  if (!text) {
+    throw Object.assign(new Error("mental decide create requires --body"), { code: "usage" });
+  }
   const day = localDate(now);
   const s = slug || slugify(title);
   const rel = `decisions/${day}-${s}.md`;
@@ -639,16 +684,6 @@ export function writeDecision(root, { title, status = "open", description = "", 
   mkdirSync(dirname(file), { recursive: true });
   if (existsSync(file)) throw Object.assign(new Error(`Decision already exists: ${rel}`), { code: "exists" });
   const ts = now.toISOString();
-  const defaultBody = `## Context
-${body.trim() || "<why this choice matters>"}
-
-## Options
-- <option A> — <tradeoff>
-- <option B> — <tradeoff>
-
-## Outcome
-<For open: what input is needed. For deferred: what it awaits. For decided: what was chosen, why, and when.>
-`;
   writeFileSync(
     file,
     stringifyFrontmatter(
@@ -663,7 +698,8 @@ ${body.trim() || "<why this choice matters>"}
       },
       `# ${title}
 
-${defaultBody}`,
+${text}
+`,
     ),
   );
   return { path: rel, updated: false };
@@ -746,10 +782,13 @@ export function bundleName(root, fallback = "project") {
  * @returns {{ ok: true, data: { path: string, abs: string, text: string, data: Record<string, string | string[]>, body: string } } | { ok: false, error: { code: string, message: string } }}
  */
 export function readBundleFile(root, relPath) {
-  const rel = String(relPath || "")
+  const raw = String(relPath || "")
     .replace(/\\/g, "/")
     .replace(/^\/+/, "")
     .trim();
+  const hash = raw.indexOf("#");
+  const rel = hash >= 0 ? raw.slice(0, hash) : raw;
+  const fragment = hash >= 0 ? raw.slice(hash + 1) : "";
   if (!rel || rel.includes("\0") || rel.split("/").some((p) => p === ".." || p === "")) {
     return { ok: false, error: { code: "path", message: "path must be a relative file inside the bundle" } };
   }
@@ -770,7 +809,18 @@ export function readBundleFile(root, relPath) {
     return { ok: false, error: { code: "read", message } };
   }
   const parsed = parseFrontmatter(text);
-  return { ok: true, data: { path: rel, abs, text, data: parsed.data, body: parsed.body } };
+  let body = parsed.body;
+  let pathOut = rel;
+  if (fragment) {
+    const hops = journalHops(parsed.body);
+    const hop = hops.find((h) => h.fragment === fragment);
+    if (!hop) {
+      return { ok: false, error: { code: "not-found", message: `no such section: ${raw}` } };
+    }
+    body = `## ${hop.heading}\n${hop.body}`;
+    pathOut = raw;
+  }
+  return { ok: true, data: { path: pathOut, abs, text, data: parsed.data, body } };
 }
 
 /**

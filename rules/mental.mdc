@@ -9,7 +9,7 @@ Run `mental where` then `mental heartbeat --json` (or `mental status --json` whe
 
 If `--json` includes `update`, tell the user once this session to run `mental install`. Do not block work.
 
-Mid-chat, not just start/finish: before changing an approach, `mental search "…" --json` for prior decisions. When residue surfaces ("X said…", a concern, "park this", unverified agent output), record `mental attention … --json` immediately — do not wait for the handoff. Interrupted mid-hop: `mental park --resume … --json`. Cross-project overview: `mental pulse --json` (compact rows, no journal dump). Cheap mid-chat reload stays `mental heartbeat --json`. Writes pass `--via cursor` (short client token, never a session id).
+Mid-chat, not just start/finish: before proposing a concrete approach, flag, crate, or env var, `mental search <that name> --json` as its own query (space-separated words are AND). Also `mental list --type Decision --json` (all statuses). When residue surfaces ("X said…", a concern, "park this", unverified agent output), record `mental attention … --json` immediately — do not wait for the handoff. Interrupted mid-hop: `mental park --resume … --json`. Cross-project overview: `mental pulse --json` (compact rows, no journal dump). Cheap mid-chat reload stays `mental heartbeat --json`. Writes pass `--via cursor` (short client token, never a session id).
 
 If `mental` is missing, install the CLI first: try `npx @balacode/mental …`, then tell the user `npm i -g @balacode/mental` and `mental install`. After that, follow the Mental skill. Missing Mental must not block work. The plugin does not start MCP.
 

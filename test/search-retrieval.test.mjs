@@ -70,10 +70,24 @@ test("search ranks a title match above a buried body mention", () => {
   assert.equal(r.status, 0, r.stderr || r.stdout);
   const body = JSON.parse(r.stdout);
   assert.equal(body.ok, true);
+  assert.deepEqual(body.data.tokens, ["alpharanktoken"]);
+  assert.equal(body.data.op, "and");
   const notes = body.data.hits.filter((h) => h.type === "Note");
   assert.ok(notes.length >= 2, JSON.stringify(notes));
   assert.equal(notes[0].path, "notes/title-hit.md");
   assert.match(notes[0].snippet, /AlphaRankToken/i);
+});
+
+test("search JSON echoes AND tokens for a multi-word query", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["journal", "--json", "--title", "Seed", "--resume", "Continue"]).status, 0);
+  const r = mental(home, root, ["search", "--json", "pill leftover overlay"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, true);
+  assert.deepEqual(body.data.tokens, ["pill", "leftover", "overlay"]);
+  assert.equal(body.data.op, "and");
 });
 
 test("list --kind and description; search --kind", () => {
@@ -189,3 +203,117 @@ test("MCP list tool and search type filter; tool JSON is compact", () => {
   assert.equal(parsed.ok, true);
   assert.ok(parsed.data.items.every((i) => i.type === "Decision"));
 });
+
+test("journal hops index as path#HH:MM; show returns that section", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(
+    mental(home, root, [
+      "journal",
+      "--json",
+      "--title",
+      "Restore defaults copy",
+      "--body",
+      "Try step Super leftover is RestoreDefaultsToken with no explainer.",
+      "--resume",
+      "Continue",
+    ]).status,
+    0,
+  );
+  assert.equal(
+    mental(home, root, [
+      "journal",
+      "--json",
+      "--title",
+      "compositing-off kills HUD",
+      "--body",
+      "DMABuf CompositingOffToken toggles were dead ends.",
+      "--resume",
+      "Continue",
+    ]).status,
+    0,
+  );
+
+  const listed = JSON.parse(mental(home, root, ["list", "--json", "--type", "Journal"]).stdout);
+  assert.ok(listed.data.items.every((i) => !i.path.includes("#")), JSON.stringify(listed.data.items));
+  assert.equal(listed.data.items.length, 1);
+
+  const found = JSON.parse(mental(home, root, ["search", "--json", "RestoreDefaultsToken"]).stdout);
+  assert.equal(found.ok, true);
+  const hit = found.data.hits.find((h) => h.type === "Journal");
+  assert.ok(hit, JSON.stringify(found.data.hits));
+  assert.match(hit.path, /journal\/\d{4}-\d{2}-\d{2}\.md#/);
+  assert.match(hit.snippet, /RestoreDefaultsToken/);
+  assert.doesNotMatch(hit.snippet, /CompositingOffToken/);
+
+  const shown = JSON.parse(mental(home, root, ["show", hit.path, "--json"]).stdout);
+  assert.equal(shown.ok, true);
+  assert.equal(shown.data.path, hit.path);
+  assert.match(shown.data.body, /RestoreDefaultsToken/);
+  assert.doesNotMatch(shown.data.body, /CompositingOffToken/);
+});
+
+test("search --any ORs tokens; Decision ranks above Journal", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(
+    mental(home, root, [
+      "journal",
+      "--json",
+      "--title",
+      "Unrelated hop",
+      "--body",
+      "Only LeftoverOnlyToken lives in this hop.",
+      "--resume",
+      "Continue",
+    ]).status,
+    0,
+  );
+  assert.equal(
+    mental(home, root, [
+      "decide",
+      "--json",
+      "--title",
+      "Keep RankBoostToken as the signal",
+      "--body",
+      "RankBoostToken is the decision, not a journal aside.",
+    ]).status,
+    0,
+  );
+  assert.equal(
+    mental(home, root, ["note", "--json", "--title", "OverlayOnlyToken fact", "--body", "OverlayOnlyToken in a note."]).status,
+    0,
+  );
+
+  const andMiss = JSON.parse(mental(home, root, ["search", "--json", "LeftoverOnlyToken OverlayOnlyToken"]).stdout);
+  assert.equal(andMiss.data.hits.length, 0, JSON.stringify(andMiss.data.hits));
+
+  const any = JSON.parse(mental(home, root, ["search", "--json", "LeftoverOnlyToken OverlayOnlyToken", "--any"]).stdout);
+  assert.equal(any.data.op, "or");
+  assert.ok(any.data.hits.some((h) => /LeftoverOnlyToken/.test(h.snippet || h.title)));
+  assert.ok(any.data.hits.some((h) => /OverlayOnlyToken/.test(h.title)));
+
+  const ranked = JSON.parse(mental(home, root, ["search", "--json", "RankBoostToken"]).stdout);
+  assert.ok(ranked.data.hits.length >= 1);
+  assert.equal(ranked.data.hits[0].type, "Decision");
+});
+
+test("MCP search q array is a union", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  mental(home, root, ["journal", "--json", "--title", "MCP retrieval seed", "--resume", "Continue"]);
+  mental(home, root, ["decide", "--json", "--title", "MCP filter decision", "--body", "Keep typed filters."]);
+  mental(home, root, ["note", "--json", "--title", "UUID fact", "--body", "IdentityUuidToken lives here."]);
+  const ctx = { cwd: root, home, env: gitEnv(home), dir: null };
+
+  const listed = handle({ jsonrpc: "2.0", id: 2, method: "tools/list" }, {});
+  const searchTool = listed.result.tools.find((t) => t.name === "search");
+  assert.ok(searchTool.inputSchema.properties.q.anyOf);
+
+  const union = runTool("search", { q: ["filter", "IdentityUuidToken"] }, ctx);
+  assert.equal(union.code, 0, JSON.stringify(union.body));
+  assert.equal(union.body.data.op, "or");
+  assert.ok(union.body.data.hits.some((h) => h.type === "Decision"));
+  assert.ok(union.body.data.hits.some((h) => /IdentityUuidToken/.test(h.snippet || h.title || "")));
+});
+

@@ -73,6 +73,24 @@ test("attention --json writes residue that status and heartbeat list", () => {
   assert.equal(pulse.data.attention[0].title, "Tom said ship the pointer");
 });
 
+test("attention create without --body does not write a placeholder", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const a = mental(home, root, [
+    "attention",
+    "--json",
+    "--title",
+    "Tom said ship",
+    "--kind",
+    "direction",
+  ]);
+  assert.equal(a.status, 0, a.stderr || a.stdout);
+  const wrote = JSON.parse(a.stdout);
+  const md = readFileSync(join(wrote.data.root, wrote.data.path), "utf8");
+  assert.doesNotMatch(md, /why this would cost a reload/);
+  assert.match(md, /# Tom said ship/);
+});
+
 test("attention --status resolved updates by title and drops from heartbeat", () => {
   const home = tempHome();
   const { root } = initRepo(home);
@@ -239,7 +257,16 @@ test("transcript-shaped extract writes residue not a journal dump", () => {
     const r = mental(home, root, args);
     assert.equal(r.status, 0, r.stderr || r.stdout);
   }
-  mental(home, root, ["decide", "--json", "--title", "Whether to enable MCP", "--status", "open"]);
+  mental(home, root, [
+    "decide",
+    "--json",
+    "--title",
+    "Whether to enable MCP",
+    "--status",
+    "open",
+    "--body",
+    "Open until the user names MCP this turn.",
+  ]);
 
   const hb = JSON.parse(mental(home, root, ["heartbeat", "--json"]).stdout);
   assert.equal(hb.data.attention.length, 3);

@@ -130,6 +130,9 @@ resource: <optional link to PR/code/discussion>
 
 # <Decision title>
 
+The CLI writes this heading plus `--body`. It does not fill the scaffold below.
+Empty placeholder files are a bug. Create requires `--body`.
+
 ## Context
 <why this choice matters and what constraint forced it>
 

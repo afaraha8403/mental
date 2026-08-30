@@ -67,14 +67,19 @@ function runTool(name, args, ctx) {
   if (name === "where") return capture(cmdWhere, base);
   if (name === "status") return capture(cmdStatus, base);
   if (name === "search") {
+    const q = args.q;
+    const rest = Array.isArray(q) ? [] : [String(q || "")];
+    const queries = Array.isArray(q) ? q.map(String) : undefined;
     return capture(cmdSearch, {
       ...base,
-      rest: [String(args.q || "")],
+      rest,
+      queries,
       flags: {
         type: args.type,
         status: args.status,
         tag: args.tag,
         kind: args.kind,
+        any: args.any === true,
       },
     });
   }

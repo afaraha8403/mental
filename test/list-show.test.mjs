@@ -9,7 +9,14 @@ test("list --json returns concepts after journal + decide", () => {
   const { root } = initRepo(home);
   const j = mental(home, root, ["journal", "--json", "--title", "Listable outcome", "--resume", "Continue"]);
   assert.equal(j.status, 0, j.stderr || j.stdout);
-  const d = mental(home, root, ["decide", "--json", "--title", "Listable decision"]);
+  const d = mental(home, root, [
+    "decide",
+    "--json",
+    "--title",
+    "Listable decision",
+    "--body",
+    "Listed so filters can find it.",
+  ]);
   assert.equal(d.status, 0, d.stderr || d.stdout);
 
   const r = mental(home, root, ["list", "--json"]);

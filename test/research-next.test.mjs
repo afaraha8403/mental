@@ -119,10 +119,29 @@ test("decided titles appear as Settled guardrails; open stay Unsettled; no bodie
   const home = tempHome();
   const { root } = initRepo(home);
   parseOk(
-    mental(home, root, ["decide", "--json", "--title", "Heartbeat only, no standing TUI", "--status", "decided"]),
+    mental(home, root, [
+      "decide",
+      "--json",
+      "--title",
+      "Heartbeat only, no standing TUI",
+      "--status",
+      "decided",
+      "--body",
+      "Default TTY mental prints a one-shot heartbeat and exits.",
+    ]),
     "decided",
   );
-  parseOk(mental(home, root, ["decide", "--json", "--title", "Still open", "--status", "open"]), "open");
+  parseOk(
+    mental(home, root, [
+      "decide",
+      "--json",
+      "--title",
+      "Still open",
+      "--status",
+      "open",
+      "--body",
+      "Needs a user pick.",
+    ]), "open");
   const hb = parseOk(mental(home, root, ["heartbeat", "--json"]), "heartbeat guardrails");
   assert.equal(hb.guardrailCount, 1);
   assert.equal(hb.guardrails[0].title, "Heartbeat only, no standing TUI");
