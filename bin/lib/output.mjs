@@ -2,8 +2,9 @@
  * Stable agent JSON envelope + human printers.
  * Emoji is TTY-only. `--json` never includes a brand mark.
  * Optional envelope sibling `update` (behind npm only) so agents can nag once.
+ * TTY prints that hint at most once per day.
  */
-import { peekUpdateNotice } from "./update.mjs";
+import { peekUpdateNotice, takeTtyNag } from "./update.mjs";
 
 /** POSIX usage / argparse exit. */
 export const EXIT_USAGE = 2;
@@ -113,16 +114,17 @@ export function printResult(out, args, ok, data, error, format) {
     out.write(`${JSON.stringify(envelope(ok, data, error, update))}\n`);
     return;
   }
+  const ttyUpdate = takeTtyNag(update, { env });
   if (!ok) {
     if (format && data) out.write(`${format(data)}\n`);
     const dest = args?.stderr ?? out;
     dest.write(`${error?.message || "error"}\n`);
     if (error?.hint) dest.write(`${error.hint}\n`);
-    if (update?.hint) dest.write(`${brandLine(update.hint, env, args)}\n`);
+    if (ttyUpdate?.hint) dest.write(`${brandLine(ttyUpdate.hint, env, args)}\n`);
     return;
   }
   out.write(`${format ? format(data) : JSON.stringify(data, null, 2)}\n`);
-  if (update?.hint) out.write(`${brandLine(update.hint, env, args)}\n`);
+  if (ttyUpdate?.hint) out.write(`${brandLine(ttyUpdate.hint, env, args)}\n`);
 }
 
 /** @param {import('./resolve.mjs').WhereData} data */

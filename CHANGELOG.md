@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- Update notice learns a new npm version within 24h when this CLI thinks it is current. The 7-day cache applies only while already behind. TTY prints the hint once per day; `--json` still includes `update` on every call. Failed npm lookups back off instead of retrying every command. Prerelease sorts below the matching release.
+
 ## [0.7.1] - 2026-08-29
 
 ### Features

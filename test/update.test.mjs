@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cmpSemver, checkForUpdate, isDevCheckout, peekUpdateNotice, skipUpdateCheck, updateHint, writeUpdateCache, UPDATE_CACHE_TTL_MS } from "../bin/lib/update.mjs";
+import { cmpSemver, checkForUpdate, isDevCheckout, peekUpdateNotice, readUpdateCache, skipUpdateCheck, takeTtyNag, updateHint, writeUpdateCache, UPDATE_CACHE_TTL_MS, UPDATE_DISCOVERY_TTL_MS, UPDATE_TTY_NAG_TTL_MS } from "../bin/lib/update.mjs";
 import { NAME, VERSION } from "../bin/lib/pkg.mjs";
 import { initRepo, mental, tempHome } from "./helpers.mjs";
 
@@ -13,6 +13,13 @@ test("cmpSemver orders major.minor.patch", () => {
   assert.equal(cmpSemver("1.2.3", "1.2.4"), -1);
   assert.equal(cmpSemver("2.0.0", "1.9.9"), 1);
   assert.equal(cmpSemver("0.2.2", "0.2.10"), -1);
+});
+
+test("cmpSemver treats prerelease as less than the matching release", () => {
+  assert.equal(cmpSemver("1.0.0-beta.1", "1.0.0"), -1);
+  assert.equal(cmpSemver("1.0.0", "1.0.0-beta.1"), 1);
+  assert.equal(cmpSemver("1.0.0-beta.1", "1.0.0-beta.2"), -1);
+  assert.equal(cmpSemver("1.0.0-alpha", "1.0.0-alpha.1"), -1);
 });
 
 test("skipUpdateCheck reads MENTAL_SKIP_UPDATE_CHECK", () => {
@@ -123,7 +130,7 @@ test("peekUpdateNotice reads a fresh cache without npm", () => {
   assert.equal(notice.latest, "99.0.0");
 });
 
-test("peekUpdateNotice does not refresh a mid-TTL cache", () => {
+test("peekUpdateNotice does not refresh a mid behind-TTL cache", () => {
   const home = tempHome();
   const env = { HOME: home, XDG_CACHE_HOME: `${home}/.cache` };
   const now = Date.now();
@@ -137,7 +144,7 @@ test("peekUpdateNotice does not refresh a mid-TTL cache", () => {
   assert.equal(notice.latest, "99.0.0");
 });
 
-test("peekUpdateNotice refreshes after the TTL", () => {
+test("peekUpdateNotice refreshes after the behind TTL", () => {
   const home = tempHome();
   const env = { HOME: home, XDG_CACHE_HOME: `${home}/.cache` };
   const now = Date.now();
@@ -149,6 +156,59 @@ test("peekUpdateNotice refreshes after the TTL", () => {
   });
   assert.ok(notice);
   assert.equal(notice.latest, "88.0.0");
+});
+
+test("peekUpdateNotice does not refresh a current cache inside the discovery TTL", () => {
+  const home = tempHome();
+  const env = { HOME: home, XDG_CACHE_HOME: `${home}/.cache` };
+  const now = Date.now();
+  writeUpdateCache(env, "0.1.0", now - UPDATE_DISCOVERY_TTL_MS + 60 * 60 * 1000);
+  const notice = peekUpdateNotice({
+    env: { ...env, MENTAL_NPM_LATEST: "99.0.0" },
+    version: "0.1.0",
+    now,
+  });
+  assert.equal(notice, null);
+});
+
+test("peekUpdateNotice refreshes a current cache after the discovery TTL", () => {
+  const home = tempHome();
+  const env = { HOME: home, XDG_CACHE_HOME: `${home}/.cache` };
+  const now = Date.now();
+  writeUpdateCache(env, "0.1.0", now - UPDATE_DISCOVERY_TTL_MS - 1000);
+  const notice = peekUpdateNotice({
+    env: { ...env, MENTAL_NPM_LATEST: "99.0.0" },
+    version: "0.1.0",
+    now,
+  });
+  assert.ok(notice);
+  assert.equal(notice.latest, "99.0.0");
+});
+
+test("null latest cache backs off inside the discovery TTL", () => {
+  const home = tempHome();
+  const env = { HOME: home, XDG_CACHE_HOME: `${home}/.cache` };
+  const now = Date.now();
+  writeUpdateCache(env, null, now);
+  const notice = peekUpdateNotice({
+    env: { ...env, MENTAL_NPM_LATEST: "99.0.0" },
+    version: "0.1.0",
+    now,
+  });
+  assert.equal(notice, null);
+});
+
+test("takeTtyNag prints once then suppresses until the nag TTL", () => {
+  const home = tempHome();
+  const env = { HOME: home, XDG_CACHE_HOME: `${home}/.cache` };
+  const now = Date.now();
+  writeUpdateCache(env, "99.0.0", now);
+  const notice = { current: "0.1.0", latest: "99.0.0", hint: "upgrade" };
+  assert.deepEqual(takeTtyNag(notice, { env, now }), notice);
+  assert.equal(takeTtyNag(notice, { env, now: now + 60 * 1000 }), null);
+  const again = takeTtyNag(notice, { env, now: now + UPDATE_TTY_NAG_TTL_MS + 1000 });
+  assert.deepEqual(again, notice);
+  assert.ok(readUpdateCache(env)?.lastNaggedAt);
 });
 
 test("heartbeat --json includes envelope update when npm is ahead", () => {
@@ -189,4 +249,23 @@ test("named TTY command prints the update hint when behind", () => {
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.match(r.stdout, /99\.0\.0/);
   assert.match(r.stdout, /mental install/);
+});
+
+test("TTY omits a second update hint the same day while JSON still includes it", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const env = {
+    MENTAL_SKIP_UPDATE_CHECK: "0",
+    MENTAL_NPM_LATEST: "99.0.0",
+  };
+  const first = mental(home, root, ["heartbeat"], env);
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+  assert.match(first.stdout, /mental install/);
+  const second = mental(home, root, ["heartbeat"], env);
+  assert.equal(second.status, 0, second.stderr || second.stdout);
+  assert.doesNotMatch(second.stdout, /mental install/);
+  const json = mental(home, root, ["heartbeat", "--json"], env);
+  assert.equal(json.status, 0, json.stderr || json.stdout);
+  const body = JSON.parse(json.stdout);
+  assert.equal(body.update.latest, "99.0.0");
 });

@@ -24,7 +24,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `-v`, `--version` | Print version |
 | `--plain`, `--no-color` | No emoji / ANSI (also `NO_COLOR` any non-empty, `TERM=dumb`) |
 
-`MENTAL_ASCII=1` strips emoji from TTY output. `--json` is always ASCII. `MENTAL_SKIP_UPDATE_CHECK=1` skips the npm newest-version check. When npm is ahead, every `--json` envelope includes a sibling `update` (`current`, `latest`, `hint`) from a 7-day cache — ordinary commands never `npm view` on every call. TTY prints the same hint. `doctor` / `install` still check live.
+`MENTAL_ASCII=1` strips emoji from TTY output. `--json` is always ASCII. `MENTAL_SKIP_UPDATE_CHECK=1` skips the npm newest-version check. When npm is ahead, every `--json` envelope includes a sibling `update` (`current`, `latest`, `hint`). Ordinary commands read `${XDG_CACHE_HOME:-~/.cache}/mental/npm-latest.json`: 24h TTL while this CLI matches cache (so a ship is visible by the next day), 7d TTL only while already behind. TTY prints the hint at most once per day. `doctor` / `install` still check live.
 
 ## Commands
 
