@@ -73,7 +73,7 @@ The unscoped npm package [`mental`](https://www.npmjs.com/package/mental) is a d
 Works in Cursor, Claude Code, Copilot, Codex, and anything that can install a plugin or run a shell:
 
 ```text
-Install Mental CLI with npm. Do not clone the GitHub repo to install. Never run a .mjs file — Windows will ask what to open it with.
+Install Mental CLI with npm. Do not clone the GitHub repo to install. Do not install from a git clone or plugin cache. Never run a .mjs file — Windows will ask what to open it with.
 
   npm i -g @balacode/mental
   mental install
@@ -84,8 +84,6 @@ Mental CLI is a local-first continuity layer. Git records what changed; Mental r
 The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. Hosts load skills/mental-setup (install the CLI). The full procedure lives in skill/mental and is copied by `mental install` — not plugin-discovered. Native plugin does not start MCP. Do not start a plugin MCP server.
 
 If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH — including when `mental` is already there (that upgrades npm and recopies the skill). Run the three commands above.
-
-From a git checkout skip `npm i -g` — run `node bin/cli.mjs install` from that tree so npm does not replace it with an older registry build. Always prefix `node`. Never execute `bin/cli.mjs` or any other `.mjs` file as a command.
 
 The plugin is discovery. npm + `mental install` are the source of truth for the binary and the procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by `mental install` — not the plugin bootstrap.
 
@@ -184,7 +182,7 @@ No. Task boundaries, real decisions, residue in the air. Hooks stay **off** unti
 `park` encodes an interruption mid-hop. `handoff` is a planned close (journal + heartbeat). `pulse` is a compact cross-project overview. The cheap mid-chat reload is still `mental` / `heartbeat --json`.
 
 **How do I upgrade?**
-`npm i -g @balacode/mental` then `mental install` then `mental doctor`. Journals stay. The search index rebuilds on the next search. Skill copies refresh; the host plugin is a second channel — update it if `doctor` says it is behind. From a git checkout: `node bin/cli.mjs install`. [Upgrade](docs/install.md#upgrade-already-installed).
+`npm i -g @balacode/mental` then `mental install` then `mental doctor`. Journals stay. The search index rebuilds on the next search. Skill copies refresh; the host plugin is a second channel — update it if `doctor` says it is behind. From a git checkout: `npm run mental -- install`. [Upgrade](docs/install.md#upgrade-already-installed).
 
 **What if `mental` is not installed?**
 Agents try `npx @balacode/mental`. If that fails they continue the coding task and mention install. Fail open.
