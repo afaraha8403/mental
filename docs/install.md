@@ -42,10 +42,10 @@ From a git checkout (unpublished commits on this tree):
 
 ```bash
 cd /path/to/mental
-node bin/cli.mjs install
+npm run mental -- install
 ```
 
-Always prefix `node`. Never run `bin/cli.mjs` or `./bin/cli.mjs` as a command — Windows ignores the shebang and shows "how do you want to open this file?".
+`npm run mental` always launches Node. Never run a `.mjs` file as a command — Windows ignores the shebang and shows "how do you want to open this file?".
 
 That checkout is the source of truth until you publish. It does not replace PATH with an older registry build.
 
@@ -58,7 +58,7 @@ That checkout is the source of truth until you publish. It does not replace PATH
 Copy the block into Cursor, Claude Code, Copilot, Codex, or any other coding agent:
 
 ```text
-Install Mental CLI with npm. Do not clone the GitHub repo to install. Never run a .mjs file — Windows will ask what to open it with.
+Install Mental CLI with npm. Do not clone the GitHub repo to install. Do not install from a git clone or plugin cache. Never run a .mjs file — Windows will ask what to open it with.
 
   npm i -g @balacode/mental
   mental install
@@ -69,8 +69,6 @@ Mental CLI is a local-first continuity layer. Git records what changed; Mental r
 The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. Hosts load skills/mental-setup (install the CLI). The full procedure lives in skill/mental and is copied by `mental install` — not plugin-discovered. Native plugin does not start MCP. Do not start a plugin MCP server.
 
 If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH — including when `mental` is already there (that upgrades npm and recopies the skill). Run the three commands above.
-
-From a git checkout skip `npm i -g` — run `node bin/cli.mjs install` from that tree so npm does not replace it with an older registry build. Always prefix `node`. Never execute `bin/cli.mjs` or any other `.mjs` file as a command.
 
 The plugin is discovery. npm + `mental install` are the source of truth for the binary and the procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by `mental install` — not the plugin bootstrap.
 
@@ -135,14 +133,16 @@ Mental CLI is packaged as a portable [Agent Plugins 1.0.0](https://agent-plugins
 
 Cursor extras live in `.cursor-plugin/plugin.json` (logo). Claude Code extras live in `.claude-plugin/plugin.json` (`displayName: Mental`) and `.claude-plugin/marketplace.json`. Rules and hooks are **not** portable v1 components — they still come from `mental install` / `mental hooks on`.
 
-## From a clone, without npm
+## From a git checkout
+
+For unpublished commits on this tree (developers). Agents must use `npm i -g @balacode/mental`, not a clone.
 
 ```bash
 cd /path/to/mental
-node bin/cli.mjs install --json
+npm run mental -- install --json
 ```
 
-Always prefix `node`. Never execute the `.mjs` file directly.
+`npm run mental` always launches Node. Never execute a `.mjs` file as a command.
 
 A git checkout installs that tree and does not clobber it with the registry.
 

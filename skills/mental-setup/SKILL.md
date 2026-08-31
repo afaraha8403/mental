@@ -48,17 +48,15 @@ mental doctor
 skill and rule. Journals stay. Do not re-run this client's plugin marketplace
 unless doctor says the host plugin is behind. Then follow the Mental skill.
 
-From a git checkout (unpublished commits): `node bin/cli.mjs install` — that
-tree does not clobber PATH with an older registry build. Always prefix `node`.
-Never execute a `.mjs` file as a command (Windows shows "how do you want to
-open this file?"). Do not clone the GitHub repo just to install — `npm i -g`
-is the install path.
+Do not install from a git clone or plugin cache. `npm i -g @balacode/mental` is
+the install path. Never execute a `.mjs` file as a command (Windows shows "how
+do you want to open this file?").
 
 ## If `mental` is missing
 
 1. Try `npx @balacode/mental where --json`. If that works, continue with npx
-   for this turn and tell the user to install. Never run `bin/cli.mjs` or any
-   other `.mjs` file as a command.
+   for this turn and tell the user to install. Never run a `.mjs` file as a
+   command.
 2. Tell the user to run:
 
 ```bash

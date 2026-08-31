@@ -105,11 +105,18 @@ test("README and install-doc agent pastes stay identical and skills-only", () =>
   assert.match(readme, /fail open/);
   assert.match(readme, /npx @balacode\/mental/);
   assert.match(readme, /including when `mental` is already there/);
-  assert.match(readme, /From a git checkout skip/);
   assert.match(readme, /Never run a \.mjs file/);
-  assert.match(readme, /Always prefix `node`/);
+  assert.match(readme, /Do not install from a git clone or plugin cache/);
   assert.match(readme, /npm i -g @balacode\/mental/);
+  assert.doesNotMatch(readme, /cli\.mjs/);
   assert.doesNotMatch(readme, /Install Mental CLI from https:\/\//);
   assert.doesNotMatch(readme, /do not duplicate setup/);
   assert.doesNotMatch(readme, /mcp\.json/);
+});
+
+test("bootstrap skill never names cli.mjs (Windows Open With bait)", () => {
+  const setup = readFileSync(join(ROOT, "skills", "mental-setup", "SKILL.md"), "utf8");
+  assert.doesNotMatch(setup, /cli\.mjs/);
+  assert.match(setup, /Never execute a `\.mjs` file/);
+  assert.match(setup, /Do not install from a git clone or plugin cache/);
 });

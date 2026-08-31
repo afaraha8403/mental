@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- Windows install/upgrade no longer leaves a `mental` symlink (or raw copy) that ShellExecutes `cli.mjs` — the "how do you want to open this file?" dialog. `mental install` now writes `mental.cmd`, `mental.ps1`, and a Git Bash shim in both `~/.local/bin` and the npm prefix, and deletes the leftover link 0.7.x created. Agent paste and the setup skill no longer name `cli.mjs` as a command (that path is what agents ran). Developers on a git checkout use `npm run mental -- install`.
+
 ## [0.8.0] - 2026-08-30
 
 ### Features

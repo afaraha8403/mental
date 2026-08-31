@@ -2,8 +2,9 @@
  * Put `mental` on PATH. Last `mental install` (or `npm i -g @balacode/mental`) wins.
  *
  * `npm install -g` this package into the active npm prefix, then expose the
- * same binary at `~/.local/bin/mental` (Unix) or `mental.cmd` (Windows) when
- * that dir differs from the npm prefix.
+ * same binary at `~/.local/bin/mental` (Unix) or `mental.cmd` + `mental.ps1`
+ * (Windows) when that dir differs from the npm prefix. Windows also drops the
+ * leftover extensionless `mental` → `cli.mjs` symlink 0.7.x wrote.
  *
  * Never spawn a `.mjs` file as argv0. Windows has no shebang and ShellExecutes
  * unknown extensions ("how do you want to open this file?").
@@ -13,6 +14,7 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readlinkSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
@@ -126,6 +128,93 @@ export function windowsCmdShim(nodePath, scriptPath) {
   return `@echo off\r\n"${nodePath}" "${scriptPath}" %*\r\n`;
 }
 
+/**
+ * PowerShell shim. Single-quoted paths so `$` / spaces stay literal.
+ *
+ * @param {string} nodePath
+ * @param {string} scriptPath
+ */
+export function windowsPs1Shim(nodePath, scriptPath) {
+  const n = String(nodePath).replace(/'/g, "''");
+  const s = String(scriptPath).replace(/'/g, "''");
+  return `#!/usr/bin/env pwsh\r\n& '${n}' '${s}' @args\r\n`;
+}
+
+/**
+ * Git Bash shim. Forward slashes so `\n` in `node.exe` is not an escape.
+ *
+ * @param {string} nodePath
+ * @param {string} scriptPath
+ */
+export function windowsGitBashShim(nodePath, scriptPath) {
+  const n = bashSingleQuote(String(nodePath).replace(/\\/g, "/"));
+  const s = bashSingleQuote(String(scriptPath).replace(/\\/g, "/"));
+  return `#!/bin/sh\nexec ${n} ${s} "$@"\n`;
+}
+
+function bashSingleQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Names 0.7.x left on PATH that Windows ShellExecutes as `cli.mjs`
+ * (extensionless symlink, or a raw `.mjs` copy).
+ *
+ * @param {string} dir
+ * @param {string} [cmd]
+ */
+export function windowsUnsafeBinPaths(dir, cmd = CMD) {
+  return [join(dir, cmd), join(dir, `${cmd}.mjs`)];
+}
+
+/**
+ * True when executing this path would open a `.mjs` (the Open With dialog).
+ *
+ * @param {string} dest
+ */
+export function isWindowsMjsBin(dest) {
+  if (!dest) return false;
+  if (/\.mjs$/i.test(dest)) return existsSync(dest);
+  try {
+    const st = lstatSync(dest);
+    if (!st.isSymbolicLink()) return false;
+    return /\.mjs$/i.test(readlinkSync(dest));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Drop leftover `mental` → `cli.mjs` links so `mental` cannot ShellExecute.
+ *
+ * @param {string} dir
+ * @param {string} [cmd]
+ */
+export function clearWindowsMjsLeftovers(dir, cmd = CMD) {
+  for (const dest of windowsUnsafeBinPaths(dir, cmd)) {
+    if (isWindowsMjsBin(dest)) unlinkQuiet(dest);
+  }
+}
+
+/**
+ * Write `mental.cmd` + `mental.ps1` + a Git Bash `mental` that all run Node.
+ * Replaces the 0.7.x symlink to `cli.mjs`.
+ *
+ * @param {string} dir
+ * @param {string} nodePath
+ * @param {string} scriptPath
+ * @param {string} [cmd]
+ */
+export function writeWindowsShims(dir, nodePath, scriptPath, cmd = CMD) {
+  mkdirSync(dir, { recursive: true });
+  for (const dest of windowsUnsafeBinPaths(dir, cmd)) unlinkQuiet(dest);
+  unlinkQuiet(join(dir, `${cmd}.cmd`));
+  unlinkQuiet(join(dir, `${cmd}.ps1`));
+  writeFileSync(join(dir, `${cmd}.cmd`), windowsCmdShim(nodePath, scriptPath));
+  writeFileSync(join(dir, `${cmd}.ps1`), windowsPs1Shim(nodePath, scriptPath));
+  writeFileSync(join(dir, cmd), windowsGitBashShim(nodePath, scriptPath));
+}
+
 function npmGlobalPrefix(env) {
   const r = runNpm(["prefix", "-g"], env);
   const p = (r.stdout || "").trim();
@@ -147,12 +236,6 @@ function replaceWithUnixSymlink(dest, target) {
   } catch {
     // symlink chmod is a no-op on some systems
   }
-}
-
-function replaceWithWindowsCmd(dest, nodePath, scriptPath) {
-  mkdirSync(dirname(dest), { recursive: true });
-  unlinkQuiet(dest);
-  writeFileSync(dest, windowsCmdShim(nodePath, scriptPath));
 }
 
 /**
@@ -197,7 +280,10 @@ export function installGlobalCli({ home, env = process.env, spec = PKG_ROOT }) {
 
   try {
     if (platform === "win32") {
-      replaceWithWindowsCmd(pathBin, process.execPath, script);
+      // ~/.local/bin *and* the npm prefix: 0.7.x left `mental` → cli.mjs
+      // in both, and PowerShell prefers that leftover over mental.cmd.
+      writeWindowsShims(dirname(pathBin), process.execPath, script);
+      if (prefix) writeWindowsShims(npmGlobalBinDir(prefix, platform), process.execPath, script);
     } else {
       const target = npmTarget || script;
       if (resolve(pathBin) !== target) replaceWithUnixSymlink(pathBin, target);
