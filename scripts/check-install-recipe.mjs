@@ -93,15 +93,15 @@ const env = {
   npm_config_prefix: prefix,
   PATH: `${binDir}${delimiter}${process.env.PATH || ""}`,
 };
+const repair = join(binDir, process.platform === "win32" ? "mental-repair.cmd" : "mental-repair");
+if (!existsSync(repair)) fail(`npm prefix missing mental-repair at ${repair}`);
+run(repair, ["--json"], { env });
 
 if (process.platform === "win32") {
   const cmd = join(prefix, "mental.cmd");
-  const repair = join(prefix, "mental-repair.cmd");
   if (!existsSync(cmd)) fail(`npm prefix missing mental.cmd at ${cmd}`);
-  if (!existsSync(repair)) fail(`npm prefix missing mental-repair.cmd at ${repair}`);
   const ver = run(cmd, ["--version"], { env });
   if (ver.stdout.trim() !== VERSION) fail(`mental.cmd version ${ver.stdout.trim()}`);
-  run(repair, ["--json"], { env });
   const powerShell = run(
     "powershell.exe",
     ["-NoProfile", "-NonInteractive", "-Command", "mental --version"],

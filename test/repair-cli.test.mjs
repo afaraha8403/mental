@@ -42,6 +42,19 @@ test("inspectLegacyBins fingerprints Mental-owned shims and leaves unknown files
   assert.deepEqual(scan.unknown.map((x) => x.path), [unknown]);
 });
 
+test("inspectLegacyBins recognizes Mental 0.8 custom cmd shims", () => {
+  const home = tempHome();
+  const file = join(home, ".local", "bin", "mental.cmd");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    `@echo off\r\n"C:\\Program Files\\nodejs\\node.exe" "C:\\Users\\a\\AppData\\Roaming\\npm\\node_modules\\@balacode\\mental\\bin\\cli.mjs" %*\r\n`,
+  );
+  const scan = inspectLegacyBins(home);
+  assert.deepEqual(scan.owned.map((x) => x.path), [file]);
+  assert.equal(scan.owned[0].unsafe, false);
+});
+
 test("repairLegacyBins quarantines owned shims, preserves unknown files, and is idempotent", () => {
   const home = tempHome();
   const legacy = seedLegacySymlink(home);
