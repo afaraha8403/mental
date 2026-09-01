@@ -159,6 +159,7 @@ test("repairLegacyBins also quarantines unsafe mental in the active npm prefix",
   const repaired = repairLegacyBins({
     home,
     env: { PATH: npmBinDir },
+    platform: "win32",
     npmBinDir,
     verify: () => true,
   });

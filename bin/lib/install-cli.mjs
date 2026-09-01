@@ -217,7 +217,7 @@ export function repairLegacyBins(opts) {
     excludeDir: npmBinDir,
     platform,
   });
-  const npmScan = samePath(userScan.dir, npmBinDir, platform)
+  const npmScan = platform !== "win32" || samePath(userScan.dir, npmBinDir, platform)
     ? { owned: [], unknown: [] }
     : inspectBinDir(npmBinDir);
   const owned = [...userScan.owned, ...npmScan.owned];
