@@ -14,7 +14,7 @@ license: MIT
 compatibility: Requires Node.js >=22.13 and git. Agent Plugins 1.0.0 + Agent Skills. MCP is optional (`mental serve` / `mental install --mcp`); the plugin does not start it.
 metadata:
   author: Ali Farahat
-  version: "0.8.1"
+  version: "0.9.0"
   tags: continuity,coding-agents,mcp,agent-skills,cursor,claude-code,copilot,journal,decisions,handoff,local-first
 user-invocable: true
 disable-model-invocation: false
