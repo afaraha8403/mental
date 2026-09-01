@@ -4,11 +4,18 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import { inspectLegacyBins, repairLegacyBins } from "../bin/lib/install-cli.mjs";
+import {
+  classifyLegacyBin,
+  homeFromEnv,
+  inspectLegacyBins,
+  pathHasDir,
+  repairLegacyBins,
+} from "../bin/lib/install-cli.mjs";
 import { initRepo, mental, tempHome } from "./helpers.mjs";
 
 function seedLegacySymlink(home) {
@@ -53,6 +60,20 @@ test("inspectLegacyBins recognizes Mental 0.8 custom cmd shims", () => {
   const scan = inspectLegacyBins(home);
   assert.deepEqual(scan.owned.map((x) => x.path), [file]);
   assert.equal(scan.owned[0].unsafe, false);
+});
+
+test("classifyLegacyBin preserves npm's standard cmd-shim launcher", () => {
+  const home = tempHome();
+  const file = join(home, "mental.cmd");
+  writeFileSync(
+    file,
+    `@ECHO off\r\nGOTO start\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n"%dp0%\\node.exe" "%dp0%\\node_modules\\@balacode\\mental\\bin\\cli.mjs" %*\r\n`,
+  );
+  assert.deepEqual(classifyLegacyBin(file), {
+    owned: false,
+    unsafe: false,
+    kind: "unknown-file",
+  });
 });
 
 test("repairLegacyBins quarantines owned shims, preserves unknown files, and is idempotent", () => {
@@ -117,6 +138,51 @@ test("repairLegacyBins refuses migration when npm bin is not on PATH", () => {
   assert.equal(existsSync(legacy), true);
 });
 
+test("repairLegacyBins also quarantines unsafe mental in the active npm prefix", () => {
+  const home = tempHome();
+  const npmBinDir = join(home, "npm-bin");
+  const target = join(
+    home,
+    "old-prefix",
+    "node_modules",
+    "@mental",
+    "cli",
+    "bin",
+    "cli.mjs",
+  );
+  mkdirSync(dirname(target), { recursive: true });
+  mkdirSync(npmBinDir, { recursive: true });
+  writeFileSync(target, "#!/usr/bin/env node\n");
+  const legacy = join(npmBinDir, "mental");
+  symlinkSync(target, legacy);
+
+  const repaired = repairLegacyBins({
+    home,
+    env: { PATH: npmBinDir },
+    npmBinDir,
+    verify: () => true,
+  });
+  assert.equal(repaired.ok, true);
+  assert.equal(existsSync(legacy), false);
+  assert.deepEqual(repaired.moved.map((x) => x.from), [legacy]);
+});
+
+test("homeFromEnv prefers USERPROFILE on Windows Git Bash", () => {
+  const env = { HOME: "/c/Users/ali", USERPROFILE: "C:\\Users\\ali" };
+  assert.equal(homeFromEnv(env, "win32"), "C:\\Users\\ali");
+  assert.equal(homeFromEnv(env, "linux"), "/c/Users/ali");
+});
+
+test("pathHasDir accepts canonical aliases of the same directory", () => {
+  const home = tempHome();
+  const real = join(home, "real-bin");
+  const alias = join(home, "alias-bin");
+  mkdirSync(real);
+  symlinkSync(real, alias);
+  assert.equal(pathHasDir(alias, real), true);
+  rmSync(alias);
+});
+
 test("doctor reports an unsafe legacy launcher with the repair command", () => {
   const home = tempHome();
   const { root } = initRepo(home);
@@ -133,4 +199,24 @@ test("doctor reports an unsafe legacy launcher with the repair command", () => {
   assert.equal(check.ok, false);
   assert.match(check.message, /mental-repair/);
   assert.match(check.message, /cli\.mjs/);
+});
+
+test("doctor marks a safe but shadowing Mental 0.8 launcher as unresolved", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const file = join(home, ".local", "bin", "mental.cmd");
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(
+    file,
+    `@echo off\r\n"C:\\node.exe" "C:\\npm\\node_modules\\@balacode\\mental\\bin\\cli.mjs" %*\r\n`,
+  );
+  const r = mental(home, root, ["doctor", "--json"], {
+    npm_config_prefix: join(home, "active-npm"),
+  });
+  assert.ok(r.status === 0 || r.status === 3, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  const check = body.data.checks.find((x) => x.id === "cli-shadow");
+  assert.ok(check);
+  assert.equal(check.ok, false);
+  assert.equal(check.level, "warn");
 });
