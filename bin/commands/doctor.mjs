@@ -24,6 +24,11 @@ import { FEATURES, listOptionals, loadConfig, markOptionalSeen } from "../lib/co
 import { formatOptionalsTable } from "./option.mjs";
 import { TIME_DB, listOrphanTimeDbs, runningCount } from "../lib/time.mjs";
 import { skillMetadataVersion } from "../lib/lockstep.mjs";
+import {
+  inspectLegacyBins,
+  npmGlobalBinDir,
+  npmGlobalPrefix,
+} from "../lib/install-cli.mjs";
 
 function check(id, ok, message, level = "error") {
   return { id, ok, level, message };
@@ -98,6 +103,34 @@ export function cmdDoctor(args, io = {}) {
   }
 
   if (home) {
+    const prefix = npmGlobalPrefix(env);
+    const npmBinDir = prefix ? npmGlobalBinDir(prefix) : null;
+    const launchers = inspectLegacyBins(home, { excludeDir: npmBinDir });
+    if (launchers.owned.length) {
+      const unsafe = launchers.owned.filter((item) => item.unsafe);
+      const repair = process.platform === "win32" ? "mental-repair.cmd" : "mental-repair";
+      checks.push(
+        check(
+          "cli-shadow",
+          unsafe.length === 0,
+          unsafe.length
+            ? `${unsafe.length} legacy launcher(s) can resolve to cli.mjs before npm (${unsafe.map((item) => item.path).join(", ")}). Run \`${repair}\`.`
+            : `${launchers.owned.length} legacy Mental launcher(s) still shadow npm (${launchers.owned.map((item) => item.path).join(", ")}). Run \`${repair}\`.`,
+          unsafe.length ? "error" : "warn",
+        ),
+      );
+    }
+    if (launchers.unknown.length) {
+      checks.push(
+        check(
+          "cli-shadow-unknown",
+          true,
+          `preserving unknown launcher path(s): ${launchers.unknown.map((item) => item.path).join(", ")}`,
+          "warn",
+        ),
+      );
+    }
+
     /** @type {ReturnType<typeof loadBindings> | null} */
     let bindings = null;
     try {
