@@ -13,6 +13,7 @@ import {
   unixAgentLines,
   win32SpawnCommand,
   windowsAgentLines,
+  windowsUpgradeLines,
 } from "../bin/lib/install-recipe.mjs";
 import { NAME } from "../bin/lib/pkg.mjs";
 
@@ -32,7 +33,7 @@ test("normalizeShell maps pwsh, cmd.exe, zsh", () => {
   assert.equal(normalizeShell("sh"), "sh");
 });
 
-test("every published recipe covers powershell, cmd, bash, and sh", () => {
+test("every fresh-install recipe is identical across powershell, cmd, bash, and sh", () => {
   const ids = allRecipes().map((r) => r.id);
   assert.ok(ids.includes("win-powershell"));
   assert.ok(ids.includes("win-cmd"));
@@ -41,8 +42,11 @@ test("every published recipe covers powershell, cmd, bash, and sh", () => {
   assert.ok(ids.includes("linux-bash"));
   assert.ok(ids.includes("linux-sh"));
   for (const r of allRecipes()) {
-    assert.equal(r.lines.length, 3, r.id);
-    assert.equal(r.lines[0], `npm i -g ${NAME}`);
+    assert.deepEqual(r.lines, [
+      `npm i -g ${NAME}`,
+      "mental install",
+      "mental doctor",
+    ]);
     assert.doesNotMatch(r.lines.join("\n"), /\.mjs/);
   }
 });
@@ -56,25 +60,26 @@ test("Windows CI spawn remaps npm/npx to .cmd and strips a trailing slash", () =
   assert.equal(packageSpecPath("/tmp/mental/"), "/tmp/mental");
 });
 
-test("PowerShell recipe uses npx --yes, never bare mental", () => {
+test("PowerShell fresh install uses the same bare mental command as Unix", () => {
   const lines = installLines({ platform: "win32", shell: "powershell" });
   assert.deepEqual(lines, windowsAgentLines());
-  assert.equal(lines[1], `npx --yes ${NAME} install`);
-  assert.equal(lines[2], `npx --yes ${NAME} doctor`);
+  assert.deepEqual(lines, unixAgentLines());
+  assert.equal(lines[1], "mental install");
+  assert.equal(lines[2], "mental doctor");
   for (const line of lines) {
     assert.equal(isUnsafeWindowsLine(line), false, line);
   }
   const inv = invokeArgv(["install"], { platform: "win32", shell: "powershell" });
-  assert.equal(inv.command, "npx");
+  assert.equal(inv.command, "mental");
   assert.doesNotMatch(inv.command, /\.mjs$/i);
 });
 
-test("cmd.exe recipe uses mental.cmd", () => {
+test("cmd.exe fresh install also uses bare mental", () => {
   const lines = installLines({ platform: "win32", shell: "cmd" });
-  assert.equal(lines[1], "mental.cmd install");
+  assert.equal(lines[1], "mental install");
   assert.equal(isUnsafeWindowsLine(lines[1]), false);
   const inv = invokeArgv(["doctor"], { platform: "win32", shell: "cmd" });
-  assert.equal(inv.command, "mental.cmd");
+  assert.equal(inv.command, "mental");
 });
 
 test("Unix and Git Bash recipes use mental", () => {
@@ -94,14 +99,23 @@ test("Unix and Git Bash recipes use mental", () => {
   }
 });
 
-test("bare mental and raw .mjs are unsafe Windows lines", () => {
-  assert.equal(isUnsafeWindowsLine("mental install"), true);
+test("only raw .mjs invocation is unsafe in the npm-owned launcher model", () => {
+  assert.equal(isUnsafeWindowsLine("mental install"), false);
   assert.equal(isUnsafeWindowsLine("bin/cli.mjs install"), true);
-  assert.equal(isUnsafeWindowsLine("npx --yes @balacode/mental install"), false);
+  assert.equal(isUnsafeWindowsLine("node bin/cli.mjs install"), false);
   assert.equal(isUnsafeWindowsLine("mental.cmd install"), false);
 });
 
-test("agent paste and setup skill lock both OS recipes", () => {
+test("existing Windows users get one explicit repair step", () => {
+  assert.deepEqual(windowsUpgradeLines(), [
+    `npm i -g ${NAME}`,
+    "mental-repair.cmd",
+    "mental install",
+    "mental doctor",
+  ]);
+});
+
+test("agent paste and setup skill lock the universal recipe", () => {
   const paste = agentPaste(readFileSync(join(ROOT, "README.md"), "utf8"));
   const setup = readFileSync(join(ROOT, "skills", "mental-setup", "SKILL.md"), "utf8");
   for (const line of windowsAgentLines()) {
@@ -113,6 +127,6 @@ test("agent paste and setup skill lock both OS recipes", () => {
     assert.match(setup, new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.match(paste, /Windows Terminal/);
-  assert.match(paste, /Never run bare mental in PowerShell/);
-  assert.match(setup, /Never run bare `mental` in PowerShell/);
+  assert.match(paste, /mental-repair\.cmd/);
+  assert.match(setup, /mental-repair\.cmd/);
 });
