@@ -1,13 +1,14 @@
-import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { canonicalPath } from "../bin/lib/git.mjs";
 
 export const CLI = fileURLToPath(new URL("../bin/cli.mjs", import.meta.url));
 
 export function tempHome(prefix = "mental-") {
-  return realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+  return canonicalPath(mkdtempSync(join(tmpdir(), prefix)));
 }
 
 /**

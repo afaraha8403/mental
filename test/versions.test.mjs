@@ -6,13 +6,24 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   applyProductVersion,
+  MARKETPLACE_RELATIVE,
   readProductVersions,
   skillMetadataVersion,
   SKILL_RELATIVE,
+  TRACK_SKILL_RELATIVE,
 } from "../bin/lib/lockstep.mjs";
 import { VERSION } from "../bin/lib/pkg.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
+
+test("lockstep relative keys are POSIX so Windows files[] lookups match", () => {
+  assert.equal(SKILL_RELATIVE, "skill/mental/SKILL.md");
+  assert.equal(TRACK_SKILL_RELATIVE, "optional/mental-track/SKILL.md");
+  assert.equal(MARKETPLACE_RELATIVE, ".claude-plugin/marketplace.json");
+  for (const rel of [SKILL_RELATIVE, TRACK_SKILL_RELATIVE, MARKETPLACE_RELATIVE]) {
+    assert.doesNotMatch(rel, /\\/);
+  }
+});
 
 test("repo product versions lockstep to package.json", () => {
   const r = readProductVersions(ROOT);

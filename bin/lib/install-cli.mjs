@@ -24,8 +24,14 @@ import { spawnSync } from "node:child_process";
 import { CMD, NAME, PKG_ROOT } from "./pkg.mjs";
 
 function runNpm(args, env) {
+  // CreateProcess cannot run npm.cmd without a shell.
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-  return spawnSync(npm, args, { encoding: "utf8", env });
+  return spawnSync(npm, args, {
+    encoding: "utf8",
+    env,
+    shell: process.platform === "win32",
+    windowsHide: process.platform === "win32",
+  });
 }
 
 function unlinkQuiet(dest) {

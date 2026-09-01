@@ -75,6 +75,51 @@ export function normalizeOrigin(input) {
 }
 
 /**
+ * Stable absolute path. `realpath` covers macOS `/var` → `/private/var`.
+ * On Windows, also expand 8.3 names (`RUNNER~1` → `runneradmin`) so
+ * `path.relative` and string equality agree with `git rev-parse --show-toplevel`.
+ *
+ * @param {string} input
+ * @returns {string}
+ */
+export function canonicalPath(input) {
+  let abs = resolve(String(input));
+  try {
+    abs = realpathSync(abs);
+  } catch {
+    // dest may not exist yet (export --out); keep resolve()
+  }
+  if (process.platform === "win32") {
+    const long = win32LongPath(abs);
+    if (long) abs = long;
+  }
+  return abs;
+}
+
+/**
+ * `%~fI` expands 8.3 components. `realpathSync` on GitHub Actions Windows
+ * often leaves `C:\Users\RUNNER~1\...` while git reports `runneradmin`.
+ *
+ * @param {string} abs
+ * @returns {string | null}
+ */
+function win32LongPath(abs) {
+  const comspec = process.env.ComSpec || "cmd.exe";
+  const quoted = abs.replace(/"/g, "");
+  const r = spawnSync(comspec, ["/d", "/s", "/c", `for %I in ("${quoted}") do @echo %~fI`], {
+    encoding: "utf8",
+    windowsHide: true,
+  });
+  if (r.error || r.status !== 0) return null;
+  const line = (r.stdout || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .pop();
+  return line || null;
+}
+
+/**
  * Walk from `cwd` to the filesystem root looking for `.git` (dir or file).
  * Prefer `git rev-parse --show-toplevel` when git works (correct for worktrees).
  *
@@ -88,13 +133,7 @@ export function findGitRoot(cwd, { env = process.env } = {}) {
     const r = runGit(start, ["rev-parse", "--show-toplevel"], { env });
     if (r.status === 0) {
       const top = (r.stdout || "").trim();
-      if (top) {
-        try {
-          return realpathSync(top);
-        } catch {
-          return resolve(top);
-        }
-      }
+      if (top) return canonicalPath(top);
     }
   }
   let dir = start;
@@ -104,7 +143,7 @@ export function findGitRoot(cwd, { env = process.env } = {}) {
     if (existsSync(gitPath)) {
       try {
         const st = statSync(gitPath);
-        if (st.isDirectory() || st.isFile()) return dir;
+        if (st.isDirectory() || st.isFile()) return canonicalPath(dir);
       } catch {
         // ignore
       }

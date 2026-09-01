@@ -18,9 +18,10 @@ export const VERSION_JSON_RELATIVE = [
   ".claude-plugin/plugin.json",
 ];
 
-export const SKILL_RELATIVE = join("skill", "mental", "SKILL.md");
-export const TRACK_SKILL_RELATIVE = join("optional", "mental-track", "SKILL.md");
-export const MARKETPLACE_RELATIVE = join(".claude-plugin", "marketplace.json");
+/** POSIX keys so `files["skill/mental/SKILL.md"]` works on win32 (`join` → `\`). */
+export const SKILL_RELATIVE = "skill/mental/SKILL.md";
+export const TRACK_SKILL_RELATIVE = "optional/mental-track/SKILL.md";
+export const MARKETPLACE_RELATIVE = ".claude-plugin/marketplace.json";
 export const LOCKFILE_RELATIVE = "package-lock.json";
 
 /**

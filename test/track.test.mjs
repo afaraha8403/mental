@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { git, initRepo, mental, tempHome } from "./helpers.mjs";
-import { TIME_DB, backupTimeDb, openTimeDb, timeDbPath } from "../bin/lib/time.mjs";
+import { TIME_DB, assertExportOutPath, backupTimeDb, openTimeDb, timeDbPath } from "../bin/lib/time.mjs";
 import { importLegacyBundle } from "../bin/lib/import-legacy.mjs";
 import { copyOkfTree } from "../bin/lib/okf.mjs";
 
@@ -423,6 +423,16 @@ test("last_seen matching started is not never-started; stop still sets billable 
   assert.equal(stopped.data.stopped[0].needs_user, false);
   assert.equal(stopped.data.stopped[0].user, stopped.data.stopped[0].wall);
   assert.ok((stopped.data.stopped[0].wall_minutes || 0) >= 4);
+});
+
+test("assertExportOutPath treats dest under git root as inside after canonicalize", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const inside = assertExportOutPath("timesheet.csv", { cwd: root, gitRoot: root });
+  assert.equal(inside.ok, false);
+  assert.match(inside.error.message, /outside the git worktree/);
+  const outside = assertExportOutPath(join(home, "invoice.csv"), { cwd: root, gitRoot: root });
+  assert.equal(outside.ok, true);
 });
 
 test("export --external strips internal columns; --out inside repo is usage", () => {

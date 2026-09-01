@@ -117,10 +117,15 @@ if (process.argv.includes("--json")) {
   process.stdout.write(JSON.stringify([{ id: "mental@mental", version: "0.1.0" }]));
 }
 `;
-  writeFileSync(join(bin, "claude"), stub);
-  chmodSync(join(bin, "claude"), 0o755);
   if (process.platform === "win32") {
-    writeFileSync(join(bin, "claude.cmd"), `@echo off\r\n"${process.execPath}" "%~dp0claude" %*\r\n`);
+    writeFileSync(join(bin, "claude.js"), stub);
+    writeFileSync(
+      join(bin, "claude.cmd"),
+      `@echo off\r\n"${process.execPath}" "%~dp0claude.js" %*\r\n`,
+    );
+  } else {
+    writeFileSync(join(bin, "claude"), stub);
+    chmodSync(join(bin, "claude"), 0o755);
   }
   const r = mental(home, root, ["doctor", "--json"], {
     PATH: `${bin}${delimiter}${process.env.PATH || "/usr/bin"}`,
