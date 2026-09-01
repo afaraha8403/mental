@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { inspectLegacyBins, repairLegacyBins } from "../bin/lib/install-cli.mjs";
-import { tempHome } from "./helpers.mjs";
+import { initRepo, mental, tempHome } from "./helpers.mjs";
 
 function seedLegacySymlink(home) {
   const target = join(
@@ -102,4 +102,22 @@ test("repairLegacyBins refuses migration when npm bin is not on PATH", () => {
   assert.equal(repaired.ok, false);
   assert.equal(repaired.reason, "npm-bin-not-on-path");
   assert.equal(existsSync(legacy), true);
+});
+
+test("doctor reports an unsafe legacy launcher with the repair command", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const legacy = seedLegacySymlink(home);
+  const npmPrefix = join(home, "active-npm");
+  const r = mental(home, root, ["doctor", "--json"], {
+    npm_config_prefix: npmPrefix,
+    PATH: `${dirname(legacy)}${process.platform === "win32" ? ";" : ":"}${process.env.PATH || ""}`,
+  });
+  assert.ok(r.status === 0 || r.status === 3, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  const check = body.data.checks.find((x) => x.id === "cli-shadow");
+  assert.ok(check, JSON.stringify(body.data.checks.map((x) => x.id)));
+  assert.equal(check.ok, false);
+  assert.match(check.message, /mental-repair/);
+  assert.match(check.message, /cli\.mjs/);
 });
