@@ -42,6 +42,7 @@ import { cmdOption } from "./commands/option.mjs";
 import { cmdTrack } from "./commands/track.mjs";
 import { cmdSchema } from "./commands/schema.mjs";
 import { cmdCompletion } from "./commands/completion.mjs";
+import { homeFromEnv } from "./lib/install-cli.mjs";
 
 export { parseArgv } from "./lib/args.mjs";
 export { normalizeOrigin, findGitRoot } from "./lib/git.mjs";
@@ -95,7 +96,7 @@ export async function run(argv, ctx = {}) {
   const stderr = ctx.stderr ?? process.stderr;
   const env = ctx.env ?? process.env;
   const cwd = ctx.cwd ?? process.cwd();
-  const home = ctx.home ?? env.HOME ?? env.USERPROFILE ?? null;
+  const home = ctx.home ?? homeFromEnv(env);
   const isTTY = ctx.isTTY ?? Boolean(stdout.isTTY);
 
   const args = parseArgv(argv);

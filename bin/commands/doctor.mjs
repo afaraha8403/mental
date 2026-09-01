@@ -112,7 +112,7 @@ export function cmdDoctor(args, io = {}) {
       checks.push(
         check(
           "cli-shadow",
-          unsafe.length === 0,
+          false,
           unsafe.length
             ? `${unsafe.length} legacy launcher(s) can resolve to cli.mjs before npm (${unsafe.map((item) => item.path).join(", ")}). Run \`${repair}\`.`
             : `${launchers.owned.length} legacy Mental launcher(s) still shadow npm (${launchers.owned.map((item) => item.path).join(", ")}). Run \`${repair}\`.`,

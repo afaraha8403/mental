@@ -17,6 +17,7 @@ import {
 import { delimiter, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { CMD, VERSION } from "./pkg.mjs";
+import { canonicalPath, sameIdentity } from "./git.mjs";
 
 const OWNED_TARGET_RE =
   /(?:^|[/\\])node_modules[/\\](?:@balacode[/\\]mental|@mental[/\\]cli)[/\\]bin[/\\]cli\.mjs$/i;
@@ -36,11 +37,18 @@ function readSmall(file) {
 }
 
 function samePath(a, b, platform = process.platform) {
-  const left = resolve(a);
-  const right = resolve(b);
+  const left = canonicalPath(a);
+  const right = canonicalPath(b);
+  if (sameIdentity(left, right)) return true;
   return platform === "win32"
     ? left.toLowerCase() === right.toLowerCase()
     : left === right;
+}
+
+export function homeFromEnv(env = process.env, platform = process.platform) {
+  return platform === "win32"
+    ? env.USERPROFILE || env.HOME || null
+    : env.HOME || env.USERPROFILE || null;
 }
 
 /**
@@ -67,7 +75,18 @@ export function classifyLegacyBin(file) {
   const body = readSmall(file);
   const rawCli =
     /\.mjs$/i.test(file) && RAW_CLI_MARKERS.every((marker) => body.includes(marker));
-  const shim = OWNED_BODY_RE.test(body.replace(/\\/g, "/"));
+  const pointsToMental = OWNED_BODY_RE.test(body.replace(/\\/g, "/"));
+  const shim =
+    pointsToMental &&
+    (/^@echo off\r?\n"[^"\r\n]*node(?:\.exe)?" "[^"\r\n]*cli\.mjs" %\*\r?\n?$/i.test(
+      body,
+    ) ||
+      /^#!\/usr\/bin\/env pwsh\r?\n& '[^'\r\n]*node(?:\.exe)?' '[^'\r\n]*cli\.mjs' @args\r?\n?$/i.test(
+        body,
+      ) ||
+      /^#!\/bin\/sh\nexec '[^'\n]*node(?:\.exe)?' '[^'\n]*cli\.mjs' "\$@"\n?$/i.test(
+        body,
+      ));
   return {
     owned: rawCli || shim,
     unsafe: rawCli || (/[/\\]cli\.mjs/i.test(body) && !/\bnode(?:\.exe)?\b/i.test(body)),
@@ -98,6 +117,22 @@ export function inspectLegacyBins(home, opts = {}) {
       } catch {
         continue;
       }
+    }
+    const found = { path, ...classifyLegacyBin(path) };
+    (found.owned ? owned : unknown).push(found);
+  }
+  return { dir, owned, unknown };
+}
+
+function inspectBinDir(dir, cmd = CMD) {
+  const owned = [];
+  const unknown = [];
+  for (const name of [cmd, `${cmd}.cmd`, `${cmd}.ps1`, `${cmd}.mjs`]) {
+    const path = join(dir, name);
+    try {
+      lstatSync(path);
+    } catch {
+      continue;
     }
     const found = { path, ...classifyLegacyBin(path) };
     (found.owned ? owned : unknown).push(found);
@@ -178,14 +213,18 @@ export function repairLegacyBins(opts) {
     return { ...base, ok: false, reason: "npm-bin-not-on-path" };
   }
 
-  const scan = inspectLegacyBins(opts.home, {
+  const userScan = inspectLegacyBins(opts.home, {
     excludeDir: npmBinDir,
     platform,
   });
-  base.unknown = scan.unknown;
+  const npmScan = samePath(userScan.dir, npmBinDir, platform)
+    ? { owned: [], unknown: [] }
+    : inspectBinDir(npmBinDir);
+  const owned = [...userScan.owned, ...npmScan.owned];
+  base.unknown = userScan.unknown;
   let quarantine = null;
   try {
-    if (scan.owned.length) {
+    if (owned.length) {
       quarantine = join(
         opts.home,
         ".mental",
@@ -194,8 +233,9 @@ export function repairLegacyBins(opts) {
         stamp(opts.now ?? Date.now()),
       );
       mkdirSync(quarantine, { recursive: true });
-      for (const item of scan.owned) {
-        const to = join(quarantine, item.path.slice(dirname(item.path).length + 1));
+      for (const [index, item] of owned.entries()) {
+        const name = item.path.slice(dirname(item.path).length + 1);
+        const to = join(quarantine, `${index + 1}-${name}`);
         renameSync(item.path, to);
         base.moved.push({ from: item.path, to, unsafe: item.unsafe, kind: item.kind });
       }

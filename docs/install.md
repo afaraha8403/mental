@@ -117,7 +117,7 @@ After doctor, ask whether I want optional hooks or time tracking, and whether MC
 
 These steps are for a **human in that client**. Do not paste this whole list into an agent — it will run the wrong host's commands. The agent paste above stays gated: this client only, then `mental install`.
 
-Plugin install loads the setup skill from a git clone the host caches. It does **not** start MCP. Still run `mental install` so the CLI, full procedure, and tiny always-on rule land on this machine. Upgrading the CLI does **not** refresh that cache — after a release, update the plugin in the host. `mental doctor` warns when a host plugin or a copied skill is behind the CLI.
+Plugin install loads the setup skill from a git clone the host caches. It does **not** start MCP. Install the CLI with npm, then run `mental install` so the full procedure and tiny always-on rule land on this machine. Upgrading the CLI does **not** refresh that cache — after a release, update the plugin in the host. `mental doctor` warns when a host plugin or a copied skill is behind the CLI.
 
 **Cursor** — [Customize](https://cursor.com/docs/plugins) → Plugins → install. From GitHub today: **+ Add** / install from source with `https://github.com/afaraha8403/mental`, or symlink for local load:
 
@@ -180,7 +180,7 @@ A git checkout installs that tree and does not clobber it with the registry.
 
 ## What `mental install` does
 
-Last install wins: an existing global `mental` bin is overwritten (npm 11 no longer fails with `EEXIST`). From a published install it also **upgrades** the CLI when npm has a newer version, then re-runs so skills match. It **removes leftover Balakit Mental skill/rule copies** (the old `npx balakit doctor` pointer) so they cannot fight the new rule. Already installed? See [Upgrade](#upgrade-already-installed).
+npm owns and upgrades the global `mental` executable. `mental install` refreshes the procedure/rule/config and **removes leftover Balakit Mental skill/rule copies** (the old `npx balakit doctor` pointer) so they cannot fight the new rule. It never installs or updates the executable. Already installed? See [Upgrade](#upgrade-already-installed).
 
 Optional:
 

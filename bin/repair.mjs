@@ -5,7 +5,7 @@
  * npm owns current launchers. This command has a distinct bin name so it stays
  * reachable when a legacy `mental` shadows npm and opens Windows' file chooser.
  */
-import { repairLegacyBins } from "./lib/install-cli.mjs";
+import { homeFromEnv, repairLegacyBins } from "./lib/install-cli.mjs";
 import { isCliEntry } from "./lib/entry.mjs";
 
 export function runRepair({
@@ -15,7 +15,7 @@ export function runRepair({
   stderr = process.stderr,
 } = {}) {
   const json = argv.includes("--json");
-  const home = env.HOME || env.USERPROFILE;
+  const home = homeFromEnv(env);
   if (!home) {
     const error = { code: "no-home", message: "HOME is unset; no launchers changed." };
     if (json) stdout.write(`${JSON.stringify({ ok: false, error })}\n`);
