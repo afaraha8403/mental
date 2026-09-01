@@ -4,9 +4,9 @@
  */
 import { existsSync, mkdirSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { canonicalPath, commitShortDates } from "./git.mjs";
+import { canonicalPath, commitShortDates, isInsideDir } from "./git.mjs";
 
 function isBundleRoot(where) {
   if (where.mode === "env" || where.mode === "local" || where.mode === "personal") return true;
@@ -1312,8 +1312,7 @@ export function assertExportOutPath(out, { cwd, gitRoot }) {
     return { ok: false, error: { code: "usage", message: "--out must not write into .git" } };
   }
   if (gitRoot) {
-    const rel = relative(canonicalPath(gitRoot), abs);
-    if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) {
+    if (isInsideDir(canonicalPath(gitRoot), abs)) {
       return {
         ok: false,
         error: { code: "usage", message: "--out must be outside the git worktree (hours must never land in git)" },
