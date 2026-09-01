@@ -13,7 +13,9 @@ import { NAME, PKG_ROOT, VERSION } from "../bin/lib/pkg.mjs";
 import {
   allRecipes,
   invokeArgv,
+  packageSpecPath,
   unixAgentLines,
+  win32SpawnCommand,
   windowsAgentLines,
 } from "../bin/lib/install-recipe.mjs";
 
@@ -28,17 +30,17 @@ function run(command, args, opts = {}) {
   if (/\.mjs$/i.test(command)) {
     fail(`refusing to spawn .mjs as argv0: ${command}`);
   }
-  const exe =
-    process.platform === "win32" && command === "npm" ? "npm.cmd" : command;
+  const exe = win32SpawnCommand(command, process.platform);
   const r = spawnSync(exe, args, {
     encoding: "utf8",
     cwd: opts.cwd ?? ROOT,
     env: opts.env ?? process.env,
     shell: process.platform === "win32" && /\.(cmd|bat)$/i.test(exe),
+    windowsHide: process.platform === "win32",
   });
-  if (r.status !== 0) {
+  if (r.error || r.status !== 0) {
     fail(
-      `${command} ${args.join(" ")} exited ${r.status}\n${r.stdout || ""}\n${r.stderr || ""}`,
+      `${command} ${args.join(" ")} exited ${r.status}${r.error ? ` (${r.error.message})` : ""}\n${r.stdout || ""}\n${r.stderr || ""}`,
     );
   }
   return r;
@@ -80,7 +82,7 @@ run("npm", [
   "--no-fund",
   "--no-audit",
   "--no-package-lock",
-  PKG_ROOT,
+  packageSpecPath(PKG_ROOT),
 ]);
 
 const binDir = process.platform === "win32" ? prefix : join(prefix, "bin");
@@ -96,7 +98,7 @@ if (process.platform === "win32") {
   const ver = run(cmd, ["--version"], { env });
   if (ver.stdout.trim() !== VERSION) fail(`mental.cmd version ${ver.stdout.trim()}`);
   const npxInv = invokeArgv(["--version"], { platform: "win32", shell: "powershell" });
-  run(npxInv.command, ["--yes", "--package", PKG_ROOT, "mental", "--version"], { env });
+  run(npxInv.command, ["--yes", "--package", packageSpecPath(PKG_ROOT), "mental", "--version"], { env });
 } else {
   const bin = join(prefix, "bin", "mental");
   if (!existsSync(bin)) fail(`npm prefix missing mental at ${bin}`);

@@ -9,7 +9,9 @@ import {
   invokeArgv,
   isUnsafeWindowsLine,
   normalizeShell,
+  packageSpecPath,
   unixAgentLines,
+  win32SpawnCommand,
   windowsAgentLines,
 } from "../bin/lib/install-recipe.mjs";
 import { NAME } from "../bin/lib/pkg.mjs";
@@ -43,6 +45,15 @@ test("every published recipe covers powershell, cmd, bash, and sh", () => {
     assert.equal(r.lines[0], `npm i -g ${NAME}`);
     assert.doesNotMatch(r.lines.join("\n"), /\.mjs/);
   }
+});
+
+test("Windows CI spawn remaps npm/npx to .cmd and strips a trailing slash", () => {
+  assert.equal(win32SpawnCommand("npx", "win32"), "npx.cmd");
+  assert.equal(win32SpawnCommand("npm", "win32"), "npm.cmd");
+  assert.equal(win32SpawnCommand("mental.cmd", "win32"), "mental.cmd");
+  assert.equal(win32SpawnCommand("npx", "linux"), "npx");
+  assert.equal(packageSpecPath("D:\\a\\mental\\mental\\"), "D:\\a\\mental\\mental");
+  assert.equal(packageSpecPath("/tmp/mental/"), "/tmp/mental");
 });
 
 test("PowerShell recipe uses npx --yes, never bare mental", () => {

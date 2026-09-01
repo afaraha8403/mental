@@ -43,6 +43,28 @@ export function recipeId(platform, shell) {
 }
 
 /**
+ * CreateProcess cannot run npm/npx `.cmd` shims. CI and install spawn this.
+ *
+ * @param {string} command
+ * @param {string} [platform]
+ */
+export function win32SpawnCommand(command, platform = "linux") {
+  if (platform !== "win32") return command;
+  if (command === "npm" || command === "npx") return `${command}.cmd`;
+  return command;
+}
+
+/**
+ * Drop a trailing slash so `cmd` + `shell: true` does not turn `C:\pkg\` into `\"`.
+ *
+ * @param {string} root
+ */
+export function packageSpecPath(root) {
+  const trimmed = String(root).replace(/[\\/]+$/, "");
+  return trimmed || root;
+}
+
+/**
  * argv that never ShellExecutes a `.mjs` file.
  *
  * @param {string[]} cliArgs
