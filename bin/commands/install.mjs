@@ -6,16 +6,14 @@ import { resolveBundle } from "../lib/resolve.mjs";
 import { userMentalDir } from "../lib/bindings.mjs";
 import { ensureSkeleton } from "../lib/okf.mjs";
 import { installSkills } from "../lib/install-skills.mjs";
-import { installGlobalCli, spawnCli } from "../lib/install-cli.mjs";
 import { enableHooks } from "../lib/hooks.mjs";
 import { enableMcp } from "../lib/mcp-hosts.mjs";
-import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
+import { CMD } from "../lib/pkg.mjs";
 import { printResult, brandLine } from "../lib/output.mjs";
 import { FEATURES, listOptionals, markOptionalSeen, setFeature } from "../lib/config.mjs";
 import { formatOptionalsTable } from "./option.mjs";
 import { copyTrackSkills } from "../lib/install-skills.mjs";
 import { purgeBalakitMental } from "../lib/legacy-balakit.mjs";
-import { checkForUpdate, cmpSemver, isDevCheckout } from "../lib/update.mjs";
 
 export function cmdInstall(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -34,34 +32,6 @@ export function cmdInstall(args, io = {}) {
   const track = Boolean(args.flags?.track);
   const cwd = args.cwd ?? process.cwd();
   const env = args.env ?? process.env;
-  const stderr = io.stderr ?? process.stderr;
-
-  if (env.MENTAL_SKIP_SELF_UPDATE !== "1" && !isDevCheckout()) {
-    const upd = checkForUpdate({ env });
-    if (upd.latest && cmpSemver(upd.latest, VERSION) > 0) {
-      const bumped = installGlobalCli({ home, env, spec: NAME });
-      if (bumped.npm && bumped.script) {
-        if (!args.json) {
-          stdout.write(`${brandLine(`updating CLI ${VERSION} → ${upd.latest}`)}\n`);
-        }
-        const childArgs = ["install"];
-        if (args.json) childArgs.push("--json");
-        if (project) childArgs.push("--project");
-        if (hooks) childArgs.push("--hooks");
-        if (mcp) childArgs.push("--mcp");
-        if (track) childArgs.push("--track");
-        if (args.dir) childArgs.push("--dir", args.dir);
-        const child = spawnCli(bumped.script, childArgs, {
-          encoding: "utf8",
-          cwd,
-          env: { ...env, MENTAL_SKIP_SELF_UPDATE: "1", MENTAL_SKIP_UPDATE_CHECK: "1" },
-        });
-        if (child.stdout) stdout.write(child.stdout);
-        if (child.stderr) stderr.write(child.stderr);
-        return child.status ?? 1;
-      }
-    }
-  }
 
   const legacy = purgeBalakitMental({
     home,
@@ -71,7 +41,6 @@ export function cmdInstall(args, io = {}) {
     home,
     projectDir: project ? cwd : null,
   });
-  const cli = installGlobalCli({ home, env });
   const personal = userMentalDir(home);
   ensureSkeleton(personal, { name: "personal" });
 
@@ -108,7 +77,6 @@ export function cmdInstall(args, io = {}) {
     home,
     personalRoot: personal,
     skills: installed.written,
-    cli,
     project: project ? `${cwd}/.github/skills/mental` : null,
     hooks: hookResult,
     mcp: mcpResult,
@@ -123,7 +91,6 @@ export function cmdInstall(args, io = {}) {
     imported?.copied?.length
       ? `\nimported ${imported.copied.length} leftover file(s) from ${imported.from}`
       : "";
-  const cliLine = cli.bin ? `\nCLI: ${cli.bin}` : "";
   const hookLine = hooks ? "\nhooks: enabled (session-start → mental status --json)" : "";
   const mcpLine = mcp
     ? mcpResult?.ok
@@ -144,7 +111,7 @@ export function cmdInstall(args, io = {}) {
     data,
     undefined,
     () =>
-      `${brandLine(`installed skill + rule (${installed.written.length} paths)`)}\n~/.mental skeleton: ${personal}${cliLine}${hookLine}${mcpLine}${importLine}${legacyLine}${leftoverLine}\n${formatOptionalsTable(optionals.optionals)}`,
+      `${brandLine(`installed skill + rule (${installed.written.length} paths)`)}\n~/.mental skeleton: ${personal}${hookLine}${mcpLine}${importLine}${legacyLine}${leftoverLine}\n${formatOptionalsTable(optionals.optionals)}`,
   );
   return 0;
 }

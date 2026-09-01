@@ -40,7 +40,8 @@
   ],
   "type": "module",
   "bin": {
-    "mental": "bin/cli.mjs"
+    "mental": "bin/cli.mjs",
+    "mental-repair": "bin/repair.mjs"
   },
   "engines": {
     "node": ">=18"
