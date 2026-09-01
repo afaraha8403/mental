@@ -361,7 +361,7 @@ export function cmdDoctor(args, io = {}) {
       : {
           code: "doctor-failed",
           message: `${problems.length} problem(s)`,
-          hint: `Run \`${CMD} doctor --fix-ignore\` for ignore issues, or \`${CMD} install\` for PATH/skill.`,
+          hint: `Run \`${CMD} doctor --fix-ignore\` for ignore issues, \`${CMD}-repair\` for legacy launchers, or \`${CMD} install\` for skills.`,
         },
     (d) => {
       const yes = useAsciiBrand(args.env ?? process.env, args) ? "OK" : "✓";

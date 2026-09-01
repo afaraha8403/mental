@@ -55,20 +55,23 @@ One shot. Then exit. Not a menu. Not a todo app.
 
 ## Quick start
 
-Windows PowerShell / Windows Terminal (PowerShell profile):
+PowerShell, cmd.exe, Windows Terminal, Git Bash, macOS, and Linux:
 
-```powershell
+```text
 npm i -g @balacode/mental
-npx --yes @balacode/mental install
-cd your-repo
-npx --yes @balacode/mental
+mental install
+mental doctor
 ```
 
-Windows cmd.exe: `mental.cmd` instead of `npx --yes @balacode/mental`. macOS, Linux, Git Bash: `mental` after `npm i -g`.
+Then `cd your-repo` and type `mental`. npm owns the executable on every
+platform; `mental install` copies the agent skill/rule and creates the local data
+skeleton. Strict PowerShell policy: use `npm.cmd` / `mental.cmd`.
 
-Install puts the CLI on PATH **and** teaches your agents the skill. After that they journal, decide, and record residue while you work. You do not keep a second journal.
+Upgrading from Mental 0.8.1 or older on Windows? Run `mental-repair.cmd` once
+after `npm i -g`; it quarantines only fingerprinted Mental-owned launchers that
+can shadow npm. Journals stay. [Upgrade](docs/install.md#upgrade-already-installed).
 
-Already installed? Same three commands for this OS. Journals stay. [Upgrade](docs/install.md#upgrade-already-installed).
+After install, agents journal, decide, and record residue while you work. You do not keep a second journal.
 
 The unscoped npm package [`mental`](https://www.npmjs.com/package/mental) is a different project. Install **`@balacode/mental`**. The binary is `mental`.
 
@@ -79,28 +82,27 @@ Works in Cursor, Claude Code, Copilot, Codex, and anything that can install a pl
 ```text
 Install Mental CLI with npm. Do not clone the GitHub repo to install. Do not install from a git clone or plugin cache. Never run a .mjs file — Windows will ask what to open it with.
 
-Pick the block for this machine. Windows Terminal is a host — match the profile (PowerShell vs cmd vs Git Bash).
-
-Windows (PowerShell, cmd, Windows Terminal):
-  npm i -g @balacode/mental
-  npx --yes @balacode/mental install
-  npx --yes @balacode/mental doctor
-  (cmd.exe may use mental.cmd instead of npx. Never run bare mental in PowerShell.)
-
-macOS and Linux (bash, zsh, sh) and Git Bash:
+Fresh install (PowerShell, cmd, Windows Terminal, Git Bash, macOS, Linux):
   npm i -g @balacode/mental
   mental install
   mental doctor
+
+Existing Windows install from Mental 0.8.1 or older (one-time migration):
+  npm i -g @balacode/mental
+  mental-repair.cmd
+  mental install
+  mental doctor
+  (If PowerShell blocks scripts, use npm.cmd and mental.cmd explicitly.)
 
 Mental CLI is a local-first continuity layer. Git records what changed; Mental records where we left off, why a decision was made, and what is still in the air. After install, you write it on my behalf — I do not journal by hand.
 
 The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. Hosts load skills/mental-setup (install the CLI). The full procedure lives in skill/mental and is copied by `mental install` — not plugin-discovered. Native plugin does not start MCP. Do not start a plugin MCP server.
 
-If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH — including when `mental` is already there (that upgrades npm and recopies the skill). Run the three commands for this machine.
+If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). npm owns the executable; `mental install` only refreshes the copied skill/rule/config. Run the fresh-install block, or the Windows migration block for an existing 0.8.1-or-older install.
 
-The plugin is discovery. npm + the install command for this OS are the source of truth for the binary and the procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by install — not the plugin bootstrap.
+The plugin is discovery. npm is the source of truth for the executable; the install command is the source of truth for the copied procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by install — not the plugin bootstrap.
 
-Missing Mental must not block my coding task (fail open): try `npx --yes @balacode/mental` this turn, then tell me to install.
+Missing Mental must not block my coding task (fail open): continue the task, then tell me to run the fresh-install block. Never execute the package's .mjs file directly.
 
 After doctor, ask whether I want optional hooks or time tracking, and whether MCP is needed for this client. Give a one-liner for each, then wait — never run `mental option … on` until I say yes this turn.
 
@@ -195,10 +197,10 @@ No. Task boundaries, real decisions, residue in the air. Hooks stay **off** unti
 `park` encodes an interruption mid-hop. `handoff` is a planned close (journal + heartbeat). `pulse` is a compact cross-project overview. The cheap mid-chat reload is still `mental` / `heartbeat --json`.
 
 **How do I upgrade?**
-Same three commands as the [OS install block](docs/install.md#fast-path). Journals stay. The search index rebuilds on the next search. Skill copies refresh; the host plugin is a second channel — update it if `doctor` says it is behind. From a git checkout: `npm run mental -- install`. [Upgrade](docs/install.md#upgrade-already-installed).
+Run `npm i -g @balacode/mental`, `mental install`, then `mental doctor`. Existing Windows installs from Mental 0.8.1 or older run `mental-repair.cmd` once after npm updates. Journals stay. The search index rebuilds on the next search. Skill copies refresh; the host plugin is a second channel — update it if `doctor` says it is behind. From a git checkout: `npm run mental -- install`. [Upgrade](docs/install.md#upgrade-already-installed).
 
 **What if `mental` is not installed?**
-Agents try `npx --yes @balacode/mental`. If that fails they continue the coding task and mention the install block for this OS. Fail open.
+Agents continue the coding task and mention the three-command install block. They never execute a `.mjs` file directly. Fail open.
 
 **Where does data live?**
 `~/.mental` (never commit). Project `./.mental` only after `mental local`. Uninstall does not delete OKF unless you type `DELETE`. [Identity](docs/identity.md) · [Privacy](#privacy)

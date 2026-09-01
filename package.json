@@ -44,7 +44,7 @@
     "mental-repair": "bin/repair.mjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",

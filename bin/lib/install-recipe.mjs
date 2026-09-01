@@ -1,11 +1,10 @@
 /**
  * OS/shell install recipes. Source of truth for agent paste, setup skill, and CI.
  *
- * Windows PowerShell resolves `mental` to `mental.ps1` first (PATHEXT prepend).
- * Restricted policy or ShellExecute of a leftover / bin target opens `cli.mjs`
- * ("how do you want to open this file?"). After `npm i -g`, Windows PowerShell
- * and Windows Terminal (PowerShell profile) must use `npx --yes` or `mental.cmd`.
- * Never bare `mental` on Windows PowerShell.
+ * npm owns the command launchers on every platform. Fresh installs therefore
+ * use the same `mental` command everywhere. Mental 0.7/0.8 also wrote private
+ * launchers under `~/.local/bin`; existing Windows users run the distinct
+ * `mental-repair.cmd` once so those files cannot shadow npm.
  *
  * Windows Terminal is a host, not a shell. Profiles: PowerShell, cmd, Git Bash.
  */
@@ -72,21 +71,6 @@ export function packageSpecPath(root) {
  * @returns {{ command: string, args: string[], line: string }}
  */
 export function invokeArgv(cliArgs, opts = {}) {
-  const platform = opts.platform ?? "linux";
-  const shell = normalizeShell(opts.shell);
-  if (platform === "win32") {
-    if (shell === "powershell") {
-      const args = ["--yes", NAME, ...cliArgs];
-      return { command: "npx", args, line: ["npx", ...args].join(" ") };
-    }
-    if (shell === "cmd") {
-      return {
-        command: `${CMD}.cmd`,
-        args: cliArgs,
-        line: [`${CMD}.cmd`, ...cliArgs].join(" ").trim(),
-      };
-    }
-  }
   return { command: CMD, args: cliArgs, line: [CMD, ...cliArgs].join(" ").trim() };
 }
 
@@ -110,6 +94,16 @@ export function windowsAgentLines() {
 /** Agent paste / setup skill: macOS, Linux, Git Bash. */
 export function unixAgentLines() {
   return installLines({ platform: "linux", shell: "bash" });
+}
+
+/** One-time update path for users who may have Mental 0.7/0.8 launchers. */
+export function windowsUpgradeLines() {
+  return [
+    `npm i -g ${NAME}`,
+    `${CMD}-repair.cmd`,
+    `${CMD} install`,
+    `${CMD} doctor`,
+  ];
 }
 
 /**
@@ -172,6 +166,5 @@ export function allRecipes() {
 export function isUnsafeWindowsLine(line) {
   const t = String(line).trim();
   if (/\.mjs(\s|$)/i.test(t) && !/\bnode\b/i.test(t)) return true;
-  if (/^mental(\s|$)/.test(t)) return true;
   return false;
 }

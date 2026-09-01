@@ -17,6 +17,7 @@ import {
   unixAgentLines,
   win32SpawnCommand,
   windowsAgentLines,
+  windowsUpgradeLines,
 } from "../bin/lib/install-recipe.mjs";
 
 const ROOT = PKG_ROOT;
@@ -61,6 +62,7 @@ for (const [label, text] of [
   for (const line of [...windowsAgentLines(), ...unixAgentLines()]) {
     mustContain(label, text, line);
   }
+  for (const line of windowsUpgradeLines()) mustContain(label, text, line);
 }
 
 for (const r of allRecipes()) {
@@ -94,11 +96,28 @@ const env = {
 
 if (process.platform === "win32") {
   const cmd = join(prefix, "mental.cmd");
+  const repair = join(prefix, "mental-repair.cmd");
   if (!existsSync(cmd)) fail(`npm prefix missing mental.cmd at ${cmd}`);
+  if (!existsSync(repair)) fail(`npm prefix missing mental-repair.cmd at ${repair}`);
   const ver = run(cmd, ["--version"], { env });
   if (ver.stdout.trim() !== VERSION) fail(`mental.cmd version ${ver.stdout.trim()}`);
-  const npxInv = invokeArgv(["--version"], { platform: "win32", shell: "powershell" });
-  run(npxInv.command, ["--yes", "--package", packageSpecPath(PKG_ROOT), "mental", "--version"], { env });
+  run(repair, ["--json"], { env });
+  const powerShell = run(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", "mental --version"],
+    { env },
+  );
+  if (powerShell.stdout.trim() !== VERSION) {
+    fail(`PowerShell bare mental version ${powerShell.stdout.trim()}`);
+  }
+  const commandPrompt = run("cmd.exe", ["/d", "/s", "/c", "mental --version"], { env });
+  if (commandPrompt.stdout.trim() !== VERSION) {
+    fail(`cmd bare mental version ${commandPrompt.stdout.trim()}`);
+  }
+  const gitBash = run("bash.exe", ["--noprofile", "--norc", "-c", "mental --version"], { env });
+  if (gitBash.stdout.trim() !== VERSION) {
+    fail(`Git Bash bare mental version ${gitBash.stdout.trim()}`);
+  }
 } else {
   const bin = join(prefix, "bin", "mental");
   if (!existsSync(bin)) fail(`npm prefix missing mental at ${bin}`);

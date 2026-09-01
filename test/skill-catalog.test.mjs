@@ -103,8 +103,8 @@ test("README and install-doc agent pastes stay identical and skills-only", () =>
   assert.match(readme, /skill\/mental/);
   assert.match(readme, /Do not start a plugin MCP server/);
   assert.match(readme, /fail open/);
-  assert.match(readme, /npx --yes @balacode\/mental/);
-  assert.match(readme, /including when `mental` is already there/);
+  assert.match(readme, /mental-repair\.cmd/);
+  assert.match(readme, /npm owns the executable/);
   assert.match(readme, /Never run a \.mjs file/);
   assert.match(readme, /Do not install from a git clone or plugin cache/);
   assert.match(readme, /npm i -g @balacode\/mental/);

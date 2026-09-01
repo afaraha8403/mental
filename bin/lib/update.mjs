@@ -264,7 +264,7 @@ export function checkForUpdate(opts = {}) {
  * @param {string} [pkg]
  */
 export function updateHint(current, latest, pkg = NAME) {
-  return `CLI ${current}; npm ${latest}. Run \`mental install\` or \`npm i -g --force ${pkg}\`.`;
+  return `CLI ${current}; npm ${latest}. Run \`npm i -g ${pkg}\`, then \`mental install\`, then \`mental doctor\`. Existing Windows installs from Mental 0.8.1 or older run \`mental-repair.cmd\` once after npm updates.`;
 }
 
 /**
