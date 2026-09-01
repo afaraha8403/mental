@@ -38,7 +38,7 @@ function loadJson(file) {
 }
 
 function parseFrontmatter(md) {
-  const m = md.match(/^---\n([\s\S]*?)\n---\n/);
+  const m = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
   assert.ok(m, "SKILL.md must start with YAML frontmatter");
   /** @type {Record<string, unknown>} */
   const out = {};

@@ -12,7 +12,28 @@ permissions:
   contents: read
 
 jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - run: npm ci
+
+      - run: npm test
+
+      - name: Check OS install recipes and local prefix invoke
+        run: npm run check:install
+
   publish:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +47,8 @@ jobs:
       - run: npm ci
 
       - run: npm test
+
+      - run: npm run check:install
 
       - name: Check package version matches tag
         if: github.event_name == 'release'

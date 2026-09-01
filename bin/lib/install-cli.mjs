@@ -1,338 +1,281 @@
 /**
- * Put `mental` on PATH. Last `mental install` (or `npm i -g @balacode/mental`) wins.
+ * Legacy CLI launcher inspection and transactional repair.
  *
- * `npm install -g` this package into the active npm prefix, then expose the
- * same binary at `~/.local/bin/mental` (Unix) or `mental.cmd` + `mental.ps1`
- * (Windows) when that dir differs from the npm prefix. Windows also drops the
- * leftover extensionless `mental` → `cli.mjs` symlink 0.7.x wrote.
- *
- * Never spawn a `.mjs` file as argv0. Windows has no shebang and ShellExecutes
- * unknown extensions ("how do you want to open this file?").
+ * npm is the sole owner of current `mental` launchers. Mental 0.7/0.8 also
+ * wrote launchers under `~/.local/bin`; on Windows an extensionless symlink to
+ * `cli.mjs` can open the system file chooser before Node starts.
  */
 import {
-  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  readFileSync,
   readlinkSync,
-  symlinkSync,
-  unlinkSync,
-  writeFileSync,
+  renameSync,
+  rmSync,
 } from "node:fs";
-import { dirname, join, posix as posixPath, resolve, win32 as win32Path } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
-import { CMD, NAME, PKG_ROOT } from "./pkg.mjs";
+import { CMD, VERSION } from "./pkg.mjs";
+import { canonicalPath, sameIdentity } from "./git.mjs";
 
-function runNpm(args, env) {
-  return spawnSync("npm", args, { encoding: "utf8", env });
-}
+const OWNED_TARGET_RE =
+  /(?:^|[/\\])node_modules[/\\](?:@balacode[/\\]mental|@mental[/\\]cli)[/\\]bin[/\\]cli\.mjs$/i;
+const OWNED_BODY_RE =
+  /(?:@balacode[/\\]mental|@mental[/\\]cli)[/\\]bin[/\\]cli\.mjs/i;
+const RAW_CLI_MARKERS = [
+  "mental — local-first OKF continuity CLI",
+  'from "./lib/entry.mjs"',
+];
 
-function unlinkQuiet(dest) {
+function readSmall(file) {
   try {
-    unlinkSync(dest);
+    return readFileSync(file, "utf8").slice(0, 64 * 1024);
   } catch {
-    // missing
+    return "";
   }
 }
 
-/**
- * Path helpers for the given OS. Tests pass `win32` while running on Unix.
- *
- * @param {string} [platform]
- */
-export function pathFor(platform = process.platform) {
-  return platform === "win32" ? win32Path : posixPath;
+function samePath(a, b, platform = process.platform) {
+  const left = canonicalPath(a);
+  const right = canonicalPath(b);
+  if (sameIdentity(left, right)) return true;
+  return platform === "win32"
+    ? left.toLowerCase() === right.toLowerCase()
+    : left === right;
+}
+
+export function homeFromEnv(env = process.env, platform = process.platform) {
+  return platform === "win32"
+    ? env.USERPROFILE || env.HOME || null
+    : env.HOME || env.USERPROFILE || null;
 }
 
 /**
- * npm global bin directory. Unix is `<prefix>/bin`; Windows is the prefix.
- *
- * @param {string} prefix
- * @param {string} [platform]
+ * @param {string} file
+ * @returns {{ owned: boolean, unsafe: boolean, kind: string }}
  */
-export function npmGlobalBinDir(prefix, platform = process.platform) {
-  const p = pathFor(platform);
-  return platform === "win32" ? prefix : p.join(prefix, "bin");
-}
-
-/**
- * Path to the `mental` executable npm writes.
- * Windows: `<prefix>/mental.cmd` (never the raw `.mjs`).
- *
- * @param {string} prefix
- * @param {string} [cmd]
- * @param {string} [platform]
- */
-export function npmGlobalBinPath(prefix, cmd = CMD, platform = process.platform) {
-  const p = pathFor(platform);
-  const dir = npmGlobalBinDir(prefix, platform);
-  return platform === "win32" ? p.join(dir, `${cmd}.cmd`) : p.join(dir, cmd);
-}
-
-/**
- * User PATH shim Mental also writes (`~/.local/bin`).
- *
- * @param {string} home
- * @param {string} [cmd]
- * @param {string} [platform]
- */
-export function userPathBin(home, cmd = CMD, platform = process.platform) {
-  const p = pathFor(platform);
-  const dir = p.join(home, ".local", "bin");
-  return platform === "win32" ? p.join(dir, `${cmd}.cmd`) : p.join(dir, cmd);
-}
-
-/**
- * `cli.mjs` inside a global `node_modules` tree (`npm root -g`).
- *
- * @param {string} globalNodeModules
- * @param {string} [name]
- * @param {string} [platform]
- */
-export function npmGlobalCliScript(globalNodeModules, name = NAME, platform = process.platform) {
-  const p = pathFor(platform);
-  const segs = name.startsWith("@") ? name.split("/") : [name];
-  return p.join(globalNodeModules, ...segs, "bin", "cli.mjs");
-}
-
-/**
- * argv for invoking the CLI without ShellExecute of a `.mjs` file.
- *
- * @param {string} scriptPath
- * @param {string[]} [args]
- * @returns {{ command: string, args: string[] }}
- */
-export function cliInvoke(scriptPath, args = []) {
-  return { command: process.execPath, args: [scriptPath, ...args] };
-}
-
-/**
- * Spawn `node cli.mjs …`. Never uses the `.mjs` path as the executable.
- *
- * @param {string} scriptPath
- * @param {string[]} args
- * @param {import('node:child_process').SpawnSyncOptionsWithStringEncoding} [opts]
- */
-export function spawnCli(scriptPath, args, opts) {
-  const inv = cliInvoke(scriptPath, args);
-  return spawnSync(inv.command, inv.args, opts);
-}
-
-/**
- * cmd.exe shim body: run Node with the CLI script. `%*` forwards argv.
- *
- * @param {string} nodePath
- * @param {string} scriptPath
- */
-export function windowsCmdShim(nodePath, scriptPath) {
-  return `@echo off\r\n"${nodePath}" "${scriptPath}" %*\r\n`;
-}
-
-/**
- * PowerShell shim. Single-quoted paths so `$` / spaces stay literal.
- *
- * @param {string} nodePath
- * @param {string} scriptPath
- */
-export function windowsPs1Shim(nodePath, scriptPath) {
-  const n = String(nodePath).replace(/'/g, "''");
-  const s = String(scriptPath).replace(/'/g, "''");
-  return `#!/usr/bin/env pwsh\r\n& '${n}' '${s}' @args\r\n`;
-}
-
-/**
- * Git Bash shim. Forward slashes so `\n` in `node.exe` is not an escape.
- *
- * @param {string} nodePath
- * @param {string} scriptPath
- */
-export function windowsGitBashShim(nodePath, scriptPath) {
-  const n = bashSingleQuote(String(nodePath).replace(/\\/g, "/"));
-  const s = bashSingleQuote(String(scriptPath).replace(/\\/g, "/"));
-  return `#!/bin/sh\nexec ${n} ${s} "$@"\n`;
-}
-
-function bashSingleQuote(value) {
-  return `'${String(value).replace(/'/g, `'\\''`)}'`;
-}
-
-/**
- * Names 0.7.x left on PATH that Windows ShellExecutes as `cli.mjs`
- * (extensionless symlink, or a raw `.mjs` copy).
- *
- * @param {string} dir
- * @param {string} [cmd]
- */
-export function windowsUnsafeBinPaths(dir, cmd = CMD) {
-  return [join(dir, cmd), join(dir, `${cmd}.mjs`)];
-}
-
-/**
- * True when executing this path would open a `.mjs` (the Open With dialog).
- *
- * @param {string} dest
- */
-export function isWindowsMjsBin(dest) {
-  if (!dest) return false;
-  if (/\.mjs$/i.test(dest)) return existsSync(dest);
+export function classifyLegacyBin(file) {
+  let st;
   try {
-    const st = lstatSync(dest);
-    if (!st.isSymbolicLink()) return false;
-    return /\.mjs$/i.test(readlinkSync(dest));
+    st = lstatSync(file);
   } catch {
-    return false;
+    return { owned: false, unsafe: false, kind: "missing" };
   }
-}
-
-/**
- * Drop leftover `mental` → `cli.mjs` links so `mental` cannot ShellExecute.
- *
- * @param {string} dir
- * @param {string} [cmd]
- */
-export function clearWindowsMjsLeftovers(dir, cmd = CMD) {
-  for (const dest of windowsUnsafeBinPaths(dir, cmd)) {
-    if (isWindowsMjsBin(dest)) unlinkQuiet(dest);
-  }
-}
-
-/**
- * Write `mental.cmd` + `mental.ps1` + a Git Bash `mental` that all run Node.
- * Replaces the 0.7.x symlink to `cli.mjs`.
- *
- * @param {string} dir
- * @param {string} nodePath
- * @param {string} scriptPath
- * @param {string} [cmd]
- */
-export function writeWindowsShims(dir, nodePath, scriptPath, cmd = CMD) {
-  mkdirSync(dir, { recursive: true });
-  for (const dest of windowsUnsafeBinPaths(dir, cmd)) unlinkQuiet(dest);
-  unlinkQuiet(join(dir, `${cmd}.cmd`));
-  unlinkQuiet(join(dir, `${cmd}.ps1`));
-  writeFileSync(join(dir, `${cmd}.cmd`), windowsCmdShim(nodePath, scriptPath));
-  writeFileSync(join(dir, `${cmd}.ps1`), windowsPs1Shim(nodePath, scriptPath));
-  writeFileSync(join(dir, cmd), windowsGitBashShim(nodePath, scriptPath));
-}
-
-function npmGlobalPrefix(env) {
-  const r = runNpm(["prefix", "-g"], env);
-  const p = (r.stdout || "").trim();
-  return p || null;
-}
-
-function npmGlobalRoot(env) {
-  const r = runNpm(["root", "-g"], env);
-  const p = (r.stdout || "").trim();
-  return p || null;
-}
-
-function replaceWithUnixSymlink(dest, target) {
-  mkdirSync(dirname(dest), { recursive: true });
-  unlinkQuiet(dest);
-  symlinkSync(target, dest);
-  try {
-    chmodSync(dest, 0o755);
-  } catch {
-    // symlink chmod is a no-op on some systems
-  }
-}
-
-/**
- * @param {{ home: string, env?: NodeJS.ProcessEnv, spec?: string }} opts
- * @returns {{
- *   ok: boolean,
- *   bin: string | null,
- *   target: string | null,
- *   script: string,
- *   npm: boolean,
- *   message: string,
- * }}
- */
-export function installGlobalCli({ home, env = process.env, spec = PKG_ROOT }) {
-  const platform = process.platform;
-  const prefix = npmGlobalPrefix(env);
-  const npmBin = prefix ? npmGlobalBinPath(prefix, CMD, platform) : null;
-  // npm 11 refuses to replace an existing global bin (EEXIST). Last install
-  // wins: drop our previous `mental` link (often leftover @mental/cli).
-  if (npmBin) unlinkQuiet(npmBin);
-  if (platform === "win32" && prefix) unlinkQuiet(join(prefix, CMD));
-
-  const npm = runNpm(
-    [
-      "install",
-      "-g",
-      "--force",
-      "--no-fund",
-      "--no-audit",
-      "--no-package-lock",
-      spec,
-    ],
-    env,
-  );
-
-  const pathBin = userPathBin(home, CMD, platform);
-  const fallbackScript = join(PKG_ROOT, "bin", "cli.mjs");
-  const globalRoot = npmGlobalRoot(env);
-  const fromNpm = globalRoot ? npmGlobalCliScript(globalRoot, NAME, platform) : null;
-  const script = resolve(fromNpm && existsSync(fromNpm) ? fromNpm : fallbackScript);
-  const npmTarget = npmBin && existsSync(npmBin) ? resolve(npmBin) : null;
-
-  try {
-    if (platform === "win32") {
-      // ~/.local/bin *and* the npm prefix: 0.7.x left `mental` → cli.mjs
-      // in both, and PowerShell prefers that leftover over mental.cmd.
-      writeWindowsShims(dirname(pathBin), process.execPath, script);
-      if (prefix) writeWindowsShims(npmGlobalBinDir(prefix, platform), process.execPath, script);
-    } else {
-      const target = npmTarget || script;
-      if (resolve(pathBin) !== target) replaceWithUnixSymlink(pathBin, target);
-      else if (!existsSync(pathBin) && existsSync(target)) replaceWithUnixSymlink(pathBin, target);
-    }
-  } catch (err) {
-    const bin = npmTarget || (existsSync(pathBin) ? pathBin : null);
-    if (bin) {
-      return {
-        ok: true,
-        bin,
-        target: bin,
-        script,
-        npm: npm.status === 0,
-        message: `${CMD} → ${bin}`,
-      };
-    }
+  if (st.isSymbolicLink()) {
+    const target = readlinkSync(file);
+    const owned = OWNED_TARGET_RE.test(target.replace(/\\/g, "/"));
     return {
-      ok: false,
-      bin: pathBin,
-      target: npmTarget,
-      script,
-      npm: npm.status === 0,
-      message: err instanceof Error ? err.message : String(err),
+      owned,
+      unsafe: owned && /\.mjs$/i.test(target),
+      kind: owned ? "mental-symlink" : "unknown-symlink",
     };
   }
-
-  const bin = existsSync(pathBin) ? pathBin : npmTarget;
-  const ok = Boolean(bin);
-  const target = npmTarget || bin;
+  if (!st.isFile()) return { owned: false, unsafe: false, kind: "unknown" };
+  const body = readSmall(file);
+  const rawCli =
+    /\.mjs$/i.test(file) && RAW_CLI_MARKERS.every((marker) => body.includes(marker));
+  const pointsToMental = OWNED_BODY_RE.test(body.replace(/\\/g, "/"));
+  const shim =
+    pointsToMental &&
+    (/^@echo off\r?\n"[^"\r\n]*node(?:\.exe)?" "[^"\r\n]*cli\.mjs" %\*\r?\n?$/i.test(
+      body,
+    ) ||
+      /^#!\/usr\/bin\/env pwsh\r?\n& '[^'\r\n]*node(?:\.exe)?' '[^'\r\n]*cli\.mjs' @args\r?\n?$/i.test(
+        body,
+      ) ||
+      /^#!\/bin\/sh\nexec '[^'\n]*node(?:\.exe)?' '[^'\n]*cli\.mjs' "\$@"\n?$/i.test(
+        body,
+      ));
   return {
-    ok,
-    bin,
-    target,
-    script,
-    npm: npm.status === 0,
-    message: ok
-      ? `${CMD} → ${target}`
-      : (npm.stderr || npm.stdout || "failed to install CLI on PATH").trim(),
+    owned: rawCli || shim,
+    unsafe: rawCli || (/[/\\]cli\.mjs/i.test(body) && !/\bnode(?:\.exe)?\b/i.test(body)),
+    kind: rawCli ? "mental-mjs" : shim ? "mental-shim" : "unknown-file",
   };
 }
 
 /**
- * @param {string} dest
+ * Inspect only Mental's former private bin directory. The active npm bin can
+ * equal this directory on Unix; callers pass `excludeDir` to preserve it.
+ *
+ * @param {string} home
+ * @param {{ cmd?: string, excludeDir?: string | null, platform?: string }} [opts]
  */
-export function isMentalBin(dest) {
+export function inspectLegacyBins(home, opts = {}) {
+  const cmd = opts.cmd ?? CMD;
+  const dir = join(home, ".local", "bin");
+  if (opts.excludeDir && samePath(dir, opts.excludeDir, opts.platform)) {
+    return { dir, owned: [], unknown: [] };
+  }
+  const owned = [];
+  const unknown = [];
+  for (const name of [cmd, `${cmd}.cmd`, `${cmd}.ps1`, `${cmd}.mjs`]) {
+    const path = join(dir, name);
+    if (!existsSync(path)) {
+      try {
+        lstatSync(path);
+      } catch {
+        continue;
+      }
+    }
+    const found = { path, ...classifyLegacyBin(path) };
+    (found.owned ? owned : unknown).push(found);
+  }
+  return { dir, owned, unknown };
+}
+
+function inspectBinDir(dir, cmd = CMD) {
+  const owned = [];
+  const unknown = [];
+  for (const name of [cmd, `${cmd}.cmd`, `${cmd}.ps1`, `${cmd}.mjs`]) {
+    const path = join(dir, name);
+    try {
+      lstatSync(path);
+    } catch {
+      continue;
+    }
+    const found = { path, ...classifyLegacyBin(path) };
+    (found.owned ? owned : unknown).push(found);
+  }
+  return { dir, owned, unknown };
+}
+
+export function npmGlobalBinDir(prefix, platform = process.platform) {
+  return platform === "win32" ? prefix : join(prefix, "bin");
+}
+
+function runNpm(args, env, platform = process.platform) {
+  const command = platform === "win32" ? "npm.cmd" : "npm";
+  return spawnSync(command, args, {
+    encoding: "utf8",
+    env,
+    shell: platform === "win32",
+    windowsHide: platform === "win32",
+  });
+}
+
+export function npmGlobalPrefix(env = process.env, platform = process.platform) {
+  const r = runNpm(["prefix", "-g"], env, platform);
+  if (r.error || r.status !== 0) return null;
+  return (r.stdout || "").trim() || null;
+}
+
+export function pathHasDir(pathValue, dir, platform = process.platform) {
+  const parts = String(pathValue || "")
+    .split(delimiter)
+    .filter(Boolean);
+  return parts.some((part) => samePath(part.replace(/^"|"$/g, ""), dir, platform));
+}
+
+function defaultVerify(npmBinDir, env, platform) {
+  const executable = join(npmBinDir, platform === "win32" ? `${CMD}.cmd` : CMD);
+  const r = spawnSync(executable, ["--version"], {
+    encoding: "utf8",
+    env,
+    shell: platform === "win32",
+    windowsHide: platform === "win32",
+  });
+  return !r.error && r.status === 0 && (r.stdout || "").trim() === VERSION;
+}
+
+function stamp(now) {
+  return new Date(now).toISOString().replace(/[:.]/g, "-");
+}
+
+/**
+ * Quarantine fingerprinted legacy launchers, then verify npm's launcher.
+ * Verification failure restores every moved path.
+ *
+ * @param {{
+ *   home: string,
+ *   env?: NodeJS.ProcessEnv,
+ *   platform?: string,
+ *   npmBinDir?: string | null,
+ *   verify?: (npmBinDir: string) => boolean,
+ *   now?: number,
+ * }} opts
+ */
+export function repairLegacyBins(opts) {
+  const env = opts.env ?? process.env;
+  const platform = opts.platform ?? process.platform;
+  const prefix = opts.npmBinDir ? null : npmGlobalPrefix(env, platform);
+  const npmBinDir =
+    opts.npmBinDir ?? (prefix ? npmGlobalBinDir(prefix, platform) : null);
+  const base = {
+    npmBinDir,
+    moved: [],
+    restored: [],
+    unknown: [],
+    quarantine: null,
+  };
+  if (!npmBinDir) return { ...base, ok: false, reason: "npm-prefix-unavailable" };
+  if (!pathHasDir(env.PATH, npmBinDir, platform)) {
+    return { ...base, ok: false, reason: "npm-bin-not-on-path" };
+  }
+
+  const userScan = inspectLegacyBins(opts.home, {
+    excludeDir: npmBinDir,
+    platform,
+  });
+  const npmScan = platform !== "win32" || samePath(userScan.dir, npmBinDir, platform)
+    ? { owned: [], unknown: [] }
+    : inspectBinDir(npmBinDir);
+  const owned = [...userScan.owned, ...npmScan.owned];
+  base.unknown = userScan.unknown;
+  let quarantine = null;
   try {
-    return existsSync(dest) || lstatSync(dest).isSymbolicLink();
-  } catch {
-    return false;
+    if (owned.length) {
+      quarantine = join(
+        opts.home,
+        ".mental",
+        "migrations",
+        "cli-shims",
+        stamp(opts.now ?? Date.now()),
+      );
+      mkdirSync(quarantine, { recursive: true });
+      for (const [index, item] of owned.entries()) {
+        const name = item.path.slice(dirname(item.path).length + 1);
+        const to = join(quarantine, `${index + 1}-${name}`);
+        renameSync(item.path, to);
+        base.moved.push({ from: item.path, to, unsafe: item.unsafe, kind: item.kind });
+      }
+      base.quarantine = quarantine;
+    }
+  } catch (err) {
+    rollback(base);
+    return {
+      ...base,
+      ok: false,
+      reason: "quarantine-failed",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  const verified = (opts.verify ?? ((dir) => defaultVerify(dir, env, platform)))(
+    npmBinDir,
+  );
+  if (!verified) {
+    rollback(base);
+    return { ...base, ok: false, reason: "npm-launcher-failed" };
+  }
+  return { ...base, ok: true, reason: base.moved.length ? "repaired" : "clean" };
+}
+
+function rollback(result) {
+  for (const item of [...result.moved].reverse()) {
+    try {
+      if (!existsSync(item.from)) {
+        mkdirSync(dirname(item.from), { recursive: true });
+        renameSync(item.to, item.from);
+        result.restored.push(item.from);
+      }
+    } catch {
+      // Keep the quarantined file: never overwrite a path created mid-repair.
+    }
+  }
+  result.moved = result.moved.filter((item) => existsSync(item.to));
+  if (result.quarantine && result.moved.length === 0) {
+    rmSync(result.quarantine, { recursive: true, force: true });
+    result.quarantine = null;
   }
 }

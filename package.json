@@ -1,6 +1,6 @@
 {
   "name": "@balacode/mental",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Never reconstruct where you left off. Local-first continuity for coding agents — resume, decisions, and residue git cannot see. CLI, MCP, and Agent Skills.",
   "license": "MIT",
   "author": {
@@ -40,13 +40,16 @@
   ],
   "type": "module",
   "bin": {
-    "mental": "bin/cli.mjs"
+    "mental": "bin/cli.mjs",
+    "mental-repair": "bin/repair.mjs"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "check:install": "node scripts/check-install-recipe.mjs",
+    "test:release": "npm test && node scripts/check-install-recipe.mjs",
     "mental": "node bin/cli.mjs",
     "bench": "node scripts/bench.mjs"
   },

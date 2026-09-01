@@ -1,12 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveBundle, findLocalMental } from "../bin/lib/resolve.mjs";
-import { findGitRoot } from "../bin/lib/git.mjs";
+import { canonicalPath, findGitRoot } from "../bin/lib/git.mjs";
 import { loadBindings } from "../bin/lib/bindings.mjs";
 import { gitEnv, initRepo, tempHome } from "./helpers.mjs";
+
+test("canonicalPath is stable and stays a real filesystem path", () => {
+  const home = tempHome();
+  assert.equal(existsSync(home), true);
+  assert.equal(canonicalPath(home), home);
+  assert.doesNotMatch(home, /["<>|]/);
+});
 
 test("MENTAL_DIR wins over walk-up .mental and git binding", () => {
   const home = tempHome();

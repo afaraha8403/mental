@@ -89,7 +89,7 @@ test("Track skill defines renderer-safe questions and plain-text fallback", () =
 });
 
 function agentPaste(md) {
-  const m = md.match(/#{2,} Paste this into your agent[\s\S]*?```text\n([\s\S]*?)```/);
+  const m = md.match(/#{2,} Paste this into your agent[\s\S]*?```text\r?\n([\s\S]*?)```/);
   assert.ok(m, "missing agent paste fence");
   return m[1];
 }
@@ -103,11 +103,13 @@ test("README and install-doc agent pastes stay identical and skills-only", () =>
   assert.match(readme, /skill\/mental/);
   assert.match(readme, /Do not start a plugin MCP server/);
   assert.match(readme, /fail open/);
-  assert.match(readme, /npx @balacode\/mental/);
-  assert.match(readme, /including when `mental` is already there/);
+  assert.match(readme, /mental-repair\.cmd/);
+  assert.match(readme, /npm owns the executable/);
   assert.match(readme, /Never run a \.mjs file/);
   assert.match(readme, /Do not install from a git clone or plugin cache/);
   assert.match(readme, /npm i -g @balacode\/mental/);
+  assert.match(readme, /Fresh install \(PowerShell, cmd, Windows Terminal, Git Bash, macOS, Linux\)/);
+  assert.match(readme, /Existing Windows install from Mental 0\.8\.1 or older/);
   assert.doesNotMatch(readme, /cli\.mjs/);
   assert.doesNotMatch(readme, /Install Mental CLI from https:\/\//);
   assert.doesNotMatch(readme, /do not duplicate setup/);

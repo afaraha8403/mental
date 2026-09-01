@@ -2,32 +2,17 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
-  lstatSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, posix as posixPath, win32 as win32Path } from "node:path";
+import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
 import { ensureMentalExcluded, MENTAL_IGNORE_LINE } from "../bin/lib/ignore.mjs";
 import { defaultExcludesFile } from "../bin/lib/ignore.mjs";
 import { skillSourceDir } from "../bin/lib/install-skills.mjs";
-import {
-  cliInvoke,
-  clearWindowsMjsLeftovers,
-  isWindowsMjsBin,
-  npmGlobalBinPath,
-  npmGlobalCliScript,
-  userPathBin,
-  windowsCmdShim,
-  windowsGitBashShim,
-  windowsPs1Shim,
-  writeWindowsShims,
-} from "../bin/lib/install-cli.mjs";
 
 const BALAKIT_MENTAL_RULE = `---
 description: Project continuity — derive current state before substantive work.
@@ -55,16 +40,11 @@ test("mental install --json copies skill + rule and creates ~/.mental skeleton",
   assert.equal(existsSync(join(home, ".mental", "index.md")), true);
   assert.match(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8"), /BEGIN mental/);
   assert.doesNotMatch(readFileSync(join(home, ".claude", "skills", "mental", "SKILL.md"), "utf8"), /balakit/i);
-  assert.match(body.data.cli.script, /cli\.mjs$/);
-  assert.doesNotMatch(body.data.cli.bin, /\.mjs$/);
-  const bin = join(home, ".local", "bin", "mental");
-  assert.equal(existsSync(bin), true, "install should put mental on ~/.local/bin");
-  const ver = spawnSync(bin, ["--version"], { encoding: "utf8", env: gitEnv(home) });
-  assert.equal(ver.status, 0, ver.stderr || ver.stdout);
-  assert.match(ver.stdout.trim(), /^\d+\.\d+\.\d+$/);
+  assert.equal(body.data.cli, undefined, "npm, not mental install, owns the CLI executable");
+  assert.equal(existsSync(join(home, ".local", "bin", "mental")), false);
 });
 
-test("install overwrites an existing global mental bin", () => {
+test("install never overwrites an unknown PATH command", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   const prefixBin = join(home, ".local", "bin");
@@ -74,14 +54,7 @@ test("install overwrites an existing global mental bin", () => {
   assert.equal(r.status, 0, r.stderr || r.stdout);
   const body = JSON.parse(r.stdout);
   assert.equal(body.ok, true);
-  assert.equal(body.data.cli.npm, true, JSON.stringify(body.data.cli));
-  const ver = spawnSync(join(home, ".local", "bin", "mental"), ["--version"], {
-    encoding: "utf8",
-    env: gitEnv(home),
-  });
-  assert.equal(ver.status, 0, ver.stderr || ver.stdout);
-  assert.match(ver.stdout.trim(), /^\d+\.\d+\.\d+$/);
-  assert.doesNotMatch(ver.stdout, /leftover/);
+  assert.equal(readFileSync(join(prefixBin, "mental"), "utf8"), "#!/bin/sh\necho leftover\n");
 });
 
 test("mental install follows a symlink skill dir (claude → agents)", () => {
@@ -235,88 +208,3 @@ test("install --project vendors the procedure skill into the repo", () => {
   assert.equal(existsSync(join(root, ".github", "skills", "mental-setup")), false);
 });
 
-test("Windows PATH bins are mental.cmd, never a raw .mjs", () => {
-  const prefix = "C:\\Users\\a\\AppData\\Roaming\\npm";
-  const home = "C:\\Users\\a";
-  const modules = win32Path.join(prefix, "node_modules");
-  assert.equal(npmGlobalBinPath(prefix, "mental", "win32"), win32Path.join(prefix, "mental.cmd"));
-  assert.equal(
-    userPathBin(home, "mental", "win32"),
-    win32Path.join(home, ".local", "bin", "mental.cmd"),
-  );
-  assert.equal(
-    npmGlobalCliScript(modules, "@balacode/mental", "win32"),
-    win32Path.join(modules, "@balacode", "mental", "bin", "cli.mjs"),
-  );
-  assert.equal(npmGlobalBinPath("/usr/local", "mental", "linux"), posixPath.join("/usr/local", "bin", "mental"));
-  assert.equal(userPathBin("/home/a", "mental", "linux"), posixPath.join("/home/a", ".local", "bin", "mental"));
-});
-
-test("CLI invoke always runs node, never the .mjs as argv0", () => {
-  const inv = cliInvoke("/tmp/cli.mjs", ["install", "--json"]);
-  assert.equal(inv.command, process.execPath);
-  assert.equal(inv.args[0], "/tmp/cli.mjs");
-  assert.deepEqual(inv.args.slice(1), ["install", "--json"]);
-  assert.doesNotMatch(inv.command, /\.mjs$/i);
-});
-
-test("Windows cmd shim forwards argv through node", () => {
-  const body = windowsCmdShim(
-    "C:\\Program Files\\nodejs\\node.exe",
-    "C:\\npm\\node_modules\\@balacode\\mental\\bin\\cli.mjs",
-  );
-  assert.match(body, /^@echo off/i);
-  assert.match(body, /node\.exe/);
-  assert.match(body, /cli\.mjs/);
-  assert.match(body, /%\*/);
-  assert.doesNotMatch(body, /^[^"\r\n]*cli\.mjs/m);
-});
-
-test("Windows PowerShell shim calls node, not the .mjs as argv0", () => {
-  const body = windowsPs1Shim(
-    "C:\\Program Files\\nodejs\\node.exe",
-    "C:\\npm\\node_modules\\@balacode\\mental\\bin\\cli.mjs",
-  );
-  assert.match(body, /pwsh/);
-  assert.match(body, /node\.exe/);
-  assert.match(body, /@args/);
-  assert.doesNotMatch(body, /^[^'\r\n]*cli\.mjs/m);
-});
-
-test("Windows Git Bash shim uses forward slashes so \\n is not an escape", () => {
-  const body = windowsGitBashShim(
-    "C:\\Program Files\\nodejs\\node.exe",
-    "C:\\npm\\node_modules\\@balacode\\mental\\bin\\cli.mjs",
-  );
-  assert.match(body, /^#!/);
-  assert.match(body, /node\.exe/);
-  assert.doesNotMatch(body, /\\n/);
-  assert.match(body, /C:\/Program Files\/nodejs\/node\.exe/);
-});
-
-test("leftover mental → cli.mjs symlink is treated as an unsafe Windows bin", () => {
-  const dir = mkdtempSync(join(tmpdir(), "mental-win-"));
-  const script = join(dir, "cli.mjs");
-  const bare = join(dir, "mental");
-  writeFileSync(script, "export {}\n");
-  symlinkSync(script, bare);
-  assert.equal(isWindowsMjsBin(bare), true);
-  assert.equal(isWindowsMjsBin(script), true);
-  assert.equal(isWindowsMjsBin(join(dir, "mental.cmd")), false);
-  clearWindowsMjsLeftovers(dir, "mental");
-  assert.equal(existsSync(bare), false);
-  assert.equal(existsSync(script), true);
-});
-
-test("writeWindowsShims replaces a leftover mjs symlink with node shims", () => {
-  const dir = mkdtempSync(join(tmpdir(), "mental-win-"));
-  const script = join(dir, "cli.mjs");
-  writeFileSync(script, "export {}\n");
-  symlinkSync(script, join(dir, "mental"));
-  writeWindowsShims(dir, "/usr/bin/node", script, "mental");
-  assert.equal(lstatSync(join(dir, "mental")).isSymbolicLink(), false);
-  assert.match(readFileSync(join(dir, "mental"), "utf8"), /^#!/);
-  assert.match(readFileSync(join(dir, "mental.cmd"), "utf8"), /usr\/bin\/node/);
-  assert.match(readFileSync(join(dir, "mental.ps1"), "utf8"), /@args/);
-  assert.doesNotMatch(readFileSync(join(dir, "mental"), "utf8"), /cli\.mjs$/m);
-});

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { findMentalPlugin, hostPluginChecks, skipHostPluginCheck } from "../bin/lib/host-plugins.mjs";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
 import { skillMetadataVersion } from "../bin/lib/lockstep.mjs";
@@ -112,17 +112,23 @@ test("doctor reports claude-plugin when a fake claude is on PATH", () => {
   const { root } = initRepo(home);
   const bin = join(home, "bin");
   mkdirSync(bin, { recursive: true });
-  writeFileSync(
-    join(bin, "claude"),
-    `#!/usr/bin/env node
+  const stub = `#!/usr/bin/env node
 if (process.argv.includes("--json")) {
   process.stdout.write(JSON.stringify([{ id: "mental@mental", version: "0.1.0" }]));
 }
-`,
-  );
-  chmodSync(join(bin, "claude"), 0o755);
+`;
+  if (process.platform === "win32") {
+    writeFileSync(join(bin, "claude.js"), stub);
+    writeFileSync(
+      join(bin, "claude.cmd"),
+      `@echo off\r\n"${process.execPath}" "%~dp0claude.js" %*\r\n`,
+    );
+  } else {
+    writeFileSync(join(bin, "claude"), stub);
+    chmodSync(join(bin, "claude"), 0o755);
+  }
   const r = mental(home, root, ["doctor", "--json"], {
-    PATH: `${bin}:${process.env.PATH || "/usr/bin"}`,
+    PATH: `${bin}${delimiter}${process.env.PATH || "/usr/bin"}`,
     MENTAL_SKIP_HOST_PLUGIN_CHECK: "0",
     MENTAL_SKIP_UPDATE_CHECK: "1",
   });

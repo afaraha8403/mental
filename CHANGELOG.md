@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-01
+
+### Features
+
+- `mental-repair` provides a one-time, unshadowed migration path for existing Windows installs. It fingerprints Mental 0.7/0.8 launchers under `~/.local/bin`, quarantines only owned files, preserves unknown paths, verifies npm's current launcher, and restores the quarantine if verification fails.
+
+### Changes
+
+- npm is the sole owner of the `mental` executable. Fresh installs use the same `npm i -g`, `mental install`, and `mental doctor` commands in PowerShell, cmd.exe, Windows Terminal, Git Bash, macOS, and Linux. `mental install` now installs skills/rules/config only; it no longer self-updates, performs a second global npm install, or writes duplicate PATH launchers. Existing Windows installs from 0.8.1 or older run `mental-repair.cmd` once. Strict PowerShell policies can use npm's `.cmd` launchers.
+
+- Node.js 22.13 or newer is now required, matching the unflagged `node:sqlite` runtime used by Mental Track.
+
+### Fixes
+
+- CI and the Release workflow run the full tests plus install recipes on Ubuntu, macOS, and Windows before publish. Windows verifies npm's `.cmd` launcher and bare `mental` from PowerShell, cmd.exe, and Git Bash. Dirty-profile tests cover rollback-safe 0.7/0.8 launcher repair. Paths canonicalize via native realpath; export `--out` walks NTFS identity so an 8.3 short-name destination inside the worktree is still refused. Lockstep file keys remain POSIX.
+
 ## [0.8.1] - 2026-08-31
 
 ### Fixes

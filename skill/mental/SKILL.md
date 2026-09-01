@@ -11,10 +11,10 @@ description: >-
   questions, ingesting a transcript into residue (never storing the
   transcript), or recording a decision that git cannot explain.
 license: MIT
-compatibility: Requires Node.js >=18 and git. Agent Plugins 1.0.0 + Agent Skills. MCP is optional (`mental serve` / `mental install --mcp`); the plugin does not start it.
+compatibility: Requires Node.js >=22.13 and git. Agent Plugins 1.0.0 + Agent Skills. MCP is optional (`mental serve` / `mental install --mcp`); the plugin does not start it.
 metadata:
   author: Ali Farahat
-  version: "0.8.1"
+  version: "0.9.0"
   tags: continuity,coding-agents,mcp,agent-skills,cursor,claude-code,copilot,journal,decisions,handoff,local-first
 user-invocable: true
 disable-model-invocation: false
@@ -56,7 +56,7 @@ about observed versus inferred information.
 **OKF markdown is the source of truth.** Agents must call the CLI with `--json`.
 Do not grep `.mental`, `~/.mental`, or YAML frontmatter. Humans on a TTY can run `mental` with no args for a one-shot heartbeat (resume, last outcome, git, residue, open decisions). Agents use `mental heartbeat --json` for the same cheap reload — not `status` unless they need notes. Do not call `pulse` every turn or dump journals into context.
 
-If the JSON envelope includes `update` (`current`, `latest`, `hint`), or the user asks to upgrade, tell the user **once this session** to run `npm i -g @balacode/mental` then `mental install` then `mental doctor`. That upgrades the published CLI when npm is ahead and recopies the skill and rule. Journals stay. The search index rebuilds on the next search. Do not re-run the host plugin marketplace unless doctor says the plugin is behind. Do not block work. Do not put this on the Mental receipt.
+If the JSON envelope includes `update` (`current`, `latest`, `hint`), or the user asks to upgrade, tell the user **once this session** to run `npm i -g @balacode/mental`, then `mental install`, then `mental doctor`. npm alone owns the executable; install recopies the skill and rule. Existing Windows installs from Mental 0.8.1 or older first run `mental-repair.cmd` after npm updates the package. If PowerShell blocks npm-generated `.ps1` launchers, use `npm.cmd` / `mental.cmd`; never change execution policy for the user. Journals stay. The search index rebuilds on the next search. Do not re-run the host plugin marketplace unless doctor says the plugin is behind. Do not block work. Do not put this on the Mental receipt.
 
 If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill (optional hours). When tracking is on, `mental track start --via <host>` if `runningCount` is 0 (start twice is ensure-running; new chat/host is not a new interval). Generate short internal and customer-ready title/body from current context; regenerate customer copy at park/handoff/journal on that same command. Billable defaults to wall. Ask only when client identity, billable treatment, or safe wording is genuinely ambiguous. Renderer-safe question = one plain-text draft prompt, 2–3 short single-select options, `(Recommended)` in the first label, no rich UI dependency; use the host's structured question tool or numbered text fallback. If tracking is off, do not enable it. Usage "Time tracking is off for this project" is not permission to turn it on. After `mental install` or `mental doctor`, ask the user about optionals (`needsConsent: true`) with a one-liner each: hooks (session-start status), MCP (`mental serve` for clients that cannot shell the CLI), time tracking (per-project sit-down clock). Check whether MCP is needed — skip it if this client can run `mental`. Never run `mental option … on` or `mental install --hooks|--mcp|--track` until the user says yes **this turn**.
 
@@ -141,8 +141,9 @@ not this repo, so links would 404. The CLI tool card already has the path.
 
 Mix writes and a read in one block if both happened. Never invent Mental activity.
 
-If `mental` is not on PATH, try `npx @balacode/mental …`. If that fails, continue
-the user's coding task and mention `npm i -g @balacode/mental` then `mental install`.
+If `mental` is not on PATH, continue the user's coding task and mention the
+three-command npm/install/doctor block. Existing Windows 0.8.1-or-older installs
+run `mental-repair.cmd` once. Never execute a `.mjs` file directly.
 
 `where` reports `{ root, id, mode, reason, gitRoot }` and may include `imported`
 and `indexed` when a leftover project `./.mental/` was ingested into the home

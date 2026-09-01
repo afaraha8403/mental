@@ -4,8 +4,8 @@
  * Origin is a *hint* for Mental bindings, never the id. Canonical form is
  * `host/owner/repo` (no scheme, no `.git`, no userinfo).
  */
-import { existsSync, statSync } from "node:fs";
-import { dirname, join, parse, resolve } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, parse, relative, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 /**
@@ -75,22 +75,119 @@ export function normalizeOrigin(input) {
 }
 
 /**
- * Walk from `cwd` to the filesystem root looking for `.git` (dir or file).
- * Prefer `git rev-parse --show-toplevel` when git works (correct for worktrees).
+ * Drop the Windows `\\?\` device prefix `GetFinalPathNameByHandle` adds.
+ * @param {string} p
+ */
+function stripWin32DevicePrefix(p) {
+  if (p.startsWith("\\\\?\\UNC\\")) return `\\\\${p.slice(8)}`;
+  if (p.startsWith("\\\\?\\")) return p.slice(4);
+  return p;
+}
+
+/** Reject cmd-FOR junk (`D:\"C:\Users\..."`) and other non-paths. */
+function isSaneAbs(p) {
+  if (!p || /["<>|*?]/.test(p)) return false;
+  if (process.platform === "win32") return /^[A-Za-z]:[\\/]/.test(p) || p.startsWith("\\\\");
+  return p.startsWith("/");
+}
+
+/**
+ * Native realpath: POSIX realpath(3), Windows GetFinalPathNameByHandle
+ * (expands 8.3). Never use `cmd for %~fI` — Node's quoting of `/c` pollutes
+ * the result (`D:\"C:\Users\RUNNER~1\..."`).
  *
- * @param {string} cwd
- * @param {{ env?: NodeJS.ProcessEnv }} [opts]
+ * @param {string} p
  * @returns {string | null}
  */
-export function findGitRoot(cwd, { env = process.env } = {}) {
-  const start = resolve(cwd);
-  if (gitAvailable()) {
-    const r = runGit(start, ["rev-parse", "--show-toplevel"], { env });
-    if (r.status === 0) {
-      const top = (r.stdout || "").trim();
-      if (top) return resolve(top);
-    }
+function nativeRealpath(p) {
+  const impl = typeof realpathSync.native === "function" ? realpathSync.native : realpathSync;
+  try {
+    const out = stripWin32DevicePrefix(impl(p));
+    return isSaneAbs(out) ? out : null;
+  } catch {
+    return null;
   }
+}
+
+/**
+ * Stable absolute path. macOS `/var` → `/private/var`. Windows 8.3
+ * (`RUNNER~1`) → long name so string equality and `path.relative` agree
+ * with `git rev-parse --show-toplevel`.
+ *
+ * @param {string} input
+ * @returns {string}
+ */
+export function canonicalPath(input) {
+  const abs = resolve(String(input));
+  const hit = nativeRealpath(abs);
+  if (hit) return hit;
+  try {
+    const js = realpathSync(abs);
+    if (isSaneAbs(js)) return js;
+  } catch {
+    // dest may not exist yet (export --out); canonicalize the parent
+  }
+  const parent = nativeRealpath(dirname(abs));
+  if (parent) return join(parent, basename(abs));
+  try {
+    const jsParent = realpathSync(dirname(abs));
+    if (isSaneAbs(jsParent)) return join(jsParent, basename(abs));
+  } catch {
+    // keep resolve()
+  }
+  return abs;
+}
+
+/**
+ * True when both paths are the same directory/file (8.3 vs long on NTFS).
+ * `ino === 0` is treated as unknown (some Windows volumes).
+ *
+ * @param {string} a
+ * @param {string} b
+ */
+export function sameIdentity(a, b) {
+  try {
+    const sa = statSync(a);
+    const sb = statSync(b);
+    return Number(sa.ino) !== 0 && sa.dev === sb.dev && sa.ino === sb.ino;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when `child` is `parent` or a descendant. Uses `path.relative` first,
+ * then NTFS identity walk so `RUNNER~1` vs `runneradmin` still refuses
+ * export `--out` inside the worktree.
+ *
+ * @param {string} parent
+ * @param {string} child
+ */
+export function isInsideDir(parent, child) {
+  const rel = relative(parent, child);
+  if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) return true;
+  let dir = child;
+  try {
+    statSync(dir);
+  } catch {
+    dir = dirname(dir);
+  }
+  dir = resolve(dir);
+  const parentAbs = resolve(parent);
+  const { root } = parse(dir);
+  while (true) {
+    if (sameIdentity(parentAbs, dir)) return true;
+    if (dir === root || dirname(dir) === dir) return false;
+    dir = dirname(dir);
+  }
+}
+
+/**
+ * Walk cwd → filesystem root for `.git` (dir or file).
+ * @param {string} start
+ * @returns {string | null}
+ */
+function walkUpGit(start) {
   let dir = start;
   const { root } = parse(dir);
   while (true) {
@@ -108,6 +205,33 @@ export function findGitRoot(cwd, { env = process.env } = {}) {
     if (parent === dir) return null;
     dir = parent;
   }
+}
+
+/**
+ * Walk from `cwd` to the filesystem root looking for `.git` (dir or file).
+ * Prefer `git rev-parse --show-toplevel` when git works (correct for worktrees).
+ * When walk-up and git name the same directory, keep walk-up's spelling so
+ * 8.3 cwd stays 8.3 if native realpath did not expand it.
+ *
+ * @param {string} cwd
+ * @param {{ env?: NodeJS.ProcessEnv }} [opts]
+ * @returns {string | null}
+ */
+export function findGitRoot(cwd, { env = process.env } = {}) {
+  const start = resolve(cwd);
+  const walked = walkUpGit(start);
+  if (gitAvailable()) {
+    const r = runGit(start, ["rev-parse", "--show-toplevel"], { env });
+    if (r.status === 0) {
+      const top = (r.stdout || "").trim();
+      if (top) {
+        const gitTop = canonicalPath(top);
+        if (walked && sameIdentity(walked, gitTop)) return canonicalPath(walked);
+        return gitTop;
+      }
+    }
+  }
+  return walked ? canonicalPath(walked) : null;
 }
 
 /**

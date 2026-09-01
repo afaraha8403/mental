@@ -71,6 +71,9 @@ function spawnJson(opts) {
       encoding: "utf8",
       env: opts.env,
       timeout: opts.timeoutMs ?? HOST_PLUGIN_TIMEOUT_MS,
+      // win32: host CLIs are `.cmd`; CreateProcess will not run them bare.
+      shell: process.platform === "win32",
+      windowsHide: process.platform === "win32",
     });
     if (r.status !== 0 || r.error) return { ok: false, parsed: null };
     const text = (r.stdout || "").trim();
