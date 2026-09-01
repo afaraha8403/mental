@@ -8,19 +8,57 @@ Node.js **>= 18**. Zero runtime npm dependencies.
 
 ## Fast path
 
+**Windows PowerShell** (Windows Terminal default, Windows PowerShell 5.1 / pwsh). Do not run bare `mental` here — PowerShell picks `mental.ps1` and Windows may ask what to open `cli.mjs` with.
+
+```powershell
+npm i -g @balacode/mental
+npx --yes @balacode/mental install
+npx --yes @balacode/mental doctor
+```
+
+**Windows cmd.exe** (Command Prompt, or a Command Prompt profile in Windows Terminal):
+
+```bat
+npm i -g @balacode/mental
+mental.cmd install
+mental.cmd doctor
+```
+
+**macOS, Linux, and Git Bash** (bash, zsh, sh):
+
 ```bash
 npm i -g @balacode/mental
 mental install
 mental doctor
 ```
 
-`mental install` puts `mental` on PATH (`~/.local/bin/mental` on Unix; npm's `mental.cmd` on Windows), copies the skill and a tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton.
+`mental install` (or the `npx` / `mental.cmd` form above) puts `mental` on PATH (`~/.local/bin/mental` on Unix; npm's `mental.cmd` on Windows), copies the skill and a tiny always-on rule into `~/.claude`, `~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental` skeleton.
 
 That skill is what makes agents journal, decide, and record residue **for you**. You do not keep the log by hand. It does **not** turn on hooks or MCP, and it does not delete journals.
 
 ## Upgrade (already installed)
 
 Journals, decisions, notes, and identity stay. Nothing to migrate.
+
+Windows PowerShell / Windows Terminal (PowerShell profile):
+
+```powershell
+npm i -g @balacode/mental
+npx --yes @balacode/mental install
+npx --yes @balacode/mental doctor
+npx --yes @balacode/mental --version
+```
+
+Windows cmd.exe:
+
+```bat
+npm i -g @balacode/mental
+mental.cmd install
+mental.cmd doctor
+mental.cmd --version
+```
+
+macOS, Linux, Git Bash:
 
 ```bash
 npm i -g @balacode/mental
@@ -34,7 +72,7 @@ For a published install, `mental --version` should match `npm view @balacode/men
 What that does:
 
 1. `npm i -g` puts the published CLI on PATH (last install wins; npm 11 overwrites the existing bin).
-2. `mental install` from a published install also self-upgrades when npm is ahead, then recopies the skill and always-on rule so agents match this CLI. It does **not** turn on hooks, MCP, or time tracking. It does **not** refresh the host plugin cache.
+2. `mental install` (Windows PowerShell: `npx --yes @balacode/mental install`) from a published install also self-upgrades when npm is ahead, then recopies the skill and always-on rule so agents match this CLI. It does **not** turn on hooks, MCP, or time tracking. It does **not** refresh the host plugin cache.
 3. The derived search index (`${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite`) rebuilds on the next search or write when the index version changes. `mental reindex` is optional.
 4. `mental doctor` reports PATH, npm lag, copied-skill lag, and host-plugin lag.
 
@@ -60,6 +98,15 @@ Copy the block into Cursor, Claude Code, Copilot, Codex, or any other coding age
 ```text
 Install Mental CLI with npm. Do not clone the GitHub repo to install. Do not install from a git clone or plugin cache. Never run a .mjs file — Windows will ask what to open it with.
 
+Pick the block for this machine. Windows Terminal is a host — match the profile (PowerShell vs cmd vs Git Bash).
+
+Windows (PowerShell, cmd, Windows Terminal):
+  npm i -g @balacode/mental
+  npx --yes @balacode/mental install
+  npx --yes @balacode/mental doctor
+  (cmd.exe may use mental.cmd instead of npx. Never run bare mental in PowerShell.)
+
+macOS and Linux (bash, zsh, sh) and Git Bash:
   npm i -g @balacode/mental
   mental install
   mental doctor
@@ -68,11 +115,11 @@ Mental CLI is a local-first continuity layer. Git records what changed; Mental r
 
 The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specification): plugin.json at the repo root, skills-only. Hosts load skills/mental-setup (install the CLI). The full procedure lives in skill/mental and is copied by `mental install` — not plugin-discovered. Native plugin does not start MCP. Do not start a plugin MCP server.
 
-If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH — including when `mental` is already there (that upgrades npm and recopies the skill). Run the three commands above.
+If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). Then always put the CLI on PATH — including when `mental` is already there (that upgrades npm and recopies the skill). Run the three commands for this machine.
 
-The plugin is discovery. npm + `mental install` are the source of truth for the binary and the procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by `mental install` — not the plugin bootstrap.
+The plugin is discovery. npm + the install command for this OS are the source of truth for the binary and the procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by install — not the plugin bootstrap.
 
-Missing Mental must not block my coding task (fail open): try `npx @balacode/mental` this turn, then tell me to install.
+Missing Mental must not block my coding task (fail open): try `npx --yes @balacode/mental` this turn, then tell me to install.
 
 After doctor, ask whether I want optional hooks or time tracking, and whether MCP is needed for this client. Give a one-liner for each, then wait — never run `mental option … on` until I say yes this turn.
 

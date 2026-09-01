@@ -29,50 +29,61 @@ when_to_use: |
 The Mental **plugin** is discovery only. It does not run Mental CLI. The product is
 the CLI on PATH.
 
-## If `mental` is already on PATH
+Pick the block for this machine. Windows Terminal is a host — match the profile
+(PowerShell vs cmd vs Git Bash). Never execute a `.mjs` file as a command
+(Windows shows "how do you want to open this file?"). Do not install from a git clone or plugin cache.
 
-Daily work: follow the **Mental** skill (copied by `mental install` into
+## Windows (PowerShell, cmd, Windows Terminal)
+
+PowerShell resolves bare `mental` to `mental.ps1` and can ShellExecute a `.mjs` file.
+Use `npx --yes` (works in PowerShell, cmd, and Windows Terminal). cmd.exe may
+use `mental.cmd` instead. Never run bare `mental` in PowerShell.
+
+```powershell
+npm i -g @balacode/mental
+npx --yes @balacode/mental install
+npx --yes @balacode/mental doctor
+```
+
+Daily invoke on this machine: `npx --yes @balacode/mental … --json` or
+`mental.cmd … --json`.
+
+## macOS and Linux (bash, zsh, sh) and Git Bash
+
+```bash
+npm i -g @balacode/mental
+mental install
+mental doctor
+```
+
+Daily invoke: `mental … --json`.
+
+## If `mental` is already current
+
+Daily work: follow the **Mental** skill (copied by install into
 `~/.cursor/skills/mental`, `~/.claude/skills/mental`,
-`~/.agents/skills/mental`). Use `mental … --json`. Stop.
+`~/.agents/skills/mental`). Use the daily invoke for this OS. Stop.
 
 Upgrade (the user asked, JSON includes `update`, or doctor says the CLI / copied
-skill / host plugin is behind):
+skill / host plugin is behind): run the three commands for this OS again.
+Journals stay. Do not re-run this client's plugin marketplace unless doctor says
+the host plugin is behind. Then follow the Mental skill.
 
-```bash
-npm i -g @balacode/mental
-mental install
-mental doctor
-```
+## If the CLI is missing
 
-`mental install` upgrades the published CLI when npm is ahead, then recopies the
-skill and rule. Journals stay. Do not re-run this client's plugin marketplace
-unless doctor says the host plugin is behind. Then follow the Mental skill.
-
-Do not install from a git clone or plugin cache. `npm i -g @balacode/mental` is
-the install path. Never execute a `.mjs` file as a command (Windows shows "how
-do you want to open this file?").
-
-## If `mental` is missing
-
-1. Try `npx @balacode/mental where --json`. If that works, continue with npx
-   for this turn and tell the user to install. Never run a `.mjs` file as a
+1. Try `npx --yes @balacode/mental where --json`. If that works, continue with
+   npx for this turn and tell the user to install. Never run a `.mjs` file as a
    command.
-2. Tell the user to run:
-
-```bash
-npm i -g @balacode/mental
-mental install
-mental doctor
-```
-
+2. Run the three commands for this OS (Windows `npx --yes` block, or Unix
+   `mental` block).
 3. Use **only this client's** plugin flow if they still need the host plugin.
    Do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette
    steps from this session.
-4. After `mental doctor`, ask whether they want optional hooks or time
+4. After doctor, ask whether they want optional hooks or time
    tracking (sit-down clock, default off), and whether MCP is needed
-   (`mental install --mcp` for tool-only agents that cannot shell the CLI).
-   Skip MCP if this client can run `mental`. Never run `mental option … on`
-   until they say yes **this turn**.
+   (`npx --yes @balacode/mental install --mcp` on Windows PowerShell, or
+   `mental install --mcp` on Unix). Skip MCP if this client can run the CLI.
+   Never run `mental option … on` until they say yes **this turn**.
 
 Do not start a plugin MCP server. Do not silent-global-install from a hook.
 Missing Mental must not block the user's coding task (fail open).

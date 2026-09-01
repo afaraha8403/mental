@@ -6,7 +6,7 @@ The CLI is the contract. Humans type `mental`. Agents call `mental … --json`. 
 
 This is not a hidden hook and not every chat turn. Hooks stay off until the user asks. Write at a task boundary, when a decision constrains the future, or the moment residue surfaces. Fail open if Mental CLI is missing.
 
-If `mental` is on PATH for daily work, follow the Mental skill copied by `mental install` — not the plugin bootstrap (`skills/mental-setup`). If JSON includes `update`, or the user asks to upgrade, run `npm i -g @balacode/mental` then `mental install` then `mental doctor` (recopies skill/rule; does not turn on optionals; does not refresh the host plugin cache). If `mental` is missing, try `npx @balacode/mental …`. If that fails, continue the coding task (fail open) and mention those three commands. The plugin does not start MCP.
+If `mental` is on PATH for daily work, follow the Mental skill copied by install — not the plugin bootstrap (`skills/mental-setup`). If JSON includes `update`, or the user asks to upgrade, run the install block for this OS (Windows PowerShell / Windows Terminal: `npx --yes @balacode/mental` after `npm i -g`; Windows cmd: `mental.cmd`; macOS/Linux/Git Bash: `mental`). That recopies skill/rule; does not turn on optionals; does not refresh the host plugin cache. Never run bare `mental` in PowerShell. If the CLI is missing, try `npx --yes @balacode/mental …`. If that fails, continue the coding task (fail open) and mention the block for this machine. The plugin does not start MCP.
 
 ## Always
 

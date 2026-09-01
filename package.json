@@ -47,6 +47,8 @@
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",
+    "check:install": "node scripts/check-install-recipe.mjs",
+    "test:release": "npm test && node scripts/check-install-recipe.mjs",
     "mental": "node bin/cli.mjs",
     "bench": "node scripts/bench.mjs"
   },
