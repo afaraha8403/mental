@@ -30,7 +30,7 @@ export const LOCKFILE_RELATIVE = "package-lock.json";
 export function skillMetadataVersion(md) {
   const fm = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
   if (!fm) return null;
-  const ver = fm[1].match(/^  version:\s*["']?([^"'\n]+)["']?\s*$/m);
+  const ver = fm[1].match(/^  version:\s*["']?([^"'\r\n]+)["']?\s*$/m);
   return ver ? ver[1].trim() : null;
 }
 

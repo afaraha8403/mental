@@ -4,7 +4,7 @@
  * Origin is a *hint* for Mental bindings, never the id. Canonical form is
  * `host/owner/repo` (no scheme, no `.git`, no userinfo).
  */
-import { existsSync, statSync } from "node:fs";
+import { existsSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, parse, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -88,7 +88,13 @@ export function findGitRoot(cwd, { env = process.env } = {}) {
     const r = runGit(start, ["rev-parse", "--show-toplevel"], { env });
     if (r.status === 0) {
       const top = (r.stdout || "").trim();
-      if (top) return resolve(top);
+      if (top) {
+        try {
+          return realpathSync(top);
+        } catch {
+          return resolve(top);
+        }
+      }
     }
   }
   let dir = start;

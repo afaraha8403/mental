@@ -57,9 +57,9 @@ test("mental install --json copies skill + rule and creates ~/.mental skeleton",
   assert.doesNotMatch(readFileSync(join(home, ".claude", "skills", "mental", "SKILL.md"), "utf8"), /balakit/i);
   assert.match(body.data.cli.script, /cli\.mjs$/);
   assert.doesNotMatch(body.data.cli.bin, /\.mjs$/);
-  const bin = join(home, ".local", "bin", "mental");
+  const bin = userPathBin(home);
   assert.equal(existsSync(bin), true, "install should put mental on ~/.local/bin");
-  const ver = spawnSync(bin, ["--version"], { encoding: "utf8", env: gitEnv(home) });
+  const ver = spawnSync(bin, ["--version"], { encoding: "utf8", env: gitEnv(home), shell: process.platform === "win32" });
   assert.equal(ver.status, 0, ver.stderr || ver.stdout);
   assert.match(ver.stdout.trim(), /^\d+\.\d+\.\d+$/);
 });
@@ -75,9 +75,10 @@ test("install overwrites an existing global mental bin", () => {
   const body = JSON.parse(r.stdout);
   assert.equal(body.ok, true);
   assert.equal(body.data.cli.npm, true, JSON.stringify(body.data.cli));
-  const ver = spawnSync(join(home, ".local", "bin", "mental"), ["--version"], {
+  const ver = spawnSync(userPathBin(home), ["--version"], {
     encoding: "utf8",
     env: gitEnv(home),
+    shell: process.platform === "win32",
   });
   assert.equal(ver.status, 0, ver.stderr || ver.stdout);
   assert.match(ver.stdout.trim(), /^\d+\.\d+\.\d+$/);

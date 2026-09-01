@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 export const CLI = fileURLToPath(new URL("../bin/cli.mjs", import.meta.url));
 
 export function tempHome(prefix = "mental-") {
-  return mkdtempSync(join(tmpdir(), prefix));
+  return realpathSync(mkdtempSync(join(tmpdir(), prefix)));
 }
 
 /**

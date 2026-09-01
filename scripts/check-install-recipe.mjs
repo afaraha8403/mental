@@ -28,10 +28,13 @@ function run(command, args, opts = {}) {
   if (/\.mjs$/i.test(command)) {
     fail(`refusing to spawn .mjs as argv0: ${command}`);
   }
-  const r = spawnSync(command, args, {
+  const exe =
+    process.platform === "win32" && command === "npm" ? "npm.cmd" : command;
+  const r = spawnSync(exe, args, {
     encoding: "utf8",
     cwd: opts.cwd ?? ROOT,
     env: opts.env ?? process.env,
+    shell: process.platform === "win32" && /\.(cmd|bat)$/i.test(exe),
   });
   if (r.status !== 0) {
     fail(

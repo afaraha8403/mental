@@ -24,7 +24,8 @@ import { spawnSync } from "node:child_process";
 import { CMD, NAME, PKG_ROOT } from "./pkg.mjs";
 
 function runNpm(args, env) {
-  return spawnSync("npm", args, { encoding: "utf8", env });
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  return spawnSync(npm, args, { encoding: "utf8", env });
 }
 
 function unlinkQuiet(dest) {

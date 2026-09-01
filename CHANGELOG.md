@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Install is split by OS and shell. Windows PowerShell and Windows Terminal (PowerShell profile) use `npx --yes @balacode/mental` after `npm i -g` — bare `mental` can open a `.mjs` file dialog and print nothing. Windows cmd.exe uses `mental.cmd`. macOS, Linux, and Git Bash keep `mental`. Agent paste, setup skill, and the procedure skill name the block for this machine.
 
-- CI and the Release workflow run `npm test` plus `npm run check:install` on Ubuntu, macOS, and Windows before publish. The check locks both recipes in the docs and invokes the CLI from a local npm prefix without spawning a `.mjs` file as argv0.
+- CI and the Release workflow run `npm test` plus `npm run check:install` on Ubuntu, macOS, and Windows before publish. The check locks both recipes in the docs and invokes the CLI from a local npm prefix without spawning a `.mjs` file as argv0. Tests canonicalize temp paths (macOS `/private/var`, Windows 8.3) and accept CRLF so the matrix can pass.
 
 ## [0.8.1] - 2026-08-31
 

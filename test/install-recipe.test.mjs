@@ -17,7 +17,7 @@ import { NAME } from "../bin/lib/pkg.mjs";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 function agentPaste(md) {
-  const m = md.match(/#{2,} Paste this into your agent[\s\S]*?```text\n([\s\S]*?)```/);
+  const m = md.match(/#{2,} Paste this into your agent[\s\S]*?```text\r?\n([\s\S]*?)```/);
   assert.ok(m, "missing agent paste fence");
   return m[1];
 }
