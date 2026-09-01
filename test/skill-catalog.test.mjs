@@ -108,8 +108,8 @@ test("README and install-doc agent pastes stay identical and skills-only", () =>
   assert.match(readme, /Never run a \.mjs file/);
   assert.match(readme, /Do not install from a git clone or plugin cache/);
   assert.match(readme, /npm i -g @balacode\/mental/);
-  assert.match(readme, /Windows \(PowerShell, cmd, Windows Terminal\)/);
-  assert.match(readme, /macOS and Linux \(bash, zsh, sh\)/);
+  assert.match(readme, /Fresh install \(PowerShell, cmd, Windows Terminal, Git Bash, macOS, Linux\)/);
+  assert.match(readme, /Existing Windows install from Mental 0\.8\.1 or older/);
   assert.doesNotMatch(readme, /cli\.mjs/);
   assert.doesNotMatch(readme, /Install Mental CLI from https:\/\//);
   assert.doesNotMatch(readme, /do not duplicate setup/);
