@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -37,8 +38,16 @@ test("mental install --json copies skill + rule and creates ~/.mental skeleton",
   assert.equal(existsSync(join(home, ".agents", "skills", "mental", "SKILL.md")), true);
   assert.equal(existsSync(join(home, ".config", "opencode", "skills", "mental", "SKILL.md")), true);
   assert.equal(existsSync(join(home, ".cursor", "rules", "mental.mdc")), true);
+  assert.equal(existsSync(join(home, ".claude", "rules", "mental.md")), true);
+  assert.equal(existsSync(join(home, ".agents", "rules", "mental.md")), true);
   assert.equal(existsSync(join(home, ".mental", "index.md")), true);
   assert.match(readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8"), /BEGIN mental/);
+  assert.match(readFileSync(join(home, ".codex", "AGENTS.md"), "utf8"), /BEGIN mental/);
+  assert.match(readFileSync(join(home, ".agents", "AGENTS.md"), "utf8"), /BEGIN mental/);
+  const claudeRule = readFileSync(join(home, ".claude", "rules", "mental.md"), "utf8");
+  assert.doesNotMatch(claudeRule, /^---/);
+  assert.match(claudeRule, /Continuity is Mental CLI/);
+  assert.equal(existsSync(join(home, ".config", "opencode", "AGENTS.md")), false);
   assert.doesNotMatch(readFileSync(join(home, ".claude", "skills", "mental", "SKILL.md"), "utf8"), /balakit/i);
   assert.equal(body.data.cli, undefined, "npm, not mental install, owns the CLI executable");
   assert.equal(existsSync(join(home, ".local", "bin", "mental")), false);
@@ -206,5 +215,55 @@ test("install --project vendors the procedure skill into the repo", () => {
   assert.doesNotMatch(skill, /Mental setup — install the CLI/);
   assert.equal(existsSync(join(vendored, "references", "cli.md")), true);
   assert.equal(existsSync(join(root, ".github", "skills", "mental-setup")), false);
+  const projectRule = join(root, ".cursor", "rules", "mental.mdc");
+  assert.equal(existsSync(projectRule), true);
+  assert.match(readFileSync(projectRule, "utf8"), /alwaysApply:\s*true/);
+});
+
+test("install merges OpenCode AGENTS.md when it already exists", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  mkdirSync(join(home, ".config", "opencode"), { recursive: true });
+  writeFileSync(join(home, ".config", "opencode", "AGENTS.md"), "# mine\n");
+  const r = mental(home, root, ["install", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const text = readFileSync(join(home, ".config", "opencode", "AGENTS.md"), "utf8");
+  assert.match(text, /# mine/);
+  assert.match(text, /BEGIN mental/);
+});
+
+test("uninstall unlinks empty managed docs and project Cursor rule", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  mkdirSync(join(home, ".claude"), { recursive: true });
+  writeFileSync(join(home, ".claude", "CLAUDE.md"), "# keep me\n");
+  assert.equal(mental(home, root, ["install", "--json", "--project"]).status, 0);
+  const gone = mental(home, root, ["uninstall", "--json", "--project"]);
+  assert.equal(gone.status, 0, gone.stderr || gone.stdout);
+  assert.equal(existsSync(join(home, ".claude", "rules", "mental.md")), false);
+  assert.equal(existsSync(join(home, ".codex", "AGENTS.md")), false);
+  assert.equal(existsSync(join(home, ".agents", "rules", "mental.md")), false);
+  assert.equal(existsSync(join(root, ".cursor", "rules", "mental.mdc")), false);
+  const claude = readFileSync(join(home, ".claude", "CLAUDE.md"), "utf8");
+  assert.match(claude, /# keep me/);
+  assert.doesNotMatch(claude, /BEGIN mental/);
+});
+
+test("doctor fails when Claude rules file is missing after install", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  rmSync(join(home, ".claude", "rules", "mental.md"), { force: true });
+  const post = mental(home, root, ["doctor", "--json"]);
+  assert.equal(post.status, 3);
+  const body = JSON.parse(post.stdout);
+  const hit = body.data.checks.find((c) => c.id === "rule-claude-rules");
+  assert.ok(hit);
+  assert.equal(hit.ok, false);
+  assert.equal(hit.level, "error");
+  const cursor = body.data.checks.find((c) => c.id === "rule-cursor-global");
+  assert.ok(cursor);
+  assert.equal(cursor.ok, false);
+  assert.equal(cursor.level, "warn");
 });
 

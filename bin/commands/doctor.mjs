@@ -8,7 +8,12 @@ import { spawnSync } from "node:child_process";
 import { resolveBundle, findLocalMental } from "../lib/resolve.mjs";
 import { loadBindings, userMentalDir } from "../lib/bindings.mjs";
 import { checkMentalIgnored, ensureMentalExcluded, gitAvailable } from "../lib/ignore.mjs";
-import { skillsPresent, userTrackTargets, trackSkillPresent } from "../lib/install-skills.mjs";
+import {
+  skillsPresent,
+  userTrackTargets,
+  trackSkillPresent,
+  hostRuleChecks,
+} from "../lib/install-skills.mjs";
 import { printResult, brandMark, useAsciiBrand } from "../lib/output.mjs";
 import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
 import { isOptedInLocal } from "../lib/import-legacy.mjs";
@@ -149,11 +154,14 @@ export function cmdDoctor(args, io = {}) {
           : `run \`${CMD} install\``,
       ),
     );
+    const gitRoot = resolved.ok ? resolved.data.gitRoot : findGitRoot(cwd, { env });
+    for (const extra of hostRuleChecks({ home, gitRoot })) {
+      checks.push(check(extra.id, extra.ok, extra.message, extra.level));
+    }
     for (const extra of hostPluginChecks({ home, env, version: VERSION })) {
       checks.push(check(extra.id, extra.ok, extra.message, extra.level));
     }
 
-    const gitRoot = resolved.ok ? resolved.data.gitRoot : findGitRoot(cwd, { env });
     const leftover = findLocalMental(cwd, { home, gitRoot });
     if (leftover && !isOptedInLocal(leftover)) {
       const leftoverAbs = resolvePath(leftover);
