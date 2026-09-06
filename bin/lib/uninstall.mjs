@@ -5,7 +5,7 @@
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BEGIN, END } from "./pkg.mjs";
-import { userInstallTargets, removeTrackSkills } from "./install-skills.mjs";
+import { projectCursorRule, userInstallTargets, removeTrackSkills } from "./install-skills.mjs";
 
 function esc(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -13,6 +13,7 @@ function esc(s) {
 
 /**
  * Strip the managed BEGIN/END block from AGENTS.md / CLAUDE.md.
+ * Unlinks the file when the remainder is empty so OpenCode can fall back to CLAUDE.md.
  * @param {string} file
  */
 export function removeManaged(file) {
@@ -21,6 +22,10 @@ export function removeManaged(file) {
   if (!cur.includes(BEGIN) || !cur.includes(END)) return false;
   const re = new RegExp(`\\n?${esc(BEGIN)}[\\s\\S]*?${esc(END)}\\n?`);
   const next = cur.replace(re, "\n").replace(/^\n+/, "").replace(/\n{3,}/g, "\n\n");
+  if (!next.trim()) {
+    rmSync(file, { force: true });
+    return true;
+  }
   writeFileSync(file, next);
   return true;
 }
@@ -38,11 +43,13 @@ export function uninstallSkills({ home, projectDir = null }) {
       removed.push(dest);
     }
   }
-  if (existsSync(targets.cursorRule)) {
-    rmSync(targets.cursorRule, { force: true });
-    removed.push(targets.cursorRule);
+  for (const file of [targets.cursorRule, targets.claudeRule, targets.agentsRule]) {
+    if (existsSync(file)) {
+      rmSync(file, { force: true });
+      removed.push(file);
+    }
   }
-  for (const doc of targets.managedDocs) {
+  for (const doc of [...targets.managedDocs, targets.opencodeAgents]) {
     if (removeManaged(doc)) removed.push(doc);
   }
   if (projectDir) {
@@ -50,6 +57,11 @@ export function uninstallSkills({ home, projectDir = null }) {
     if (existsSync(vendored)) {
       rmSync(vendored, { recursive: true, force: true });
       removed.push(vendored);
+    }
+    const projectRule = projectCursorRule(projectDir);
+    if (existsSync(projectRule)) {
+      rmSync(projectRule, { force: true });
+      removed.push(projectRule);
     }
   }
   removed.push(...removeTrackSkills(home));

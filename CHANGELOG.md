@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- `mental install` writes the always-on rule to each host's documented path: `~/.claude/rules/mental.md` plus the CLAUDE.md managed block, `~/.codex/AGENTS.md`, and `~/.config/opencode/AGENTS.md` when that file already exists. Cursor still gets `~/.cursor/rules/mental.mdc` (not natively loaded) and a project `.cursor/rules/mental.mdc` on `mental install --project`. `mental doctor` fails when a load-true host file is missing and warns that Cursor global rules are not natively loaded. `mental uninstall` removes each destination and deletes a leftover empty AGENTS.md/CLAUDE.md so OpenCode can fall back to CLAUDE.md.
+
 ## [0.9.0] - 2026-09-01
 
 ### Features

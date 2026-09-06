@@ -3,7 +3,7 @@
  */
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BEGIN, END, OPTIONAL_DIR, PKG_ROOT, RULES_DIR } from "./pkg.mjs";
+import { BEGIN, CMD, END, OPTIONAL_DIR, PKG_ROOT, RULES_DIR } from "./pkg.mjs";
 import { loadConfig } from "./config.mjs";
 
 /**
@@ -18,18 +18,37 @@ export function ruleSourceFile() {
   return join(RULES_DIR, "mental.mdc");
 }
 
-/** Body of the always-on rule (frontmatter stripped) — single source is rules/mental.mdc. */
-export function ruleBodyText() {
-  const raw = readFileSync(ruleSourceFile(), "utf8");
+/**
+ * Strip YAML frontmatter from a Cursor `.mdc` rule so `.md` hosts get body only.
+ * @param {string} raw
+ */
+export function stripRuleFrontmatter(raw) {
   const m = raw.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/);
   return (m ? m[1] : raw).trim();
 }
 
+/** Body of the always-on rule (frontmatter stripped) — single source is rules/mental.mdc. */
+export function ruleBodyText() {
+  return stripRuleFrontmatter(readFileSync(ruleSourceFile(), "utf8"));
+}
+
+/**
+ * Project Cursor rule that actually loads (`.cursor/rules/*.mdc`).
+ * @param {string} projectDir
+ */
+export function projectCursorRule(projectDir) {
+  return join(projectDir, ".cursor", "rules", "mental.mdc");
+}
+
 /**
  * User-global skill/rule destinations under $HOME.
+ * `cursorRule` is forward-compat only — Cursor does not natively load `~/.cursor/rules`.
  * @param {string} home
  */
 export function userInstallTargets(home) {
+  const claudeMd = join(home, ".claude", "CLAUDE.md");
+  const codexAgents = join(home, ".codex", "AGENTS.md");
+  const agentsMd = join(home, ".agents", "AGENTS.md");
   return {
     skills: [
       join(home, ".claude", "skills", "mental"),
@@ -38,10 +57,13 @@ export function userInstallTargets(home) {
       join(home, ".config", "opencode", "skills", "mental"),
     ],
     cursorRule: join(home, ".cursor", "rules", "mental.mdc"),
-    managedDocs: [
-      join(home, ".claude", "CLAUDE.md"),
-      join(home, ".agents", "AGENTS.md"),
-    ],
+    claudeRule: join(home, ".claude", "rules", "mental.md"),
+    agentsRule: join(home, ".agents", "rules", "mental.md"),
+    claudeMd,
+    codexAgents,
+    agentsMd,
+    opencodeAgents: join(home, ".config", "opencode", "AGENTS.md"),
+    managedDocs: [claudeMd, codexAgents, agentsMd],
   };
 }
 
@@ -67,12 +89,22 @@ function copyRule(dest) {
   cpSync(ruleSourceFile(), dest);
 }
 
+function writePlainRule(dest, body) {
+  mkdirSync(dirname(dest), { recursive: true });
+  writeFileSync(dest, `${body.trim()}\n`);
+}
+
 export function trackSkillSourceDir() {
   return join(OPTIONAL_DIR, "mental-track");
 }
 
 export function trackRuleSourceFile() {
   return join(trackSkillSourceDir(), "rules", "mental-track.mdc");
+}
+
+function trackRuleBodyText() {
+  if (!existsSync(trackRuleSourceFile())) return "";
+  return stripRuleFrontmatter(readFileSync(trackRuleSourceFile(), "utf8"));
 }
 
 /**
@@ -89,6 +121,8 @@ export function userTrackTargets(home) {
       join(home, ".config", "opencode", "skills", "mental-track"),
     ],
     cursorRule: join(home, ".cursor", "rules", "mental-track.mdc"),
+    claudeRule: join(home, ".claude", "rules", "mental-track.md"),
+    agentsRule: join(home, ".agents", "rules", "mental-track.md"),
   };
 }
 
@@ -117,7 +151,15 @@ export function trackSkillPresent(home) {
  * @param {string} home
  */
 export function shouldCopyTrackSkills(home) {
-  if (trackSkillPresent(home) || existsSync(userTrackTargets(home).cursorRule)) return true;
+  const t = userTrackTargets(home);
+  if (
+    trackSkillPresent(home) ||
+    existsSync(t.cursorRule) ||
+    existsSync(t.claudeRule) ||
+    existsSync(t.agentsRule)
+  ) {
+    return true;
+  }
   const cfg = loadConfig(home);
   const feat = cfg.features.track;
   if (!feat) return false;
@@ -141,6 +183,11 @@ export function copyTrackSkills(home) {
     mkdirSync(dirname(targets.cursorRule), { recursive: true });
     cpSync(trackRuleSourceFile(), targets.cursorRule);
     written.push(targets.cursorRule);
+    const body = trackRuleBodyText();
+    writePlainRule(targets.claudeRule, body);
+    written.push(targets.claudeRule);
+    writePlainRule(targets.agentsRule, body);
+    written.push(targets.agentsRule);
   }
   return written;
 }
@@ -158,9 +205,11 @@ export function removeTrackSkills(home) {
       removed.push(dest);
     }
   }
-  if (existsSync(targets.cursorRule)) {
-    rmSync(targets.cursorRule, { force: true });
-    removed.push(targets.cursorRule);
+  for (const file of [targets.cursorRule, targets.claudeRule, targets.agentsRule]) {
+    if (existsSync(file)) {
+      rmSync(file, { force: true });
+      removed.push(file);
+    }
   }
   return removed;
 }
@@ -172,6 +221,7 @@ export function removeTrackSkills(home) {
  */
 export function mergeManaged(file, content) {
   mkdirSync(dirname(file), { recursive: true });
+  const existed = existsSync(file);
   const block = `${BEGIN}\n${content.trim()}\n${END}`;
   let cur = "";
   try {
@@ -188,7 +238,124 @@ export function mergeManaged(file, content) {
   const gap = cur && !cur.endsWith("\n") ? "\n" : "";
   const prefix = cur ? `${cur}${gap}\n` : "";
   writeFileSync(file, `${prefix}${block}\n`);
-  return { file, created: !existsSync(file) && !cur, updated: true };
+  return { file, created: !existed && !cur, updated: true };
+}
+
+/**
+ * @param {string} file
+ */
+export function hasManagedBlock(file) {
+  if (!existsSync(file)) return false;
+  try {
+    const cur = readFileSync(file, "utf8");
+    return cur.includes(BEGIN) && cur.includes(END);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * True when dest is a frontmatter-free Mental rule body (Claude/agents `.md`).
+ * @param {string} file
+ */
+export function isPlainMentalRule(file) {
+  if (!existsSync(file)) return false;
+  try {
+    const text = readFileSync(file, "utf8");
+    return text.includes("Continuity is Mental CLI") && !text.trimStart().startsWith("---");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Doctor checks for host-documented rule delivery. Cursor global is never coverage.
+ * @param {{ home: string, gitRoot?: string | null }} opts
+ */
+export function hostRuleChecks({ home, gitRoot = null }) {
+  const t = userInstallTargets(home);
+  const installHint = `run \`${CMD} install\``;
+  /** @type {{ id: string, ok: boolean, message: string, level: string }[]} */
+  const checks = [];
+
+  checks.push({
+    id: "rule-claude-md",
+    ok: hasManagedBlock(t.claudeMd),
+    level: "error",
+    message: hasManagedBlock(t.claudeMd)
+      ? "Claude Code CLAUDE.md has managed Mental block"
+      : `missing managed Mental block in ~/.claude/CLAUDE.md — ${installHint}`,
+  });
+  checks.push({
+    id: "rule-claude-rules",
+    ok: isPlainMentalRule(t.claudeRule),
+    level: "error",
+    message: isPlainMentalRule(t.claudeRule)
+      ? "Claude Code ~/.claude/rules/mental.md present"
+      : `missing ~/.claude/rules/mental.md — ${installHint}`,
+  });
+  checks.push({
+    id: "rule-codex",
+    ok: hasManagedBlock(t.codexAgents),
+    level: "error",
+    message: hasManagedBlock(t.codexAgents)
+      ? "Codex ~/.codex/AGENTS.md has managed Mental block"
+      : `missing managed Mental block in ~/.codex/AGENTS.md — ${installHint}`,
+  });
+
+  const override = join(home, ".codex", "AGENTS.override.md");
+  if (existsSync(override)) {
+    checks.push({
+      id: "rule-codex-override",
+      ok: false,
+      level: "warn",
+      message: "Codex loads ~/.codex/AGENTS.override.md instead of AGENTS.md; Mental's block may not apply",
+    });
+  }
+
+  if (existsSync(t.opencodeAgents)) {
+    const ok = hasManagedBlock(t.opencodeAgents);
+    checks.push({
+      id: "rule-opencode",
+      ok,
+      level: "error",
+      message: ok
+        ? "OpenCode ~/.config/opencode/AGENTS.md has managed Mental block"
+        : `~/.config/opencode/AGENTS.md exists without a Mental block — ${installHint}`,
+    });
+  } else {
+    checks.push({
+      id: "rule-opencode",
+      ok: hasManagedBlock(t.claudeMd),
+      level: "warn",
+      message: hasManagedBlock(t.claudeMd)
+        ? "OpenCode has no AGENTS.md; it will fall back to ~/.claude/CLAUDE.md"
+        : `OpenCode has no AGENTS.md and CLAUDE.md has no Mental block — ${installHint}`,
+    });
+  }
+
+  checks.push({
+    id: "rule-cursor-global",
+    ok: false,
+    level: "warn",
+    message:
+      "Cursor does not natively load ~/.cursor/rules. Run `mental install --project` for .cursor/rules/mental.mdc",
+  });
+
+  if (gitRoot) {
+    const projectRule = projectCursorRule(gitRoot);
+    const present = existsSync(projectRule);
+    checks.push({
+      id: "rule-cursor-project",
+      ok: present,
+      level: "warn",
+      message: present
+        ? "project .cursor/rules/mental.mdc present"
+        : "no project .cursor/rules/mental.mdc — run `mental install --project`",
+    });
+  }
+
+  return checks;
 }
 
 /**
@@ -199,20 +366,32 @@ export function installSkills({ home, projectDir = null, dryRun = false }) {
   /** @type {string[]} */
   const written = [];
   if (!dryRun) {
+    const body = ruleBodyText();
     for (const dest of targets.skills) {
       copySkill(dest);
       written.push(dest);
     }
     copyRule(targets.cursorRule);
     written.push(targets.cursorRule);
+    writePlainRule(targets.claudeRule, body);
+    written.push(targets.claudeRule);
+    writePlainRule(targets.agentsRule, body);
+    written.push(targets.agentsRule);
     for (const doc of targets.managedDocs) {
-      mergeManaged(doc, ruleBodyText());
+      mergeManaged(doc, body);
       written.push(doc);
+    }
+    if (existsSync(targets.opencodeAgents)) {
+      mergeManaged(targets.opencodeAgents, body);
+      written.push(targets.opencodeAgents);
     }
     if (projectDir) {
       const vendored = join(projectDir, ".github", "skills", "mental");
       copySkill(vendored);
       written.push(vendored);
+      const projectRule = projectCursorRule(projectDir);
+      copyRule(projectRule);
+      written.push(projectRule);
     }
     if (shouldCopyTrackSkills(home)) {
       written.push(...copyTrackSkills(home));

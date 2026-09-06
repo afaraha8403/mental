@@ -17,10 +17,12 @@ mental doctor
 ```
 
 npm puts `mental` on PATH. `mental install` does not reinstall or rewrite the
-CLI; it copies the skill and a tiny always-on rule into `~/.claude`,
-`~/.cursor`, `~/.agents`, and `~/.config/opencode`, and creates a `~/.mental`
-skeleton. Under a PowerShell policy that blocks npm-generated `.ps1` launchers,
-use `npm.cmd` and `mental.cmd` explicitly.
+CLI; it copies the skill and a tiny always-on rule into each host's documented
+path (`~/.claude/rules`, `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
+`~/.cursor/rules`, `~/.agents`, and OpenCode `AGENTS.md` when it already
+exists), and creates a `~/.mental` skeleton. Under a PowerShell policy that
+blocks npm-generated `.ps1` launchers, use `npm.cmd` and `mental.cmd`
+explicitly.
 
 That skill is what makes agents journal, decide, and record residue **for you**. You do not keep the log by hand. It does **not** turn on hooks or MCP, and it does not delete journals.
 

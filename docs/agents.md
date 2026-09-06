@@ -60,7 +60,19 @@ Mid-chat, not just start/finish:
 `mental install` copies:
 
 - The **skill** — procedure (when to journal, CLI contract, privacy). Model-invocable and user `/mental`.
-- A **tiny always-on rule** — pointer, not the full lifecycle.
+- A **tiny always-on rule** — pointer, not the full lifecycle. One source: [rules/mental.mdc](../rules/mental.mdc). Form follows the destination (`.mdc` with frontmatter vs `.md` body).
+
+| Host | Path | Form |
+| --- | --- | --- |
+| Claude Code | `~/.claude/rules/mental.md` | body, no `paths:` (loads every session) |
+| Claude Code | `~/.claude/CLAUDE.md` managed block | body (kept for older Claude Code and OpenCode fallback) |
+| Cursor | `~/.cursor/rules/mental.mdc` | `.mdc` with `alwaysApply: true` — **not natively loaded** yet; `doctor` warns |
+| Cursor | `.cursor/rules/mental.mdc` | same `.mdc`, only with `mental install --project` |
+| Codex | `~/.codex/AGENTS.md` managed block | body |
+| OpenCode | `~/.config/opencode/AGENTS.md` managed block | body, **only if that file already exists** (creating it would drop the CLAUDE.md fallback) |
+| Convention | `~/.agents/AGENTS.md` + `~/.agents/rules/mental.md` | body |
+
+`mental uninstall` removes each of those, including a leftover empty AGENTS.md/CLAUDE.md after the managed block is stripped. `mental doctor` fails when a load-true host file is missing.
 
 Source: [skill/mental/SKILL.md](../skill/mental/SKILL.md) and [rules/mental.mdc](../rules/mental.mdc).
 
