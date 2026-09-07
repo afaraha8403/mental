@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-07
+
+### Features
+- `mental doctor --fix` applies safe repairs only: recopies home skills/rules, purges leftover Balakit Mental wiring, and adds global git excludes. It does not write project `.cursor/rules`, does not enable hooks/MCP/track, and does not update npm or host plugins. After doctor, agents re-run `mental doctor --json`, then `mental doctor --fix --json` once if needed, and ask before `--project` or optionals.
+- Doctor TTY and JSON print a portable `next:` command (`mental doctor --fix`, `mental install --project`, `mental-repair` / `mental-repair.cmd`, or `npm i -g`). ASCII only, no `&&`, same on Windows, macOS, and Linux.
+
+### Fixes
+- `mental doctor` treats `~/.cursor/rules/mental.mdc` as coverage (Cursor 2.1+ loads home rules). A missing file is an error, same as Claude's `~/.claude/rules/mental.md`. Project `.cursor/rules/mental.mdc` stays a warning for Cloud/CLI. TTY prints ⚠ for failed warn checks and ✖ only for errors, so warn-only still ends with `doctor clean`.
+
 ## [0.9.1] - 2026-09-06
 
 ### Fixes

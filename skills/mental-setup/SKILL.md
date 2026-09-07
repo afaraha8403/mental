@@ -78,10 +78,13 @@ the host plugin is behind. Then follow the Mental skill.
 3. Use **only this client's** plugin flow if they still need the host plugin.
    Do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette
    steps from this session.
-4. After doctor, ask whether they want optional hooks or time
-   tracking (sit-down clock, default off), and whether MCP is needed
-   (`mental install --mcp`). Skip MCP if this client can run the CLI.
-   Never run `mental option … on` until they say yes **this turn**.
+4. After doctor, re-run `mental doctor --json`. If error-level checks remain
+   that `--fix` can repair, run `mental doctor --fix --json` once (home
+   skills/rules + git excludes; never `--project` or optionals). Then ask
+   whether they want optional hooks or time tracking (sit-down clock, default
+   off), and whether MCP is needed (`mental install --mcp`). Skip MCP if this
+   client can run the CLI. Never run `mental option … on` until they say yes
+   **this turn**.
 
 Do not start a plugin MCP server. Do not silent-global-install from a hook.
 Missing Mental must not block the user's coding task (fail open).

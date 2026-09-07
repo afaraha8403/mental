@@ -263,7 +263,77 @@ test("doctor fails when Claude rules file is missing after install", () => {
   assert.equal(hit.level, "error");
   const cursor = body.data.checks.find((c) => c.id === "rule-cursor-global");
   assert.ok(cursor);
-  assert.equal(cursor.ok, false);
-  assert.equal(cursor.level, "warn");
+  assert.equal(cursor.ok, true);
+  assert.equal(cursor.level, "error");
+});
+
+test("doctor fails when Cursor home rule is missing after install", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  rmSync(join(home, ".cursor", "rules", "mental.mdc"), { force: true });
+  const post = mental(home, root, ["doctor"]);
+  assert.equal(post.status, 3);
+  assert.match(post.stdout, /^next: mental doctor --fix$/m);
+  const json = JSON.parse(mental(home, root, ["doctor", "--json"]).stdout);
+  const hit = json.data.checks.find((c) => c.id === "rule-cursor-global");
+  assert.ok(hit);
+  assert.equal(hit.ok, false);
+  assert.equal(hit.level, "error");
+  assert.equal(json.data.next.command, "mental doctor --fix");
+  assert.equal(json.data.next.action, "fix");
+});
+
+test("doctor TTY uses warn glyph for project Cursor rule and stays clean", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install"]).status, 0);
+  const tty = mental(home, root, ["doctor"]);
+  assert.equal(tty.status, 0, tty.stderr || tty.stdout);
+  assert.match(tty.stdout, /✓ rule-cursor-global: Cursor ~\/\.cursor\/rules\/mental\.mdc present/);
+  assert.match(tty.stdout, /⚠ rule-cursor-project: no project \.cursor\/rules\/mental\.mdc/);
+  assert.doesNotMatch(tty.stdout, /✖ rule-cursor-/);
+  assert.match(tty.stdout, /doctor clean/);
+  assert.match(tty.stdout, /^next: mental install --project \(optional Cloud\/CLI\)$/m);
+  assert.doesNotMatch(tty.stdout.split("\n").find((l) => l.startsWith("next:")) || "", /&&/);
+
+  const ascii = mental(home, root, ["doctor"], { MENTAL_ASCII: "1" });
+  assert.equal(ascii.status, 0, ascii.stderr || ascii.stdout);
+  assert.match(ascii.stdout, /OK rule-cursor-global:/);
+  assert.match(ascii.stdout, /! rule-cursor-project:/);
+  assert.doesNotMatch(ascii.stdout, /^X rule-cursor-/m);
+  assert.match(ascii.stdout, /^next: mental install --project \(optional Cloud\/CLI\)$/m);
+});
+
+test("doctor --fix recopies home rules and does not vendor --project", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  rmSync(join(home, ".claude", "rules", "mental.md"), { force: true });
+  assert.equal(mental(home, root, ["doctor", "--json"]).status, 3);
+  const fixed = mental(home, root, ["doctor", "--fix", "--json"]);
+  assert.equal(fixed.status, 0, fixed.stderr || fixed.stdout);
+  const body = JSON.parse(fixed.stdout);
+  assert.equal(body.ok, true);
+  assert.ok(body.data.fix.applied.includes("install"));
+  assert.ok(body.data.fix.applied.includes("ignore"));
+  assert.equal(body.data.fix.project, false);
+  assert.equal(body.data.next?.command, "mental install --project");
+  assert.equal(existsSync(join(home, ".claude", "rules", "mental.md")), true);
+  assert.equal(existsSync(join(root, ".cursor", "rules", "mental.mdc")), false);
+  const hooks = body.data.optionals.find((o) => o.id === "hooks");
+  assert.equal(hooks?.enabled, false);
+});
+
+test("doctor --fix on a bare home installs skills", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const r = mental(home, root, ["doctor", "--fix", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, true);
+  assert.equal(existsSync(join(home, ".claude", "rules", "mental.md")), true);
+  assert.equal(existsSync(join(home, ".cursor", "rules", "mental.mdc")), true);
+  assert.equal(existsSync(join(root, ".cursor", "rules", "mental.mdc")), false);
 });
 

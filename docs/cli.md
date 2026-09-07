@@ -57,7 +57,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental track` | Optional automated project-time record (off until `option track on`): private/customer copy, wall/billable, several clocks, dated client export. [Full contract](./track.md) |
 | `mental hooks on\|off` | Optional session hooks (default off; alias of `option hooks`) |
 | `mental serve` | Optional MCP stdio (session verbs: heartbeat, journal, park, …). Identity/setup stay CLI |
-| `mental doctor` | PATH, bindings, ignore, skills, npm update, host plugin / skill-copy lag, decision budget, stale residue, `optionals[]`, `time.sqlite` never git-tracked (exit 3). `--fix-ignore` adds `.mental/` to global excludes. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns). `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips host CLIs. |
+| `mental doctor` | PATH, bindings, ignore, skills, npm update, host plugin / skill-copy lag, decision budget, stale residue, `optionals[]`, `time.sqlite` never git-tracked (exit 3). `--fix` recopies home skills/rules and git excludes (never `--project` or optionals). `--fix-ignore` is ignore-only. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns). TTY: ✓ ok, ⚠ failed warn, ✖ error; ASCII fallback OK / ! / X. Footer `next:` is a portable command (no `&&`). JSON `data.next`. `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips host CLIs. |
 
 ## Writes
 

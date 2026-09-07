@@ -389,8 +389,12 @@ export const CATALOG = {
     group: "Setup",
     summary: "PATH, bindings, ignore, skill, index, update. Exit 3 when error-level problems; JSON ok follows that.",
     usage: `${CMD} doctor`,
-    examples: [`${CMD} doctor`, `${CMD} doctor --json`, `${CMD} doctor --fix-ignore`],
-    flags: [b("fix-ignore"), v("days", { summary: "Stale-residue threshold in days (warn only)" })],
+    examples: [`${CMD} doctor`, `${CMD} doctor --json`, `${CMD} doctor --fix`, `${CMD} doctor --fix-ignore`],
+    flags: [
+      b("fix", { summary: "Safe repairs only: home install + git excludes. Never --project or optionals" }),
+      b("fix-ignore"),
+      v("days", { summary: "Stale-residue threshold in days (warn only)" }),
+    ],
     effects: "idempotent",
   },
   reindex: {

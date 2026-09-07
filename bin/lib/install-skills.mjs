@@ -42,7 +42,7 @@ export function projectCursorRule(projectDir) {
 
 /**
  * User-global skill/rule destinations under $HOME.
- * `cursorRule` is forward-compat only — Cursor does not natively load `~/.cursor/rules`.
+ * Cursor 2.1+ loads `cursorRule` (`~/.cursor/rules/*.mdc`) into Agent context.
  * @param {string} home
  */
 export function userInstallTargets(home) {
@@ -269,7 +269,26 @@ export function isPlainMentalRule(file) {
 }
 
 /**
- * Doctor checks for host-documented rule delivery. Cursor global is never coverage.
+ * True when dest is a Cursor `.mdc` Mental rule (frontmatter + alwaysApply).
+ * @param {string} file
+ */
+export function isCursorMentalRule(file) {
+  if (!existsSync(file)) return false;
+  try {
+    const text = readFileSync(file, "utf8");
+    return (
+      text.trimStart().startsWith("---") &&
+      /alwaysApply:\s*true/.test(text) &&
+      text.includes("Continuity is Mental CLI")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Doctor checks for host-documented rule delivery.
+ * Cursor home `~/.cursor/rules/mental.mdc` is coverage. Project `.cursor/rules` is warn-only.
  * @param {{ home: string, gitRoot?: string | null }} opts
  */
 export function hostRuleChecks({ home, gitRoot = null }) {
@@ -334,12 +353,14 @@ export function hostRuleChecks({ home, gitRoot = null }) {
     });
   }
 
+  const cursorOk = isCursorMentalRule(t.cursorRule);
   checks.push({
     id: "rule-cursor-global",
-    ok: false,
-    level: "warn",
-    message:
-      "Cursor does not natively load ~/.cursor/rules. Run `mental install --project` for .cursor/rules/mental.mdc",
+    ok: cursorOk,
+    level: "error",
+    message: cursorOk
+      ? "Cursor ~/.cursor/rules/mental.mdc present"
+      : `missing ~/.cursor/rules/mental.mdc — ${installHint}`,
   });
 
   if (gitRoot) {
@@ -351,7 +372,7 @@ export function hostRuleChecks({ home, gitRoot = null }) {
       level: "warn",
       message: present
         ? "project .cursor/rules/mental.mdc present"
-        : "no project .cursor/rules/mental.mdc — run `mental install --project`",
+        : "no project .cursor/rules/mental.mdc — optional for Cloud/CLI; run `mental install --project`",
     });
   }
 

@@ -100,7 +100,7 @@ The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specificat
 
 If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). npm owns the executable; `mental install` only refreshes the copied skill/rule/config. Run the fresh-install block, or the Windows migration block for an existing 0.8.1-or-older install.
 
-The plugin is discovery. npm is the source of truth for the executable; the install command is the source of truth for the copied procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by install — not the plugin bootstrap.
+The plugin is discovery. npm is the source of truth for the executable; the install command is the source of truth for the copied procedure. After doctor, re-run `mental doctor --json`. If anything is not ok that `--fix` can repair, run `mental doctor --fix --json` once (home skills/rules + git excludes only — never `--project` or optionals). Then tell me remaining checks. Follow the Mental skill copied by install — not the plugin bootstrap.
 
 Missing Mental must not block my coding task (fail open): continue the task, then tell me to run the fresh-install block. Never execute the package's .mjs file directly.
 

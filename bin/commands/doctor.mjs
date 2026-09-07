@@ -13,16 +13,18 @@ import {
   userTrackTargets,
   trackSkillPresent,
   hostRuleChecks,
+  installSkills,
 } from "../lib/install-skills.mjs";
+import { leftoverBalakitMentalCount, findBalakitMental, purgeBalakitMental } from "../lib/legacy-balakit.mjs";
 import { printResult, brandMark, useAsciiBrand } from "../lib/output.mjs";
+import { doctorNextAction, formatDoctorNextLine } from "../lib/doctor-next.mjs";
 import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
 import { isOptedInLocal } from "../lib/import-legacy.mjs";
 import { findGitRoot } from "../lib/git.mjs";
 import { indexPath } from "../lib/index.mjs";
-import { leftoverBalakitMentalCount, findBalakitMental } from "../lib/legacy-balakit.mjs";
 import { checkForUpdate, cmpSemver, updateHint } from "../lib/update.mjs";
 import { hostPluginChecks } from "../lib/host-plugins.mjs";
-import { DECISION_HEARTBEAT_CAP, listOpenDecisions } from "../lib/okf.mjs";
+import { DECISION_HEARTBEAT_CAP, listOpenDecisions, ensureSkeleton } from "../lib/okf.mjs";
 import { parseDays, scanStale } from "../lib/stale.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { FEATURES, listOptionals, loadConfig, markOptionalSeen } from "../lib/config.mjs";
@@ -39,12 +41,53 @@ function check(id, ok, message, level = "error") {
   return { id, ok, level, message };
 }
 
+/**
+ * TTY mark: green when ok, warn glyph when a warn check failed, X only for errors.
+ * @param {{ ok: boolean, level?: string }} c
+ * @param {boolean} ascii
+ */
+function checkGlyph(c, ascii) {
+  if (c.ok) return ascii ? "OK" : "✓";
+  if (c.level === "warn") return ascii ? "!" : "⚠";
+  return ascii ? "X" : "✖";
+}
+
+/**
+ * Safe repairs only: home skill/rule copies, Balakit leftover purge, git excludes, skeleton.
+ * Never --project, never optionals, never npm, never host plugin caches, never mental-repair.
+ * @param {{ home: string, cwd: string, env: NodeJS.ProcessEnv }} opts
+ */
+function applySafeDoctorFixes({ home, cwd, env }) {
+  /** @type {string[]} */
+  const applied = [];
+  const ignore = ensureMentalExcluded({ home, env });
+  if (ignore.ok) applied.push("ignore");
+  const legacy = purgeBalakitMental({ home, projectDir: cwd });
+  if (legacy.removed.length) applied.push("legacy-balakit");
+  const installed = installSkills({ home, projectDir: null });
+  applied.push("install");
+  ensureSkeleton(userMentalDir(home), { name: "personal" });
+  return {
+    applied,
+    written: installed.written,
+    legacyRemoved: legacy.removed,
+    project: false,
+  };
+}
+
 export function cmdDoctor(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const cwd = args.cwd ?? process.cwd();
   const env = args.env ?? process.env;
-  const fixIgnore = Boolean(args.flags?.["fix-ignore"]);
+  const doFix = Boolean(args.flags?.fix);
+  const fixIgnore = Boolean(args.flags?.["fix-ignore"]) || doFix;
+
+  /** @type {ReturnType<typeof applySafeDoctorFixes> | null} */
+  let fix = null;
+  if (doFix && home) {
+    fix = applySafeDoctorFixes({ home, cwd, env });
+  }
 
   /** @type {ReturnType<typeof check>[]} */
   const checks = [];
@@ -352,11 +395,18 @@ export function cmdDoctor(args, io = {}) {
   if (home) for (const id of FEATURES) markOptionalSeen(home, id);
 
   const problems = checks.filter((c) => !c.ok && c.level === "error");
+  const next = doctorNextAction({
+    checks,
+    alreadyFixed: Boolean(fix),
+    platform: process.platform,
+  });
   const data = {
     checks,
     where: resolved.ok ? resolved.data : null,
     problems: problems.length,
     optionals: optionals.optionals,
+    next,
+    ...(fix ? { fix } : {}),
   };
   const ok = problems.length === 0;
   printResult(
@@ -369,15 +419,22 @@ export function cmdDoctor(args, io = {}) {
       : {
           code: "doctor-failed",
           message: `${problems.length} problem(s)`,
-          hint: `Run \`${CMD} doctor --fix-ignore\` for ignore issues, \`${CMD}-repair\` for legacy launchers, or \`${CMD} install\` for skills.`,
+          hint: next
+            ? `next: ${next.command}`
+            : (problems[0]?.message ?? `Run \`${CMD} doctor --fix\`.`),
         },
     (d) => {
-      const yes = useAsciiBrand(args.env ?? process.env, args) ? "OK" : "✓";
-      const no = useAsciiBrand(args.env ?? process.env, args) ? "X" : "✖";
+      const ascii = useAsciiBrand(args.env ?? process.env, args);
+      const fixLine =
+        d.fix?.applied?.length
+          ? `fixed: ${d.fix.applied.join(", ")}\n`
+          : "";
       return (
-        d.checks.map((c) => `${c.ok ? yes : no} ${c.id}: ${c.message}`).join("\n") +
+        fixLine +
+        d.checks.map((c) => `${checkGlyph(c, ascii)} ${c.id}: ${c.message}`).join("\n") +
         `\n${formatOptionalsTable(d.optionals)}` +
-        (problems.length ? `\n${problems.length} problem(s)` : `\n${brandMark(args.env ?? process.env, args)} doctor clean`)
+        (problems.length ? `\n${problems.length} problem(s)` : `\n${brandMark(args.env ?? process.env, args)} doctor clean`) +
+        formatDoctorNextLine(d.next)
       );
     },
   );

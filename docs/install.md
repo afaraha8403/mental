@@ -104,7 +104,7 @@ The repo is an Agent Plugins 1.0.0 package (https://agent-plugins.org/specificat
 
 If this client has a native plugin install, use only that host's flow (do not run other hosts' `/plugin`, `copilot plugin`, or Command Palette steps from this session). npm owns the executable; `mental install` only refreshes the copied skill/rule/config. Run the fresh-install block, or the Windows migration block for an existing 0.8.1-or-older install.
 
-The plugin is discovery. npm is the source of truth for the executable; the install command is the source of truth for the copied procedure. After doctor, tell me what it reports. Then follow the Mental skill copied by install — not the plugin bootstrap.
+The plugin is discovery. npm is the source of truth for the executable; the install command is the source of truth for the copied procedure. After doctor, re-run `mental doctor --json`. If anything is not ok that `--fix` can repair, run `mental doctor --fix --json` once (home skills/rules + git excludes only — never `--project` or optionals). Then tell me remaining checks. Follow the Mental skill copied by install — not the plugin bootstrap.
 
 Missing Mental must not block my coding task (fail open): continue the task, then tell me to run the fresh-install block. Never execute the package's .mjs file directly.
 
@@ -191,10 +191,11 @@ mental install --mcp    # register `mental serve` in ~/.cursor/mcp.json + ~/.cla
 mental hooks on         # session-start hooks; default off
 mental option track on  # per-UUID sit-down clock; never from install paste unless the user asked
 mental doctor           # PATH, bindings, ignore, skills, npm update, host plugin lag, optionals[]
+mental doctor --fix     # safe repairs: home install + git excludes (never --project)
 mental doctor --fix-ignore   # add .mental/ and .mental-id to your global git excludes
 ```
 
-Install and doctor JSON include `optionals[]` (`id`, `enabled`, `scope`, `command`, `isNew`, `needsConsent: true`). After doctor, agents ask about hooks and time tracking, and whether MCP is needed, with a one-liner each. Do not pass `--hooks` / `--mcp` / `--track` until the user says yes this turn.
+Install and doctor JSON include `optionals[]` (`id`, `enabled`, `scope`, `command`, `isNew`, `needsConsent: true`). After doctor, re-run `mental doctor --json`, then `mental doctor --fix --json` once if `--fix` can repair remaining errors. Then ask about hooks and time tracking, and whether MCP is needed, with a one-liner each. Do not pass `--hooks` / `--mcp` / `--track` until the user says yes this turn.
 
 Time tracking is off by default. When enabled, agents generate private and customer-ready descriptions from current work, clock wall/billable time, and refresh the record at park, journal, or handoff. Billable defaults to wall. Genuine ambiguity uses one plain-text draft prompt with short single-select options through the host's native question renderer, or the same numbered-text fallback. `--new` starts another clock. Customer exports contain dated work descriptions and hours, never private detail. It does **not** reconstruct hours from git, guess a duration, or print hours on the TTY pulse. Hours live in bundle `time.sqlite` (never git). The track skill is copied from `optional/mental-track/` only when track is enabled — not from plugin `skills/`. Full contract: [What time tracking can and cannot do](./track.md).
 
