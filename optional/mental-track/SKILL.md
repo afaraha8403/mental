@@ -8,7 +8,7 @@ license: MIT
 compatibility: Requires Node.js >=22.13, git, and Mental CLI. Optional; not part of Agent Plugins skills/.
 metadata:
   author: Ali Farahat
-  version: "0.10.0"
+  version: "0.10.1"
   tags: mental,time-tracking,continuity
 user-invocable: true
 disable-model-invocation: false
@@ -83,7 +83,8 @@ mental handoff --title "…" --body "…" --title-external "…" --body-external
   second start. `--new` starts another clock when the user starts distinct
   simultaneous work or explicitly asks for another clock.
 - New chat or host is not a new interval. Park, a new calendar day, or 12h
-  since `started` is. `--task <id>` only when inserting a new interval and glance
+  since `started` is. Start is **machine-wide**: a second session joins the
+  existing clock (`ensured: true`). `--task <id>` only when inserting a new interval and glance
   already shows that id. `--new` ignores `--task` (new task).
 - `start` without `--task` on a **new** interval = new task. `--task` is
   ignored while ensuring.
@@ -95,7 +96,9 @@ mental handoff --title "…" --body "…" --title-external "…" --body-external
   This is the automatic default, so do not ask about minutes on every hop.
   Use `--billable` only when the user supplied a smaller amount or the conversation
   clearly says some time is non-billable. `billable` must be `<= wall`.
-  `--accept-stale` is TTY-only; `--json` cannot pass it.
+  `--billable suggested` uses `last_seen - started` (glance `suggested_billable`)
+  so a reaper does not have to read glance first. `--accept-stale` is a no-op;
+  JSON and non-TTY stop may pass it. Stop works without the flag.
 - **Stale** (glance) = running and (`now - last_seen` > 2h or `now - started` > 12h).
   Explicit stop still uses now; `stale_stop` is a flag, not a prompt. Do not clip
   billable to last_seen on park/stop.

@@ -29,7 +29,7 @@ import { parseDays, scanStale } from "../lib/stale.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { FEATURES, listOptionals, loadConfig, markOptionalSeen } from "../lib/config.mjs";
 import { formatOptionalsTable } from "./option.mjs";
-import { TIME_DB, listOrphanTimeDbs, runningCount } from "../lib/time.mjs";
+import { TIME_DB, formatHmm, listOrphanTimeDbs, runningHealth } from "../lib/time.mjs";
 import { skillMetadataVersion } from "../lib/lockstep.mjs";
 import {
   inspectLegacyBins,
@@ -359,9 +359,18 @@ export function cmdDoctor(args, io = {}) {
       // bindings already checked
     }
     if (resolved.ok && isBundleRoot(resolved.data)) {
-      const n = runningCount(resolved.data.root);
-      if (n > 0) {
-        checks.push(check("time-running", true, `${n} running interval(s) in time.sqlite`, "info"));
+      const health = runningHealth(resolved.data.root);
+      if (health.staleCount > 0) {
+        checks.push(
+          check(
+            "time-running",
+            false,
+            `${health.staleCount} stale running interval(s) idle ${formatHmm(health.idleMinutes)} since last heartbeat`,
+            "warn",
+          ),
+        );
+      } else if (health.count > 0) {
+        checks.push(check("time-running", true, `${health.count} running interval(s) in time.sqlite`, "info"));
       }
     }
     const trackTargets = userTrackTargets(home);

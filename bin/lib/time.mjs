@@ -184,11 +184,19 @@ export function canContinueRunner(row, now = new Date()) {
 }
 
 /**
- * Suggested user minutes: last_seen - started (display only until stop --user).
+ * Suggested user minutes: last_seen - started (display only until stop --billable).
  * @param {{ started: string, last_seen_at: string }} row
  */
 export function suggestedUserMinutes(row) {
   return elapsedMinutes(row.started, row.last_seen_at);
+}
+
+/**
+ * `--billable suggested` uses last_seen elapsed, not live wall.
+ * @param {unknown} raw
+ */
+export function isSuggestedBillable(raw) {
+  return String(raw ?? "").trim().toLowerCase() === "suggested";
 }
 
 function liveWallMinutes(row, now) {
@@ -621,6 +629,7 @@ function applyStopRow(
     now,
     stoppedAt,
     userMinutes,
+    useSuggested = false,
     acceptStale: _acceptStale,
     titleInternal,
     bodyInternal,
@@ -639,7 +648,9 @@ function applyStopRow(
   let userMin = wallMin;
   const needsUser = 0;
   const staleStop = stale ? 1 : 0;
-  if (userMinutes != null) {
+  if (useSuggested) {
+    userMin = Math.min(suggestedUserMinutes(row), wallMin);
+  } else if (userMinutes != null) {
     if (userMinutes > wallMin) {
       throw Object.assign(new Error("billable must be <= wall"), { code: "usage" });
     }
@@ -704,14 +715,12 @@ function applyStopRow(
 export function stopIntervals(root, opts = {}) {
   const now = opts.now ?? new Date();
   let userMinutes = null;
-  if (opts.userHmm != null && opts.userHmm !== "") {
+  const useSuggested = isSuggestedBillable(opts.userHmm);
+  if (opts.userHmm != null && opts.userHmm !== "" && !useSuggested) {
     userMinutes = parseHmm(opts.userHmm);
     if (userMinutes == null) {
-      return { ok: false, error: { code: "usage", message: "--billable must be h:mm (minutes 00–59)" } };
+      return { ok: false, error: { code: "usage", message: "--billable must be h:mm (minutes 00–59) or suggested" } };
     }
-  }
-  if (opts.acceptStale && opts.json) {
-    return { ok: false, error: { code: "usage", message: "--accept-stale is TTY-only" } };
   }
   const opened = openTimeDb(timeDbPath(root), { write: true });
   if (!opened.ok) return opened;
@@ -744,6 +753,7 @@ export function stopIntervals(root, opts = {}) {
           applyStopRow(db, row, {
             now,
             userMinutes,
+            useSuggested,
             acceptStale: Boolean(opts.acceptStale),
             titleInternal: opts.titleInternal,
             bodyInternal: opts.bodyInternal,
@@ -785,10 +795,11 @@ export function stopFocusedForPark(root, opts = {}) {
   const project = opts.projectName != null ? sanitizeProjectName(opts.projectName) : { ok: true, name: undefined };
   if (!project.ok) return project;
   let billableMinutes = null;
-  if (opts.billableHmm != null && opts.billableHmm !== "") {
+  const useSuggested = isSuggestedBillable(opts.billableHmm);
+  if (opts.billableHmm != null && opts.billableHmm !== "" && !useSuggested) {
     billableMinutes = parseHmm(opts.billableHmm);
     if (billableMinutes == null) {
-      return { ok: false, error: { code: "usage", message: "--billable must be h:mm (minutes 00–59)" } };
+      return { ok: false, error: { code: "usage", message: "--billable must be h:mm (minutes 00–59) or suggested" } };
     }
   }
   if (!existsSync(timeDbPath(root))) return { ok: true, skipped: true };
@@ -804,6 +815,7 @@ export function stopFocusedForPark(root, opts = {}) {
       return applyStopRow(db, focused, {
         now,
         userMinutes: billableMinutes,
+        useSuggested,
         acceptStale: false,
         titleInternal: opts.titleInternal,
         bodyInternal: opts.bodyInternal,
@@ -1035,15 +1047,31 @@ export function heartbeatTrack(root, { now = new Date(), pingFocused = true, hop
  * @param {string} root
  */
 export function runningCount(root) {
+  return runningHealth(root).count;
+}
+
+/**
+ * Running clocks plus stale/idle for doctor. Glance must not call this as a ping.
+ * @param {string} root
+ * @param {{ now?: Date }} [opts]
+ */
+export function runningHealth(root, { now = new Date() } = {}) {
   const file = timeDbPath(root);
-  if (!existsSync(file)) return 0;
+  if (!existsSync(file)) return { count: 0, staleCount: 0, idleMinutes: 0 };
   const opened = openTimeDb(file, { write: false });
-  if (!opened.ok) return 0;
+  if (!opened.ok) return { count: 0, staleCount: 0, idleMinutes: 0 };
   try {
-    const row = opened.db.prepare("SELECT COUNT(*) AS n FROM intervals WHERE status = 'running' AND discarded = 0").get();
-    return Number(row?.n || 0);
+    const rows = runningRows(opened.db).map((r) => annotate(r, now));
+    const stale = rows.filter((r) => r.stale);
+    let idleMinutes = 0;
+    const nowIso = isoWithOffset(now);
+    for (const r of stale) {
+      const idle = elapsedMinutes(r.last_seen_at, nowIso);
+      if (idle > idleMinutes) idleMinutes = idle;
+    }
+    return { count: rows.length, staleCount: stale.length, idleMinutes };
   } catch {
-    return 0;
+    return { count: 0, staleCount: 0, idleMinutes: 0 };
   } finally {
     opened.db.close();
   }
@@ -1055,6 +1083,136 @@ function inDateRange(iso, since, until) {
   if (since && d < since) return false;
   if (until && d > until) return false;
   return true;
+}
+
+function inDateRangeOrOpen(row, since, until) {
+  return inDateRange(row.started, since, until) || (!since && !until);
+}
+
+function reportShape({
+  bundleId,
+  rows,
+  wallMin,
+  userMin,
+  running,
+  runningMinutes,
+  overlap,
+  skippedNeedsExternal,
+  review,
+  unclockedCommitDays,
+}) {
+  return {
+    bundleId: bundleId || null,
+    rows,
+    wall: formatHmm(wallMin),
+    user: formatHmm(userMin),
+    billable: formatHmm(userMin),
+    wall_minutes: wallMin,
+    user_minutes: userMin,
+    billable_minutes: userMin,
+    running,
+    running_minutes: runningMinutes,
+    overlap,
+    skippedNeedsExternal,
+    ...(review ? { review } : {}),
+    unclockedCommitDays,
+  };
+}
+
+/**
+ * @param {string} root
+ * @param {{ since?: string, until?: string, external?: boolean, project?: string, now?: Date, bundleId?: string, gitRoot?: string | null, env?: NodeJS.ProcessEnv }} [opts]
+ */
+export function reportTime(root, opts = {}) {
+  const now = opts.now ?? new Date();
+  const file = timeDbPath(root);
+  const clockedDays = new Set();
+  const emptyUnclocked = () => {
+    const commitDays = commitShortDates(opts.gitRoot || null, {
+      since: opts.since,
+      until: opts.until,
+      env: opts.env,
+    });
+    return commitDays.filter((d) => !clockedDays.has(d));
+  };
+  const empty = () => ({
+    ok: true,
+    data: reportShape({
+      bundleId: opts.bundleId,
+      rows: [],
+      wallMin: 0,
+      userMin: 0,
+      running: 0,
+      runningMinutes: 0,
+      overlap: [],
+      skippedNeedsExternal: 0,
+      review: null,
+      unclockedCommitDays: emptyUnclocked(),
+    }),
+  });
+  if (!existsSync(file)) {
+    return empty();
+  }
+  const opened = openTimeDb(file, { write: false });
+  if (!opened.ok) return opened;
+  try {
+    const all = allIntervals(opened.db).map((r) => annotate(r, now));
+    for (const r of all) {
+      const d = calendarDateFromIso(r.started);
+      if (d) clockedDays.add(d);
+    }
+    let stopped = all.filter((r) => r.status === "stopped").filter((r) => inDateRangeOrOpen(r, opts.since, opts.until));
+    let runningRowsInRange = all
+      .filter((r) => r.status === "running")
+      .filter((r) => inDateRangeOrOpen(r, opts.since, opts.until));
+    if (opts.project) {
+      stopped = stopped.filter((r) => r.project_name === opts.project);
+      runningRowsInRange = runningRowsInRange.filter((r) => r.project_name === opts.project);
+    }
+    let skippedNeedsExternal = 0;
+    let review = null;
+    if (opts.external) {
+      const kept = [];
+      const missing = [];
+      for (const r of stopped) {
+        if (r.needs_external || externalIsInternal(r)) {
+          skippedNeedsExternal += 1;
+          missing.push(r);
+          continue;
+        }
+        kept.push(r);
+      }
+      stopped = kept;
+      review = customerCopyReview(missing);
+    }
+    const runningView = runningRowsInRange.map((r) => ({
+      ...r,
+      wall: r.live_wall,
+      wall_minutes: r.live_wall_minutes,
+    }));
+    const rows = opts.external ? stopped : [...stopped, ...runningView];
+    const runningMinutes = runningView.reduce((s, r) => s + (r.live_wall_minutes || 0), 0);
+    const wallMin = stopped.reduce((s, r) => s + (r.wall_minutes || 0), 0) + (opts.external ? 0 : runningMinutes);
+    const userMin = stopped.reduce((s, r) => s + (r.user_minutes || 0), 0);
+    const overlap = overlappingPairs(opts.external ? stopped : rows, now);
+    return {
+      ok: true,
+      data: reportShape({
+        bundleId: opts.bundleId,
+        rows,
+        wallMin,
+        userMin,
+        running: runningView.length,
+        runningMinutes,
+        overlap,
+        skippedNeedsExternal,
+        review,
+        unclockedCommitDays: emptyUnclocked(),
+      }),
+    };
+  } finally {
+    opened.db.close();
+  }
 }
 
 function intervalEndMs(row, now) {
@@ -1150,91 +1308,6 @@ export function glanceTime(root, { now = new Date(), since, until } = {}) {
           const b = running.find((r) => r.id === idB);
           return Boolean(a && b && a.task_id === b.task_id);
         }),
-      },
-    };
-  } finally {
-    opened.db.close();
-  }
-}
-
-/**
- * @param {string} root
- * @param {{ since?: string, until?: string, external?: boolean, project?: string, now?: Date, bundleId?: string, gitRoot?: string | null, env?: NodeJS.ProcessEnv }} [opts]
- */
-export function reportTime(root, opts = {}) {
-  const now = opts.now ?? new Date();
-  const file = timeDbPath(root);
-  const clockedDays = new Set();
-  const emptyUnclocked = () => {
-    const commitDays = commitShortDates(opts.gitRoot || null, {
-      since: opts.since,
-      until: opts.until,
-      env: opts.env,
-    });
-    return commitDays.filter((d) => !clockedDays.has(d));
-  };
-  if (!existsSync(file)) {
-    return {
-      ok: true,
-      data: {
-        rows: [],
-        wall: "0:00",
-        user: "0:00",
-        billable: "0:00",
-        overlap: [],
-        skippedNeedsExternal: 0,
-        unclockedCommitDays: emptyUnclocked(),
-      },
-    };
-  }
-  const opened = openTimeDb(file, { write: false });
-  if (!opened.ok) return opened;
-  try {
-    const all = allIntervals(opened.db);
-    for (const r of all) {
-      const d = calendarDateFromIso(r.started);
-      if (d) clockedDays.add(d);
-    }
-    let rows = all
-      .filter((r) => r.status === "stopped")
-      .filter((r) => inDateRange(r.started, opts.since, opts.until) || (!opts.since && !opts.until));
-    if (opts.project) {
-      rows = rows.filter((r) => r.project_name === opts.project);
-    }
-    let skippedNeedsExternal = 0;
-    let review = null;
-    if (opts.external) {
-      const kept = [];
-      const missing = [];
-      for (const r of rows) {
-        if (r.needs_external || externalIsInternal(r)) {
-          skippedNeedsExternal += 1;
-          missing.push(r);
-          continue;
-        }
-        kept.push(r);
-      }
-      rows = kept;
-      review = customerCopyReview(missing);
-    }
-    const wallMin = rows.reduce((s, r) => s + (r.wall_minutes || 0), 0);
-    const userMin = rows.reduce((s, r) => s + (r.user_minutes || 0), 0);
-    const overlap = overlappingPairs(rows, now);
-    return {
-      ok: true,
-      data: {
-        bundleId: opts.bundleId || null,
-        rows,
-        wall: formatHmm(wallMin),
-        user: formatHmm(userMin),
-        billable: formatHmm(userMin),
-        wall_minutes: wallMin,
-        user_minutes: userMin,
-        billable_minutes: userMin,
-        overlap,
-        skippedNeedsExternal,
-        ...(review ? { review } : {}),
-        unclockedCommitDays: emptyUnclocked(),
       },
     };
   } finally {

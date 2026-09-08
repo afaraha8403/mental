@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-08
+
+### Features
+- `mental track stop --billable suggested` records glance `suggested_billable` (elapsed to last heartbeat) instead of requiring the caller to copy that value by hand.
+
+### Fixes
+- `mental track report` includes running intervals with live wall and always emits `wall_minutes` plus `running` / `running_minutes`, so an unstopped clock is not a silent zero.
+- `mental doctor` warns on a stale running interval (idle since last heartbeat) instead of listing it as a healthy info line.
+- `--accept-stale` is a no-op, including under `--json`, so a hook or timer can pass it. `stop` already worked without the flag.
+
 ## [0.10.0] - 2026-09-07
 
 ### Features

@@ -124,7 +124,7 @@ time.sqlite                # optional hours (off until `mental option track on`;
 
 Index: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` (rebuildable). Hours are **not** in the index — they live in bundle `time.sqlite`.
 
-Optional timers are default **off**. When on, agents generate private and customer-ready title/body fields from current work and refresh them at park, journal, or handoff. `track start` is ensure-running; `--new` starts another clock; billable defaults to wall. Missing customer copy returns structured `review` JSON. Customer export rows contain date, work description, wall, and billable. TTY heartbeat and pulse never show hours. [Full Track contract](./track.md).
+Optional timers are default **off**. When on, agents generate private and customer-ready title/body fields from current work and refresh them at park, journal, or handoff. `track start` is ensure-running (machine-wide); `--new` starts another clock; billable defaults to wall (`--billable suggested` uses last_seen). Report includes running clocks. Missing customer copy returns structured `review` JSON. Customer export rows contain date, work description, wall, and billable. TTY heartbeat and pulse never show hours. [Full Track contract](./track.md).
 
 Pulse watermark: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json` (`{ at: iso }` — rebuildable, not SoT). Written after delta by `pulse` / `park` / `handoff`; **heartbeat never writes it**.
 

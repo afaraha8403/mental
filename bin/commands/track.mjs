@@ -184,13 +184,6 @@ export function cmdTrack(args, io = {}) {
   }
 
   if (sub === "stop") {
-    if (Boolean(args.flags?.["accept-stale"]) && json) {
-      printResult(stdout, args, false, undefined, {
-        code: "usage",
-        message: "--accept-stale is TTY-only",
-      });
-      return EXIT_USAGE;
-    }
     const hours = hoursHmm(args.flags);
     if (!hours.ok) {
       printResult(stdout, args, false, undefined, { code: "usage", message: hours.message });
@@ -200,7 +193,7 @@ export function cmdTrack(args, io = {}) {
       id: flagString(args.flags, "id") || undefined,
       all: Boolean(args.flags?.all),
       userHmm: hours.hmm,
-      acceptStale: Boolean(args.flags?.["accept-stale"]) && isTTY && !json,
+      acceptStale: Boolean(args.flags?.["accept-stale"]),
       json,
       titleInternal: flagString(args.flags, "title-internal") || undefined,
       bodyInternal: flagString(args.flags, "body-internal") || undefined,
@@ -322,7 +315,12 @@ export function cmdTrack(args, io = {}) {
         });
       }
       printResult(stdout, args, true, { chunks }, undefined, () =>
-        chunks.map((c) => `${c.name || c.id}: wall ${c.report.wall} billable ${c.report.billable}`).join("\n"),
+        chunks
+          .map((c) => {
+            const run = c.report.running ? ` running ${c.report.running}` : "";
+            return `${c.name || c.id}: wall ${c.report.wall} billable ${c.report.billable}${run}`;
+          })
+          .join("\n"),
       );
       return 0;
     }
@@ -355,7 +353,8 @@ export function cmdTrack(args, io = {}) {
       true,
       rep.data,
       undefined,
-      (d) => `wall ${d.wall}  billable ${d.billable}${d.overlap?.length ? "\nwarn: overlapping intervals" : ""}`,
+      (d) =>
+        `wall ${d.wall}  billable ${d.billable}${d.running ? `\nrunning ${d.running}` : ""}${d.overlap?.length ? "\nwarn: overlapping intervals" : ""}`,
     );
     return 0;
   }
