@@ -288,7 +288,23 @@ test("heartbeat pings focused last_seen; glance is not a ping", () => {
   assert.equal(getRow(slice, a.data.id).last_seen_at, old, "glance is not a focus ping");
 });
 
-test("stale stop sets billable = wall and flags stale_stop; --accept-stale rejected on --json", () => {
+function todayYmd() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function ageInterval(slice, id, { startedAgoMs, lastSeenAgoMs }) {
+  const startedAt = new Date(Date.now() - startedAgoMs).toISOString();
+  const lastSeen = new Date(Date.now() - lastSeenAgoMs).toISOString();
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  opened.db
+    .prepare("UPDATE intervals SET started = ?, last_seen_at = ? WHERE id = ?")
+    .run(startedAt, lastSeen, id);
+  opened.db.close();
+}
+
+test("stale stop sets billable = wall and flags stale_stop; --accept-stale is a no-op on --json", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   enableTrack(home, root);
@@ -297,27 +313,109 @@ test("stale stop sets billable = wall and flags stale_stop; --accept-stale rejec
     "start",
   );
   const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
-  const startedAt = new Date(Date.now() - 4 * 3600 * 1000).toISOString();
-  const lastSeen = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
-  const opened = openTimeDb(timeDbPath(slice), { write: true });
-  opened.db
-    .prepare("UPDATE intervals SET started = ?, last_seen_at = ? WHERE id = ?")
-    .run(startedAt, lastSeen, started.data.id);
-  opened.db.close();
+  ageInterval(slice, started.data.id, { startedAgoMs: 4 * 3600 * 1000, lastSeenAgoMs: 3 * 3600 * 1000 });
   const glance = parseOk(mental(home, root, ["track", "--json"]), "glance stale");
   const row = glance.data.running[0];
   assert.equal(row.stale, true);
-  const accept = parseErr(
+  const accept = parseOk(
     mental(home, root, ["track", "stop", "--json", "--accept-stale"]),
     "accept-stale json",
   );
-  assert.match(accept.error.message, /TTY-only/);
-  const stopped = parseOk(mental(home, root, ["track", "stop", "--json"]), "stop stale no user");
-  assert.equal(stopped.data.stopped[0].needs_user, false);
-  assert.equal(stopped.data.stopped[0].stale_stop, true);
-  assert.ok(stopped.data.stopped[0].user);
-  assert.ok((stopped.data.stopped[0].wall_minutes || 0) >= 239);
-  assert.equal(stopped.data.stopped[0].user, stopped.data.stopped[0].wall);
+  assert.equal(accept.data.stopped[0].stale_stop, true);
+  assert.ok((accept.data.stopped[0].wall_minutes || 0) >= 239);
+  assert.equal(accept.data.stopped[0].user, accept.data.stopped[0].wall);
+});
+
+test("report includes a running interval with live wall instead of a silent zero", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const started = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Open clock"]),
+    "start",
+  );
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  ageInterval(slice, started.data.id, { startedAgoMs: 7 * 3600 * 1000, lastSeenAgoMs: 3 * 3600 * 1000 });
+  const day = todayYmd();
+  const report = parseOk(
+    mental(home, root, ["track", "report", "--json", "--since", day, "--until", day]),
+    "report running",
+  );
+  assert.equal(typeof report.data.wall_minutes, "number");
+  assert.ok(report.data.wall_minutes >= 7 * 60 - 1);
+  assert.equal(report.data.running, 1);
+  assert.ok(report.data.running_minutes >= 7 * 60 - 1);
+  assert.equal(report.data.rows.length, 1);
+  assert.equal(report.data.rows[0].id, started.data.id);
+  assert.equal(report.data.rows[0].status, "running");
+  assert.equal(typeof report.data.rows[0].wall_minutes, "number");
+  const all = parseOk(
+    mental(home, root, ["track", "report", "--all", "--json", "--since", day, "--until", day]),
+    "report --all running",
+  );
+  assert.equal(all.data.chunks.length, 1);
+  assert.equal(typeof all.data.chunks[0].report.wall_minutes, "number");
+  assert.ok(all.data.chunks[0].report.wall_minutes >= 7 * 60 - 1);
+  assert.equal(all.data.chunks[0].report.running, 1);
+});
+
+test("empty report always includes wall_minutes and running: 0", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const report = parseOk(mental(home, root, ["track", "report", "--json"]), "empty report");
+  assert.equal(report.data.rows.length, 0);
+  assert.equal(report.data.wall_minutes, 0);
+  assert.equal(report.data.running, 0);
+  assert.equal(report.data.running_minutes, 0);
+});
+
+test("doctor warns on a stale running interval with idle duration; fresh running stays info", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const started = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Still going"]),
+    "start",
+  );
+  let doc = JSON.parse(mental(home, root, ["doctor", "--json"]).stdout);
+  let hit = doc.data.checks.find((c) => c.id === "time-running");
+  assert.ok(hit);
+  assert.equal(hit.ok, true);
+  assert.equal(hit.level, "info");
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  ageInterval(slice, started.data.id, { startedAgoMs: 7 * 3600 * 1000, lastSeenAgoMs: 3 * 3600 * 1000 + 50 * 60 * 1000 });
+  doc = JSON.parse(mental(home, root, ["doctor", "--json"]).stdout);
+  hit = doc.data.checks.find((c) => c.id === "time-running");
+  assert.ok(hit);
+  assert.equal(hit.ok, false);
+  assert.equal(hit.level, "warn");
+  assert.match(hit.message, /idle 3:\d{2}/);
+  const timeProblems = doc.data.checks.filter((c) => c.id === "time-running" && !c.ok && c.level === "error");
+  assert.equal(timeProblems.length, 0);
+});
+
+test("stop --billable suggested uses glance suggested_billable, not wall", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const started = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Agent idle"]),
+    "start",
+  );
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  ageInterval(slice, started.data.id, { startedAgoMs: 7 * 3600 * 1000, lastSeenAgoMs: 3 * 3600 * 1000 });
+  const glance = parseOk(mental(home, root, ["track", "--json"]), "glance");
+  const suggested = glance.data.running[0].suggested_billable;
+  const stopped = parseOk(
+    mental(home, root, ["track", "stop", "--json", "--billable", "suggested"]),
+    "stop suggested",
+  );
+  assert.equal(stopped.data.stopped[0].billable, suggested);
+  assert.notEqual(stopped.data.stopped[0].billable, stopped.data.stopped[0].wall);
+  assert.ok((stopped.data.stopped[0].wall_minutes || 0) >= 7 * 60 - 1);
+  assert.ok((stopped.data.stopped[0].billable_minutes || 0) >= 4 * 60 - 1);
+  assert.ok((stopped.data.stopped[0].billable_minutes || 0) <= 4 * 60 + 1);
 });
 
 test("false start discard is excluded from report", () => {

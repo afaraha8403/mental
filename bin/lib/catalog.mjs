@@ -64,7 +64,7 @@ const TIME_CAPTURE_FLAGS = [
   v("body-internal", { mcpName: "body_internal", summary: "Internal time-entry detail" }),
   v("title-external", { mcpName: "title_external", summary: "Customer-ready time-entry title" }),
   v("body-external", { mcpName: "body_external", summary: "Customer-ready time-entry detail" }),
-  v("billable", { summary: "Billable h:mm override; defaults to wall" }),
+  v("billable", { summary: "Billable h:mm override, or suggested (last_seen elapsed); defaults to wall" }),
   v("project-name", { mcpName: "project_name", summary: "Project/client label for reports and exports" }),
 ];
 const RESUME = v("resume", { required: true, summary: "Exact next action — open loops: none or list" });
@@ -334,7 +334,7 @@ export const CATALOG = {
   track: {
     name: "track",
     group: "Setup",
-    summary: "Optional wall/billable clock (off until option track on). Start is ensure-running; --new starts another. Stop sets billable=wall. Glance / start / stop / focus / discard / report / export.",
+    summary: "Optional wall/billable clock (off until option track on). Start is ensure-running (machine-wide); --new starts another. Stop sets billable=wall. --billable suggested uses last_seen. Report includes running clocks. Glance / start / stop / focus / discard / report / export.",
     usage: `${CMD} track [glance|start|stop|focus|discard|amend|report|export]`,
     examples: [`${CMD} track`, `${CMD} track start --via cursor --json`, `${CMD} track start --new --title-external "Auth work" --json`],
     flags: [
@@ -345,7 +345,7 @@ export const CATALOG = {
       v("project-name"),
       v("task"),
       v("id"),
-      v("billable"),
+      v("billable", { summary: "h:mm or suggested (last_seen elapsed); defaults to wall" }),
       v("user", { summary: "Alias of --billable" }),
       v("since"),
       v("until"),
@@ -356,7 +356,7 @@ export const CATALOG = {
       b("all"),
       b("new", { summary: "Start another clock; default start is ensure-running" }),
       b("external"),
-      b("accept-stale"),
+      b("accept-stale", { summary: "No-op; kept so non-TTY stop can pass it" }),
       VIA,
       AGAINST,
     ],

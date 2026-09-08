@@ -25,13 +25,13 @@ Park, handoff, and journal stop the **focused** timer. Other running clocks stay
 
 ## What it can do
 
-- Clock **this sit-down** as one interval. A new chat or a different host (Cursor, Claude Code, OpenCode, …) does **not** start a second clock. Default `track start` is **ensure-running**: same day and under 12 hours → ping `last_seen` (and amend `--title-internal` if given). Safe to call twice. `--title-internal` is optional (default `Session`).
+- Clock **this sit-down** as one interval **machine-wide** (one open clock per project bundle, not per chat or host). A second session that starts joins the existing interval; its title is whoever started first unless it passes `--title-internal` (ensure-running amends the title). `--new` starts a distinct clock. `amend` retitles after the fact. A new chat or a different host (Cursor, Claude Code, OpenCode, …) does **not** start a second clock. Default `track start` is **ensure-running**: same day and under 12 hours → ping `last_seen` (and amend `--title-internal` if given). Safe to call twice. `--title-internal` is optional (default `Session`).
 - **Run several clocks at once.** `track start --new` inserts another interval and focuses it. Ensure-running keeps one continuable runner (the focused one). Extra running rows on **that same task** are closed at `last_seen`. Leftovers that cannot continue (new day / 12h cap) also close at `last_seen`. Other continuable clocks stay.
-- Record **wall** and **billable**. Stop (park, handoff, journal, `track stop`) sets **billable = wall** without asking. Optional `--billable` (`--user` is a compatibility alias) records a smaller amount when you specify one (`billable` must be `<= wall`).
+- Record **wall** and **billable**. Stop (park, handoff, journal, `track stop`) sets **billable = wall** without asking. Optional `--billable` (`--user` is a compatibility alias) records a smaller amount when you specify one (`billable` must be `<= wall`). `--billable suggested` uses elapsed from `last_seen` (what glance already computed) so a reaper does not have to read glance first. `--accept-stale` is a no-op; `stop` works non-TTY without it, and JSON may pass the flag without error.
 - Store private title/body plus a **customer-ready title/body**. The agent generates both from the task, then refreshes the customer copy from the actual outcome when it parks, journals, or hands off. You can steer or replace any wording.
 - Label each entry with `project_name`. It defaults to the repository name; the agent uses a client/project name already present in context and asks only when the customer label matters but cannot be inferred.
 - Treat a hop shorter than **2 minutes** as a false start (`0:00`). That test is start → now, not “did heartbeat ping `last_seen`?”
-- Flag an overnight leftover with `stale_stop` on **explicit** stop and still keep **full wall**. It does not clip billable to `last_seen`.
+- Flag an overnight leftover with `stale_stop` on **explicit** stop and still keep **full wall**. It does not clip billable to `last_seen` unless you pass `--billable suggested`. `mental doctor` warns on a stale open interval (idle since last heartbeat) instead of listing it as a healthy info line.
 - When `start` cannot continue (new calendar day, or 12h since `started`), close the leftover at **`last_seen`** (last proof of life), then start a new interval. Nights are not wall.
 - Show a **gap**, not invented minutes: heartbeat JSON `track.unclocked` (a hop today with no interval today); report `unclockedCommitDays` (git commit **dates** with no clocked slice).
 - Export a dated customer CSV **outside** the git worktree (`--external --project <client> --out /path/outside/repo.csv`). Each row says when the work happened, what was done, wall time, and billable time.
@@ -88,7 +88,7 @@ Customer export fails with `needs-customer-copy` instead of writing a partial fi
 | Hop ends | Park, handoff, or journal stops the focused interval. `billable = wall` (stop clock = now). Other runners stay. |
 | New start, same day, under 12h | Same interval. Title may change. `--via` stays whoever opened it. Other clocks stay. |
 | New start, new day or 12h cap | Previous interval stops at `last_seen`, then a new one starts. |
-| Overnight leftover, explicit stop | Stop anyway at **now**. `stale_stop` is a flag. Billable is still full wall, not last_seen. |
+| Overnight leftover, explicit stop | Stop anyway at **now**. `stale_stop` is a flag. Billable is still full wall unless `--billable suggested`. `--accept-stale` is a no-op. |
 | Customer copy | The agent generates `--title-external` and `--body-external` on start, then refreshes them on park, journal, or handoff. |
 | `timer_stop_failed` on JSON | The timer is still running. Tell the user. |
 
@@ -104,6 +104,8 @@ mental track export --external --project Acme --out /tmp/invoice.csv --json
 
 `--from` / `--to` are remap/attention, not dates. Use `--since` / `--until`.
 
+Report includes **running** intervals (live wall, `status: running`) so an open clock is not a silent zero. Totals always include `wall_minutes` and `running` (count) / `running_minutes`. `--external` export still omits open clocks from invoice rows, but `running` stays on the JSON so the gap is visible.
+
 Heartbeat `data.track` (when enabled) is compact: ids, stale flags, `unclocked`. No titles, bodies, or hours on that sibling.
 
 ## Workspace caveat
@@ -112,6 +114,6 @@ Hours attach to the bundle `mental where` resolves from the **git worktree**. A 
 
 ## For agents
 
-When `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill. If `runningCount` is 0 (or the runner is stale / another day), start with short AI-generated internal and customer-ready title/body. Start twice is safe. At park/handoff/journal, refresh the customer copy on that same command. Billable defaults to wall; never invent a smaller duration. Ask only on genuine ambiguity and prefer the host's structured question UI. Glance and report are **Read** (`glanced` / `reported`), not Time › exported. JSON `ensured: true` → Time › *ensured*; a new row is Time › *started*.
+When `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Track skill. If `runningCount` is 0 (or the runner is stale / another day), start with short AI-generated internal and customer-ready title/body. Start twice is safe. At park/handoff/journal, refresh the customer copy on that same command. Billable defaults to wall; never invent a smaller duration. `stop --billable suggested` uses last_seen elapsed; `--accept-stale` is a no-op. Ask only on genuine ambiguity and prefer the host's structured question UI. Glance and report are **Read** (`glanced` / `reported`), not Time › exported. JSON `ensured: true` → Time › *ensured*; a new row is Time › *started*.
 
 Source: [optional/mental-track/SKILL.md](../optional/mental-track/SKILL.md).
