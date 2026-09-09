@@ -2,6 +2,7 @@
  * `mental show <path>` — one OKF file relative to the bundle root.
  */
 import { resolveBundle } from "../lib/resolve.mjs";
+import { catalogRoot } from "../lib/heartbeat.mjs";
 import { readBundleFile } from "../lib/okf.mjs";
 import { listBacklinks } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
@@ -27,14 +28,22 @@ export function cmdShow(args, io = {}) {
     printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
-  const file = readBundleFile(resolved.data.root, rel);
+  const root = catalogRoot(resolved.data);
+  if (!root) {
+    printResult(stdout, args, false, undefined, {
+      code: "not-found",
+      message: "no Mental bundle yet (home mode without a UUID)",
+    });
+    return 1;
+  }
+  const file = readBundleFile(root, rel);
   if (!file.ok) {
     printResult(stdout, args, false, undefined, file.error);
     return 1;
   }
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const backlinks = listBacklinks({
-    root: resolved.data.root,
+    root,
     path: file.data.path.split("#")[0],
     id: resolved.data.id,
     home,

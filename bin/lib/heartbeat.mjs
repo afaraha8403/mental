@@ -47,11 +47,21 @@ export const HEARTBEAT_JSON_FIELDS = [
 
 /**
  * Home mode without a UUID is `~/.mental/projects` (parent), not a bundle.
+ * Glance (search/list/show) must not walk that parent.
  * @param {{ id?: string | null, mode?: string }} where
  */
 export function isBundleRoot(where) {
   if (where.mode === "env" || where.mode === "local" || where.mode === "personal") return true;
   return Boolean(where.id);
+}
+
+/**
+ * Catalog root for search/list/show, or null when unbound home.
+ * @param {{ id?: string | null, mode?: string, root?: string }} where
+ * @returns {string | null}
+ */
+export function catalogRoot(where) {
+  return isBundleRoot(where) && where.root ? where.root : null;
 }
 
 /**

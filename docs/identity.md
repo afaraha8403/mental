@@ -23,6 +23,9 @@ Two clones of the same origin share one brain until you split.
 4. Not a git repo → `~/.mental` → mode `personal`
 
 Exclusive: never concatenate personal + project trees in `status` / `search`.
+Until a write creates a UUID, `search` / `list` / `show` are empty. They must
+not walk `~/.mental/projects` (the parent of every slice). Leftover `./.mental`
+stays invisible until that write. `mental pulse` is the cross-project surface.
 
 Origin matching treats `git@github.com:org/repo` and `https://github.com/org/repo.git` as the same hint. A fork (new origin, `upstream` matches an old origin) does **not** inherit silently — remap or split. A git worktree shares the main worktree’s UUID. A monorepo binds the git root, not `packages/foo`.
 

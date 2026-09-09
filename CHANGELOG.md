@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-09-09
+
+### Fixes
+- Unbound `search`, `list`, and `show` no longer walk every home project under `~/.mental/projects`. Until a write creates a UUID, glance returns an empty catalog (`show` is not-found). Leftover `./.mental` still imports only on write. `mental pulse` remains the cross-project view.
+
 ## [0.10.1] - 2026-09-08
 
 ### Features

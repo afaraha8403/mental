@@ -2,6 +2,7 @@
  * `mental list` — concepts in the active bundle (filters: --type --status --tag --kind).
  */
 import { resolveBundle } from "../lib/resolve.mjs";
+import { catalogRoot } from "../lib/heartbeat.mjs";
 import { filterConcepts, listConcepts } from "../lib/index.mjs";
 import { printResult } from "../lib/output.mjs";
 
@@ -35,7 +36,10 @@ export function cmdList(args, io = {}) {
   const status = typeof args.flags?.status === "string" ? args.flags.status : undefined;
   const tag = typeof args.flags?.tag === "string" ? args.flags.tag : undefined;
   const kind = typeof args.flags?.kind === "string" ? args.flags.kind : undefined;
-  const all = filterConcepts(listConcepts(resolved.data.root), { type, status, tag, kind }).map(summarize);
+  const root = catalogRoot(resolved.data);
+  const all = root
+    ? filterConcepts(listConcepts(root), { type, status, tag, kind }).map(summarize)
+    : [];
   const items = all.slice(0, LIST_CAP);
   const data = {
     ...resolved.data,

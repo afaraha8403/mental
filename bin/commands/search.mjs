@@ -2,8 +2,14 @@
  * `mental search` — query the derived index (sqlite) or scan OKF files.
  */
 import { resolveBundle } from "../lib/resolve.mjs";
-import { mergeSearchResults, searchBundle } from "../lib/index.mjs";
+import { catalogRoot } from "../lib/heartbeat.mjs";
+import { mergeSearchResults, searchBundle, tokenizeQuery } from "../lib/index.mjs";
 import { printResult, EXIT_USAGE } from "../lib/output.mjs";
+
+function emptyFound(q, any) {
+  const tokens = tokenizeQuery(String(q).trim().toLowerCase());
+  return { backend: "scan", hits: [], total: 0, tokens, op: any ? "or" : "and" };
+}
 
 export function cmdSearch(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -38,8 +44,9 @@ export function cmdSearch(args, io = {}) {
   const any = args.flags?.any === true;
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const env = args.env ?? process.env;
+  const root = catalogRoot(resolved.data);
   const base = {
-    root: resolved.data.root,
+    root,
     id: resolved.data.id,
     home,
     env,
@@ -48,8 +55,11 @@ export function cmdSearch(args, io = {}) {
     tag,
     kind,
   };
-  const found =
-    queries.length === 1
+  const found = !root
+    ? queries.length === 1
+      ? emptyFound(queries[0], any)
+      : mergeSearchResults(queries.map((q) => emptyFound(q, false)))
+    : queries.length === 1
       ? searchBundle({ ...base, q: queries[0], any })
       : mergeSearchResults(
           queries.map((q) => searchBundle({ ...base, q, any: false })),

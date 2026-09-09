@@ -14,7 +14,7 @@ license: MIT
 compatibility: Requires Node.js >=22.13 and git. Agent Plugins 1.0.0 + Agent Skills. MCP is optional (`mental serve` / `mental install --mcp`); the plugin does not start it.
 metadata:
   author: Ali Farahat
-  version: "0.10.1"
+  version: "0.10.2"
   tags: continuity,coding-agents,mcp,agent-skills,cursor,claude-code,copilot,journal,decisions,handoff,local-first
 user-invocable: true
 disable-model-invocation: false
@@ -151,6 +151,12 @@ UUID slice. Modes: `env` (MENTAL_DIR), `local` (`./.mental/` after `mental local
 `home` (`~/.mental/projects/<uuid>/`), `personal` (`~/.mental` when cwd is not a
 git repo). Never overlay personal + project trees.
 
+Home mode with `id: null` is not a bundle. `search` / `list` return an empty
+catalog (`ok: true`, no hits). `show` is not-found. They do not walk
+`~/.mental/projects` (the parent of every UUID slice). `id: null` means unbound,
+not “this repo has no decisions.” Leftover `./.mental` stays invisible until a
+write. Cross-project overview is `mental pulse`.
+
 Leftover `./.mental` without the `.mental-local` marker is **normalized** into
 `~/.mental/projects/<uuid>/` on first **write** (`install` / `status` / `journal`,
 not `where`) (canonical paths + frontmatter) and indexed in sqlite. The leftover
@@ -267,9 +273,10 @@ Mental CLI is not only a start/finish ritual. Step back in cheaply whenever:
   `mental search <that name> --json` as its own query (not glued to other words).
   Space-separated words are AND prefixes (`--any` is OR). MCP `q` may be a string
   array for a union in one round-trip. Also `mental list --type Decision --json`
-  (all statuses — titles, not only open). `mental show` any plausible hit
-  (journal hits may be `journal/YYYY-MM-DD.md#HH:MM`); follow `backlinks`.
-  Orient-search on the user's topic is not enough.
+  (all statuses — titles, not only open). If `id` is null, search/list are empty
+  (unbound, not “no decisions”); `pulse` is the other-repos view. `mental show`
+  any plausible hit (journal hits may be `journal/YYYY-MM-DD.md#HH:MM`); follow
+  `backlinks`. Orient-search on the user's topic is not enough.
 - **Approach change** — before abandoning or switching an approach, search that
   name then `mental show <path> --json` for the hit (backlinks are on `show`).
   If the switch constrains the future, record it with `mental decide` at once.
