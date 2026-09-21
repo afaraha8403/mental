@@ -3,8 +3,9 @@
  */
 import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { BEGIN, CMD, END, OPTIONAL_DIR, PKG_ROOT, RULES_DIR } from "./pkg.mjs";
+import { BEGIN, CMD, END, OPTIONAL_DIR, PKG_ROOT, RULES_DIR, VERSION } from "./pkg.mjs";
 import { loadConfig } from "./config.mjs";
+import { skillMetadataVersion } from "./lockstep.mjs";
 
 /**
  * Directory of the full Mental procedure copied by `mental install`.
@@ -67,7 +68,42 @@ export function userInstallTargets(home) {
   };
 }
 
-function copySkill(dest) {
+function destSkillVersion(dest) {
+  const file = join(dest, "SKILL.md");
+  if (!existsSync(file)) return null;
+  try {
+    return skillMetadataVersion(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function sameFileBytes(a, b) {
+  try {
+    return existsSync(a) && existsSync(b) && readFileSync(a).equals(readFileSync(b));
+  } catch {
+    return false;
+  }
+}
+
+function recordAttempt(written, skipped, failed, dest, fn) {
+  try {
+    const outcome = fn();
+    if (outcome === "skipped") skipped.push(dest);
+    else written.push(dest);
+  } catch (err) {
+    failed.push({
+      path: dest,
+      code: String(err && typeof err === "object" && "code" in err && err.code ? err.code : "internal").toLowerCase(),
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+/**
+ * @returns {"written" | "skipped"}
+ */
+function copySkill(dest, { force = false } = {}) {
   mkdirSync(dirname(dest), { recursive: true });
   let target = dest;
   try {
@@ -81,17 +117,36 @@ function copySkill(dest) {
   } catch {
     // dest does not exist yet
   }
+  if (!force && destSkillVersion(target) === VERSION) return "skipped";
   cpSync(skillSourceDir(), target, { recursive: true, force: true });
+  return "written";
 }
 
-function copyRule(dest) {
+/**
+ * @returns {"written" | "skipped"}
+ */
+function copyRule(dest, { force = false } = {}) {
   mkdirSync(dirname(dest), { recursive: true });
+  if (!force && sameFileBytes(dest, ruleSourceFile())) return "skipped";
   cpSync(ruleSourceFile(), dest);
+  return "written";
 }
 
-function writePlainRule(dest, body) {
+/**
+ * @returns {"written" | "skipped"}
+ */
+function writePlainRule(dest, body, { force = false } = {}) {
+  const next = `${body.trim()}\n`;
   mkdirSync(dirname(dest), { recursive: true });
-  writeFileSync(dest, `${body.trim()}\n`);
+  if (!force && existsSync(dest)) {
+    try {
+      if (readFileSync(dest, "utf8") === next) return "skipped";
+    } catch {
+      // rewrite
+    }
+  }
+  writeFileSync(dest, next);
+  return "written";
 }
 
 export function trackSkillSourceDir() {
@@ -126,7 +181,10 @@ export function userTrackTargets(home) {
   };
 }
 
-function copyDirFollowLink(src, dest) {
+/**
+ * @returns {"written" | "skipped"}
+ */
+function copyDirFollowLink(src, dest, { force = false } = {}) {
   mkdirSync(dirname(dest), { recursive: true });
   let target = dest;
   try {
@@ -136,7 +194,9 @@ function copyDirFollowLink(src, dest) {
   } catch {
     // dest does not exist yet
   }
+  if (!force && destSkillVersion(target) === VERSION) return "skipped";
   cpSync(src, target, { recursive: true, force: true });
+  return "written";
 }
 
 /**
@@ -168,28 +228,33 @@ export function shouldCopyTrackSkills(home) {
 
 /**
  * @param {string} home
- * @returns {string[]}
+ * @param {{ force?: boolean }} [opts]
+ * @returns {{ written: string[], skipped: string[], failed: Array<{ path: string, code: string, message: string }> }}
  */
-export function copyTrackSkills(home) {
-  if (!existsSync(join(trackSkillSourceDir(), "SKILL.md"))) return [];
-  const targets = userTrackTargets(home);
+export function copyTrackSkills(home, { force = false } = {}) {
   /** @type {string[]} */
   const written = [];
+  /** @type {string[]} */
+  const skipped = [];
+  /** @type {Array<{ path: string, code: string, message: string }>} */
+  const failed = [];
+  if (!existsSync(join(trackSkillSourceDir(), "SKILL.md"))) return { written, skipped, failed };
+  const targets = userTrackTargets(home);
   for (const dest of targets.skills) {
-    copyDirFollowLink(trackSkillSourceDir(), dest);
-    written.push(dest);
+    recordAttempt(written, skipped, failed, dest, () => copyDirFollowLink(trackSkillSourceDir(), dest, { force }));
   }
   if (existsSync(trackRuleSourceFile())) {
-    mkdirSync(dirname(targets.cursorRule), { recursive: true });
-    cpSync(trackRuleSourceFile(), targets.cursorRule);
-    written.push(targets.cursorRule);
+    recordAttempt(written, skipped, failed, targets.cursorRule, () => {
+      mkdirSync(dirname(targets.cursorRule), { recursive: true });
+      if (!force && sameFileBytes(targets.cursorRule, trackRuleSourceFile())) return "skipped";
+      cpSync(trackRuleSourceFile(), targets.cursorRule);
+      return "written";
+    });
     const body = trackRuleBodyText();
-    writePlainRule(targets.claudeRule, body);
-    written.push(targets.claudeRule);
-    writePlainRule(targets.agentsRule, body);
-    written.push(targets.agentsRule);
+    recordAttempt(written, skipped, failed, targets.claudeRule, () => writePlainRule(targets.claudeRule, body, { force }));
+    recordAttempt(written, skipped, failed, targets.agentsRule, () => writePlainRule(targets.agentsRule, body, { force }));
   }
-  return written;
+  return { written, skipped, failed };
 }
 
 /**
@@ -218,8 +283,10 @@ export function removeTrackSkills(home) {
  * Insert or replace a managed HTML-comment block.
  * @param {string} file
  * @param {string} content
+ * @param {{ force?: boolean }} [opts]
+ * @returns {{ file: string, created: boolean, updated: boolean, skipped?: boolean }}
  */
-export function mergeManaged(file, content) {
+export function mergeManaged(file, content, { force = false } = {}) {
   mkdirSync(dirname(file), { recursive: true });
   const existed = existsSync(file);
   const block = `${BEGIN}\n${content.trim()}\n${END}`;
@@ -232,7 +299,9 @@ export function mergeManaged(file, content) {
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   if (cur.includes(BEGIN) && cur.includes(END)) {
     const re = new RegExp(`${esc(BEGIN)}[\\s\\S]*?${esc(END)}`);
-    writeFileSync(file, cur.replace(re, block));
+    const next = cur.replace(re, block);
+    if (!force && next === cur) return { file, created: false, updated: false, skipped: true };
+    writeFileSync(file, next);
     return { file, created: false, updated: true };
   }
   const gap = cur && !cur.endsWith("\n") ? "\n" : "";
@@ -380,45 +449,58 @@ export function hostRuleChecks({ home, gitRoot = null }) {
 }
 
 /**
- * @param {{ home: string, projectDir?: string | null, dryRun?: boolean }} opts
+ * @param {{ home: string, projectDir?: string | null, dryRun?: boolean, force?: boolean, homeInstall?: boolean }} opts
  */
-export function installSkills({ home, projectDir = null, dryRun = false }) {
+export function installSkills({
+  home,
+  projectDir = null,
+  dryRun = false,
+  force = false,
+  homeInstall = true,
+}) {
   const targets = userInstallTargets(home);
   /** @type {string[]} */
   const written = [];
+  /** @type {string[]} */
+  const skipped = [];
+  /** @type {Array<{ path: string, code: string, message: string }>} */
+  const failed = [];
   if (!dryRun) {
     const body = ruleBodyText();
-    for (const dest of targets.skills) {
-      copySkill(dest);
-      written.push(dest);
-    }
-    copyRule(targets.cursorRule);
-    written.push(targets.cursorRule);
-    writePlainRule(targets.claudeRule, body);
-    written.push(targets.claudeRule);
-    writePlainRule(targets.agentsRule, body);
-    written.push(targets.agentsRule);
-    for (const doc of targets.managedDocs) {
-      mergeManaged(doc, body);
-      written.push(doc);
-    }
-    if (existsSync(targets.opencodeAgents)) {
-      mergeManaged(targets.opencodeAgents, body);
-      written.push(targets.opencodeAgents);
+    if (homeInstall) {
+      for (const dest of targets.skills) {
+        recordAttempt(written, skipped, failed, dest, () => copySkill(dest, { force }));
+      }
+      recordAttempt(written, skipped, failed, targets.cursorRule, () => copyRule(targets.cursorRule, { force }));
+      recordAttempt(written, skipped, failed, targets.claudeRule, () => writePlainRule(targets.claudeRule, body, { force }));
+      recordAttempt(written, skipped, failed, targets.agentsRule, () => writePlainRule(targets.agentsRule, body, { force }));
+      for (const doc of targets.managedDocs) {
+        recordAttempt(written, skipped, failed, doc, () => {
+          const r = mergeManaged(doc, body, { force });
+          return r.skipped ? "skipped" : "written";
+        });
+      }
+      if (existsSync(targets.opencodeAgents)) {
+        recordAttempt(written, skipped, failed, targets.opencodeAgents, () => {
+          const r = mergeManaged(targets.opencodeAgents, body, { force });
+          return r.skipped ? "skipped" : "written";
+        });
+      }
     }
     if (projectDir) {
       const vendored = join(projectDir, ".github", "skills", "mental");
-      copySkill(vendored);
-      written.push(vendored);
+      recordAttempt(written, skipped, failed, vendored, () => copySkill(vendored, { force }));
       const projectRule = projectCursorRule(projectDir);
-      copyRule(projectRule);
-      written.push(projectRule);
+      recordAttempt(written, skipped, failed, projectRule, () => copyRule(projectRule, { force }));
     }
-    if (shouldCopyTrackSkills(home)) {
-      written.push(...copyTrackSkills(home));
+    if (homeInstall && shouldCopyTrackSkills(home)) {
+      const track = copyTrackSkills(home, { force });
+      written.push(...track.written);
+      skipped.push(...track.skipped);
+      failed.push(...track.failed);
     }
   }
-  return { ok: true, written, targets };
+  return { ok: failed.length === 0, written, skipped, failed, targets };
 }
 
 export function skillsPresent(home) {

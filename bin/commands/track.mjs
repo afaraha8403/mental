@@ -58,14 +58,15 @@ function resolveWhere(args, { write }) {
 function formatGlance(data) {
   const lines = [];
   if (!data.running.length && !data.stoppedToday.length) return "no running timers";
-  for (const t of data.tasks) {
-    lines.push(`${t.title_internal}  ⏱ ${t.wall}  billable ${t.billable}`);
-    for (const i of t.intervals) {
-      const tag = i.neverStarted ? "never-started" : i.stale ? "stale" : i.status;
-      lines.push(`  ${tag} ${i.id.slice(0, 8)}  ${i.live_wall}`);
-    }
+  for (const i of data.running) {
+    const tag = i.neverStarted ? "never-started" : i.stale ? "stale" : i.status;
+    lines.push(`${i.title_internal}  ${tag} ${String(i.id).slice(0, 8)}  ${i.live_wall}`);
+  }
+  for (const i of data.stoppedToday) {
+    lines.push(`${i.title_internal}  stopped ${String(i.id).slice(0, 8)}  ${i.wall || i.live_wall}`);
   }
   if (data.overlap?.length) lines.push("warn: overlapping running intervals (same clock twice)");
+  if (data.truncated) lines.push("truncated; use mental track report --since DATE --until DATE --json");
   return lines.join("\n");
 }
 
@@ -114,7 +115,7 @@ export function cmdTrack(args, io = {}) {
   }
 
   if (sub === "glance" || sub === "track") {
-    const g = glanceTime(where.root);
+    const g = glanceTime(where.root, { history: Boolean(args.flags?.history) });
     if (!g.ok) {
       printResult(stdout, args, false, undefined, g.error);
       return 1;

@@ -33,7 +33,7 @@ Park, handoff, and journal stop the **focused** timer. Other running clocks stay
 - Treat a hop shorter than **2 minutes** as a false start (`0:00`). That test is start → now, not “did heartbeat ping `last_seen`?”
 - Flag an overnight leftover with `stale_stop` on **explicit** stop and still keep **full wall**. It does not clip billable to `last_seen` unless you pass `--billable suggested`. `mental doctor` warns on a stale open interval (idle since last heartbeat) instead of listing it as a healthy info line.
 - When `start` cannot continue (new calendar day, or 12h since `started`), close the leftover at **`last_seen`** (last proof of life), then start a new interval. Nights are not wall.
-- Show a **gap**, not invented minutes: heartbeat JSON `track.unclocked` (a hop today with no interval today); report `unclockedCommitDays` (git commit **dates** with no clocked slice).
+- Show a **gap**, not invented minutes: heartbeat JSON `track.unclocked` (a hop today with no interval today); `mental doctor` warns `time-unclocked`; report `unclockedCommitDays` (git commit **dates** with no clocked slice). Hooks do not start a clock.
 - Export a dated customer CSV **outside** the git worktree (`--external --project <client> --out /path/outside/repo.csv`). Each row says when the work happened, what was done, wall time, and billable time.
 - Share one `time.sqlite` across Cursor, Claude Code, Copilot, Codex, OpenCode, MCP, and the TTY (`--via` is a short host token, never a session id). `--via` on a later start does not split the clock.
 
@@ -97,7 +97,8 @@ Customer export fails with `needs-customer-copy` instead of writing a partial fi
 ## Glance, report, export
 
 ```bash
-mental track --json                          # glance (not a focus ping)
+mental track --json                          # glance: running + today (not a focus ping)
+mental track --history --json                # nested tasks[] history (large)
 mental track report --since YYYY-MM-DD --until YYYY-MM-DD --json
 mental track export --external --project Acme --out /tmp/invoice.csv --json
 ```

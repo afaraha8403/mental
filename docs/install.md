@@ -20,7 +20,9 @@ npm puts `mental` on PATH. `mental install` does not reinstall or rewrite the
 CLI; it copies the skill and a tiny always-on rule into each host's documented
 path (`~/.claude/rules`, `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
 `~/.cursor/rules`, `~/.agents`, and OpenCode `AGENTS.md` when it already
-exists), and creates a `~/.mental` skeleton. Under a PowerShell policy that
+exists), and creates a `~/.mental` skeleton. `mental install --project` writes
+only the repo dests (`.github/skills/mental` and `.cursor/rules/mental.mdc`).
+Under a PowerShell policy that
 blocks npm-generated `.ps1` launchers, use `npm.cmd` and `mental.cmd`
 explicitly.
 

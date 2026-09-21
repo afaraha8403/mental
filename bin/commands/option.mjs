@@ -16,6 +16,7 @@ function formatOptionalsTable(rows) {
   for (const r of rows) {
     const neu = r.isNew ? "  [new]" : "";
     lines.push(`  ${r.id.padEnd(6)} ${r.enabled ? "on " : "off"}  ${r.scope.padEnd(6)}  ${r.command}${neu}`);
+    if (r.summary) lines.push(`         ${r.summary}`);
   }
   return lines.join("\n");
 }
@@ -137,7 +138,7 @@ export function cmdOption(args, io = {}) {
   }
   if (feature === "track" && action === "on") {
     const copied = copyTrackSkills(home);
-    extra.push(...copied);
+    extra.push(...(copied.written || []));
   }
 
   const data = {

@@ -31,7 +31,13 @@ test("option list has needsConsent; track off does not suggest option on", () =>
   for (const row of listed.data.optionals) {
     assert.equal(row.needsConsent, true);
     assert.equal(typeof row.command, "string");
+    assert.equal(typeof row.summary, "string");
+    assert.ok(row.summary.length > 0);
   }
+  const track = listed.data.optionals.find((r) => r.id === "track");
+  assert.match(track.summary, /track start/);
+  const hooks = listed.data.optionals.find((r) => r.id === "hooks");
+  assert.match(hooks.summary, /does not clock/);
   const off = parseErr(mental(home, root, ["track", "start", "--json", "--title-internal", "Nope"]), "track off");
   assert.match(off.error.message, /Time tracking is off/);
   assert.doesNotMatch(off.error.message, /option track on/);

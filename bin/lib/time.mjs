@@ -1243,73 +1243,144 @@ function overlappingPairs(rows, now = new Date()) {
   return pairs;
 }
 
+const GLANCE_CLOCK_KEYS = [
+  "id",
+  "task_id",
+  "status",
+  "started",
+  "stopped",
+  "last_seen_at",
+  "focused",
+  "stale",
+  "neverStarted",
+  "live_wall",
+  "live_wall_minutes",
+  "suggested_billable",
+  "suggested_billable_minutes",
+  "wall",
+  "billable",
+  "title_internal",
+];
+
+const GLANCE_RUNNING_CAP = 7;
+const GLANCE_STOPPED_TODAY_CAP = 20;
+
+function slimGlanceClock(row) {
+  /** @type {Record<string, unknown>} */
+  const out = {};
+  for (const k of GLANCE_CLOCK_KEYS) out[k] = row[k];
+  return out;
+}
+
+function emptyGlanceData() {
+  return {
+    running: [],
+    stoppedToday: [],
+    overlap: [],
+    taskCount: 0,
+    intervalCount: 0,
+    runningCount: 0,
+    focusedId: null,
+    truncated: false,
+  };
+}
+
+function historyInterval(row) {
+  const slim = slimGlanceClock(row);
+  delete slim.title_internal;
+  return slim;
+}
+
 /**
- * Glance: running (stale / never-started first) grouped by task. Not a focus ping.
+ * Glance: running + today's stops. Not a focus ping. Default omits `tasks[]` history
+ * so `--json` stays under agent stdout caps. Pass `{ history: true }` for the nested dump.
  * @param {string} root
- * @param {{ now?: Date, since?: string, until?: string }} [opts]
+ * @param {{ now?: Date, since?: string, until?: string, history?: boolean }} [opts]
  */
-export function glanceTime(root, { now = new Date(), since, until } = {}) {
+export function glanceTime(root, { now = new Date(), since, until, history = false } = {}) {
   const file = timeDbPath(root);
   if (!existsSync(file)) {
-    return { ok: true, data: { tasks: [], running: [], stoppedToday: [], overlap: [] } };
+    return { ok: true, data: emptyGlanceData() };
   }
   const opened = openTimeDb(file, { write: false });
   if (!opened.ok) return opened;
   try {
     const today = calendarDateFromIso(isoWithOffset(now));
     const rows = allIntervals(opened.db).map((r) => annotate(r, now));
-    const running = rows
+    const runningAll = rows
       .filter((r) => r.status === "running")
       .sort((a, b) => Number(b.neverStarted) - Number(a.neverStarted) || Number(b.stale) - Number(a.stale));
-    const stoppedToday = rows.filter((r) => r.status === "stopped" && calendarDateFromIso(r.stopped || r.started) === today);
-    const ranged = rows.filter((r) => {
-      if (!since && !until) return true;
-      return inDateRange(r.started, since, until);
-    });
-    /** @type {Map<string, typeof rows>} */
-    const byTask = new Map();
-    for (const r of running.length ? running : ranged) {
-      const list = byTask.get(r.task_id) || [];
-      list.push(r);
-      byTask.set(r.task_id, list);
+    const stoppedTodayAll = rows.filter(
+      (r) => r.status === "stopped" && calendarDateFromIso(r.stopped || r.started) === today,
+    );
+    const taskCount = new Set(rows.map((r) => r.task_id).filter(Boolean)).size;
+    const intervalCount = rows.length;
+    const runningCount = runningAll.length;
+    const focusedId = runningAll.find((r) => r.focused)?.id ?? null;
+    let truncated = false;
+    let running = runningAll;
+    let stoppedToday = stoppedTodayAll;
+    if (running.length > GLANCE_RUNNING_CAP) {
+      running = running.slice(0, GLANCE_RUNNING_CAP);
+      truncated = true;
     }
-    // Always group running by task; also include today's stopped on those tasks.
-    const taskIds = new Set(running.map((r) => r.task_id));
-    for (const r of stoppedToday) {
-      if (!taskIds.has(r.task_id) && running.length) continue;
-      const list = byTask.get(r.task_id) || [];
-      if (!list.some((x) => x.id === r.id)) list.push(r);
-      byTask.set(r.task_id, list);
+    if (stoppedToday.length > GLANCE_STOPPED_TODAY_CAP) {
+      stoppedToday = stoppedToday.slice(0, GLANCE_STOPPED_TODAY_CAP);
+      truncated = true;
     }
-    const tasks = [...byTask.entries()].map(([task_id, intervals]) => {
-      const wallMin = intervals.reduce((s, i) => s + (i.status === "running" ? i.live_wall_minutes : i.wall_minutes || 0), 0);
-      const userMin = intervals.reduce((s, i) => {
-        if (i.status === "running") return s + (i.live_wall_minutes || 0);
-        return s + (i.user_minutes || 0);
-      }, 0);
-      const title = intervals[0]?.title_internal || "";
-      return {
-        task_id,
-        title_internal: title,
-        wall: formatHmm(wallMin),
-        user: formatHmm(userMin),
-        billable: formatHmm(userMin),
-        intervals,
-      };
-    });
-    return {
-      ok: true,
-      data: {
-        tasks,
-        running,
-        stoppedToday,
-        overlap: overlappingPairs(running, now).filter(([idA, idB]) => {
-          const a = running.find((r) => r.id === idA);
-          const b = running.find((r) => r.id === idB);
-          return Boolean(a && b && a.task_id === b.task_id);
-        }),
-      },
+    const data = {
+      running: running.map(slimGlanceClock),
+      stoppedToday: stoppedToday.map(slimGlanceClock),
+      overlap: overlappingPairs(running, now).filter(([idA, idB]) => {
+        const a = running.find((r) => r.id === idA);
+        const b = running.find((r) => r.id === idB);
+        return Boolean(a && b && a.task_id === b.task_id);
+      }),
+      taskCount,
+      intervalCount,
+      runningCount,
+      focusedId,
+      truncated,
     };
+    if (history) {
+      const ranged = rows.filter((r) => {
+        if (!since && !until) return true;
+        return inDateRange(r.started, since, until);
+      });
+      /** @type {Map<string, typeof rows>} */
+      const byTask = new Map();
+      for (const r of runningAll.length ? runningAll : ranged) {
+        const list = byTask.get(r.task_id) || [];
+        list.push(r);
+        byTask.set(r.task_id, list);
+      }
+      const taskIds = new Set(runningAll.map((r) => r.task_id));
+      for (const r of stoppedTodayAll) {
+        if (!taskIds.has(r.task_id) && runningAll.length) continue;
+        const list = byTask.get(r.task_id) || [];
+        if (!list.some((x) => x.id === r.id)) list.push(r);
+        byTask.set(r.task_id, list);
+      }
+      data.tasks = [...byTask.entries()].map(([task_id, intervals]) => {
+        const wallMin = intervals.reduce(
+          (s, i) => s + (i.status === "running" ? i.live_wall_minutes : i.wall_minutes || 0),
+          0,
+        );
+        const userMin = intervals.reduce((s, i) => {
+          if (i.status === "running") return s + (i.live_wall_minutes || 0);
+          return s + (i.user_minutes || 0);
+        }, 0);
+        return {
+          task_id,
+          title_internal: intervals[0]?.title_internal || "",
+          wall: formatHmm(wallMin),
+          user: formatHmm(userMin),
+          billable: formatHmm(userMin),
+          intervals: intervals.map(historyInterval),
+        };
+      });
+    }
+    return { ok: true, data };
   } finally {
     opened.db.close();
   }

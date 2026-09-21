@@ -205,6 +205,7 @@ function runTool(name, args, ctx) {
     if (args.id) flags.id = args.id;
     if (args.user) flags.user = args.user;
     if (args.billable) flags.billable = args.billable;
+    if (args.history) flags.history = true;
     if (args.all) flags.all = true;
     if (args.new) flags.new = true;
     if (args.since) flags.since = args.since;

@@ -9,6 +9,35 @@ import { peekUpdateNotice, takeTtyNag } from "./update.mjs";
 /** POSIX usage / argparse exit. */
 export const EXIT_USAGE = 2;
 
+/** Thrown filesystem / IO errors under `--json`. */
+export const EXIT_IO = 4;
+
+const IO_ERR_CODES = new Set(["EROFS", "EACCES", "EPERM", "ENOSPC", "ENOTDIR", "EIO"]);
+
+/**
+ * Envelope error for a thrown exception. Used when `--json` and the CLI-entry catch.
+ * @param {unknown} err
+ */
+export function thrownErrorPayload(err) {
+  const raw = err && typeof err === "object" && "code" in err && err.code != null ? String(err.code) : "";
+  const code = (raw || "internal").toLowerCase();
+  const path =
+    err && typeof err === "object" && "path" in err && err.path != null ? String(err.path) : undefined;
+  const message = err instanceof Error ? err.message : String(err);
+  const hint = IO_ERR_CODES.has(raw.toUpperCase())
+    ? "target not writable — if you are a sandboxed agent, widen file permissions or rerun unsandboxed"
+    : undefined;
+  return { code, message, ...(path ? { path } : {}), ...(hint ? { hint } : {}) };
+}
+
+/**
+ * @param {unknown} err
+ */
+export function exitCodeForThrown(err) {
+  const raw = err && typeof err === "object" && "code" in err && err.code != null ? String(err.code).toUpperCase() : "";
+  return IO_ERR_CODES.has(raw) ? EXIT_IO : 1;
+}
+
 /**
  * no-color.org: any non-empty NO_COLOR. Also TERM=dumb, --plain, --no-color.
  * @param {NodeJS.ProcessEnv} [env]
@@ -88,7 +117,7 @@ export function brandLine(text, env = process.env, args = {}) {
 /**
  * @param {boolean} ok
  * @param {object} [data]
- * @param {{ code: string, message: string, hint?: string, retryable?: boolean }} [error]
+ * @param {{ code: string, message: string, hint?: string, retryable?: boolean, path?: string }} [error]
  * @param {{ current: string, latest: string, hint: string } | null} [update]
  */
 export function envelope(ok, data, error, update) {

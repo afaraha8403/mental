@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+- `mental track --json` glance is compact (running + today's stops + counts). It no longer dumps nested `tasks[]` history, so agent hosts with a 64 KiB stdout cap can parse it. Full history is `mental track --history --json` or `mental track report`.
+- Thrown errors under `--json` (install, handoff, journal) return a JSON envelope with `error.code` / `path` / `hint` instead of a raw Node stack. IO failures exit 4.
+- `mental install` skips recopies when the dest skill version already matches the CLI (pass `--force` to recopy). `mental doctor --fix` still force-recopies.
+- `mental install --project` writes only repo dests (`.github/skills/mental` and `.cursor/rules/mental.mdc`) so a sandboxed agent can vendor without home-dir access. `uninstall --project` is the matching inverse.
+- Install continues past individual dest failures and reports `written` / `skipped` / `failed`.
+- `mental doctor` warns `time-unclocked` when Track is on and today has a hop with no clock row. Hooks still do not start a clock.
+
+### Changes
+- Optional feature listings say what hooks and Track actually do: hooks load `mental status --json`; Track is a ledger until `mental track start`.
+
 ## [0.10.2] - 2026-09-09
 
 ### Fixes

@@ -305,10 +305,10 @@ export const CATALOG = {
   install: {
     name: "install",
     group: "Setup",
-    summary: "Skill + rule + PATH. From a published install, upgrades when npm is ahead then recopies skills. Optional --hooks / --mcp / --track only after the user says yes this turn.",
+    summary: "Skill + rule. Default recopies home dests (skips when skill version matches unless --force). --project is project-only. Optional --hooks / --mcp / --track only after the user says yes this turn.",
     usage: `${CMD} install`,
     examples: [`${CMD} install`, `${CMD} install --json`],
-    flags: [b("project"), b("hooks"), b("mcp"), b("track")],
+    flags: [b("project", { summary: "Project dests only (no home recopy)" }), b("force", { summary: "Recopy skills even when versions match" }), b("hooks"), b("mcp"), b("track")],
     effects: "idempotent",
   },
   uninstall: {
@@ -334,7 +334,7 @@ export const CATALOG = {
   track: {
     name: "track",
     group: "Setup",
-    summary: "Optional wall/billable clock (off until option track on). Start is ensure-running (machine-wide); --new starts another. Stop sets billable=wall. --billable suggested uses last_seen. Report includes running clocks. Glance / start / stop / focus / discard / report / export.",
+    summary: "Optional wall/billable clock (off until option track on). Start is ensure-running (machine-wide); --new starts another. Stop sets billable=wall. --billable suggested uses last_seen. Report includes running clocks. Default glance is running + today (not full history).",
     usage: `${CMD} track [glance|start|stop|focus|discard|amend|report|export]`,
     examples: [`${CMD} track`, `${CMD} track start --via cursor --json`, `${CMD} track start --new --title-external "Auth work" --json`],
     flags: [
@@ -355,6 +355,7 @@ export const CATALOG = {
       v("format", { enum: ["csv", "md"] }),
       b("all"),
       b("new", { summary: "Start another clock; default start is ensure-running" }),
+      b("history", { summary: "Glance: include nested tasks[] history (large; default omits it)" }),
       b("external"),
       b("accept-stale", { summary: "No-op; kept so non-TTY stop can pass it" }),
       VIA,

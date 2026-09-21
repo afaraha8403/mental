@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
 import { git, initRepo, mental, tempHome } from "./helpers.mjs";
 import { TIME_DB, assertExportOutPath, backupTimeDb, openTimeDb, timeDbPath } from "../bin/lib/time.mjs";
@@ -747,4 +748,70 @@ test("heartbeat does not ping a leftover from another day; TTY heartbeat does no
   opened.db.close();
   parseOk(mental(home, root, ["heartbeat", "--json"]), "hb leftover");
   assert.equal(getRow(slice, a.data.id).last_seen_at, startedY);
+});
+
+test("track glance --json omits history and stays under the agent stdout cap", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  const opened = openTimeDb(timeDbPath(slice), { write: true });
+  assert.equal(opened.ok, true, opened.error?.message);
+  const lastMonth = "2026-08-01T12:00:00-04:00";
+  const blob = "x".repeat(400);
+  const insert = opened.db.prepare(
+    `INSERT INTO intervals (
+      id, type, status, title_internal, title_external, body_internal, body_external,
+      project_name, started, stopped, last_seen_at, focused, against, via, timestamp,
+      task_id, stale_stop, discarded, needs_user, needs_external
+    ) VALUES (?, 'Time', 'stopped', ?, ?, ?, ?, 'Acme', ?, ?, ?, 0, '', '', ?, ?, 0, 0, 0, 0)`,
+  );
+  for (let i = 0; i < 50; i++) {
+    const id = randomUUID();
+    const taskId = randomUUID();
+    insert.run(id, `History ${i}`, `Customer ${i}`, blob, blob, lastMonth, lastMonth, lastMonth, lastMonth, taskId);
+  }
+  opened.db.close();
+
+  const glance = mental(home, root, ["track", "--json"]);
+  assert.equal(glance.status, 0, glance.stderr || glance.stdout);
+  JSON.parse(glance.stdout);
+  assert.ok(Buffer.byteLength(glance.stdout, "utf8") < 16384, `glance bytes ${Buffer.byteLength(glance.stdout, "utf8")}`);
+  const data = JSON.parse(glance.stdout).data;
+  assert.equal("tasks" in data, false);
+  assert.equal(data.taskCount, 50);
+  assert.equal(data.intervalCount, 50);
+  assert.equal(data.runningCount, 0);
+  assert.equal(data.truncated, false);
+  assert.ok(Array.isArray(data.running));
+  assert.ok(Array.isArray(data.stoppedToday));
+  assert.ok(Array.isArray(data.overlap));
+  assert.doesNotMatch(glance.stdout, /"body_internal"/);
+
+  const history = parseOk(mental(home, root, ["track", "--history", "--json"]), "history");
+  assert.equal(history.data.tasks.length, 50);
+  assert.equal("body_internal" in history.data.tasks[0].intervals[0], false);
+  assert.equal("title_internal" in history.data.tasks[0].intervals[0], false);
+  assert.equal(history.data.tasks[0].title_internal.startsWith("History"), true);
+});
+
+test("doctor warns time-unclocked when track is on and today has a hop but no clock", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  enableTrack(home, root);
+  const doc = JSON.parse(mental(home, root, ["doctor", "--json"]).stdout);
+  const hit = doc.data.checks.find((c) => c.id === "time-unclocked");
+  assert.ok(hit, JSON.stringify(doc.data.checks.map((c) => c.id)));
+  assert.equal(hit.ok, false);
+  assert.equal(hit.level, "warn");
+  assert.notEqual(doc.data.next?.command, "mental doctor --fix");
+  parseOk(mental(home, root, ["track", "start", "--json", "--title-internal", "Now"]), "start");
+  const after = JSON.parse(mental(home, root, ["doctor", "--json"]).stdout);
+  assert.equal(after.data.checks.some((c) => c.id === "time-unclocked"), false);
+});
+
+test("session-start hook never calls track start", () => {
+  const hook = readFileSync(new URL("../hooks/session-start.sh", import.meta.url), "utf8");
+  assert.doesNotMatch(hook, /track start/);
 });

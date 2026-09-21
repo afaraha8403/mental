@@ -1,6 +1,6 @@
 /**
  * `mental install` — copy skill + tiny rule to user agent dirs; ~/.mental skeleton.
- * `--hooks` and `--mcp` are optional and default off.
+ * `--project` is project-only (no home recopy). `--hooks` and `--mcp` are optional and default off.
  */
 import { resolveBundle } from "../lib/resolve.mjs";
 import { userMentalDir } from "../lib/bindings.mjs";
@@ -9,7 +9,7 @@ import { installSkills } from "../lib/install-skills.mjs";
 import { enableHooks } from "../lib/hooks.mjs";
 import { enableMcp } from "../lib/mcp-hosts.mjs";
 import { CMD } from "../lib/pkg.mjs";
-import { printResult, brandLine } from "../lib/output.mjs";
+import { printResult, brandLine, EXIT_IO } from "../lib/output.mjs";
 import { FEATURES, listOptionals, markOptionalSeen, setFeature } from "../lib/config.mjs";
 import { formatOptionalsTable } from "./option.mjs";
 import { copyTrackSkills } from "../lib/install-skills.mjs";
@@ -26,7 +26,8 @@ export function cmdInstall(args, io = {}) {
     return 1;
   }
 
-  const project = Boolean(args.flags?.project);
+  const projectOnly = Boolean(args.flags?.project);
+  const force = Boolean(args.flags?.force);
   const hooks = Boolean(args.flags?.hooks);
   const mcp = Boolean(args.flags?.mcp);
   const track = Boolean(args.flags?.track);
@@ -39,45 +40,53 @@ export function cmdInstall(args, io = {}) {
   });
   const installed = installSkills({
     home,
-    projectDir: project ? cwd : null,
+    projectDir: projectOnly ? cwd : null,
+    homeInstall: !projectOnly,
+    force,
   });
   const personal = userMentalDir(home);
-  ensureSkeleton(personal, { name: "personal" });
+  if (!projectOnly) ensureSkeleton(personal, { name: "personal" });
 
   let hookResult = null;
-  if (hooks) {
-    hookResult = enableHooks(home);
-    setFeature(home, "hooks", "on", { all: true });
-  }
-
   let mcpResult = null;
-  if (mcp) {
-    mcpResult = enableMcp(home);
-    setFeature(home, "mcp", "on", { all: true });
-  }
-
-  const resolved = resolveBundle({
-    cwd,
-    home,
-    env,
-    dir: args.dir ?? null,
-    write: true,
-  });
-
-  const imported = resolved.ok ? resolved.data.imported : null;
+  let resolved = { ok: false, data: null };
+  let imported = null;
   let trackResult = null;
-  if (track && resolved.ok && resolved.data.id) {
-    trackResult = setFeature(home, "track", "on", { uuid: resolved.data.id });
-    if (trackResult.ok) copyTrackSkills(home);
+  let optionals = { optionals: [] };
+
+  if (!projectOnly) {
+    if (hooks) {
+      hookResult = enableHooks(home);
+      setFeature(home, "hooks", "on", { all: true });
+    }
+    if (mcp) {
+      mcpResult = enableMcp(home);
+      setFeature(home, "mcp", "on", { all: true });
+    }
+    resolved = resolveBundle({
+      cwd,
+      home,
+      env,
+      dir: args.dir ?? null,
+      write: true,
+    });
+    imported = resolved.ok ? resolved.data.imported : null;
+    if (track && resolved.ok && resolved.data.id) {
+      trackResult = setFeature(home, "track", "on", { uuid: resolved.data.id });
+      if (trackResult.ok) copyTrackSkills(home, { force });
+    }
+    optionals = listOptionals(home, resolved.ok ? resolved.data.id : null);
+    for (const id of FEATURES) markOptionalSeen(home, id);
   }
-  const optionals = listOptionals(home, resolved.ok ? resolved.data.id : null);
-  for (const id of FEATURES) markOptionalSeen(home, id);
 
   const data = {
     home,
-    personalRoot: personal,
+    personalRoot: projectOnly ? null : personal,
     skills: installed.written,
-    project: project ? `${cwd}/.github/skills/mental` : null,
+    written: installed.written,
+    skipped: installed.skipped,
+    failed: installed.failed,
+    project: projectOnly ? `${cwd}/.github/skills/mental` : null,
     hooks: hookResult,
     mcp: mcpResult,
     track: trackResult,
@@ -87,16 +96,18 @@ export function cmdInstall(args, io = {}) {
     legacyRemoved: legacy.removed,
     legacyLeftover: legacy.leftover,
   };
+  const ok = installed.failed.length === 0;
   const importLine =
     imported?.copied?.length
       ? `\nimported ${imported.copied.length} leftover file(s) from ${imported.from}`
       : "";
-  const hookLine = hooks ? "\nhooks: enabled (session-start → mental status --json)" : "";
-  const mcpLine = mcp
-    ? mcpResult?.ok
-      ? `\nMCP: ${CMD} serve registered in ${mcpResult.written.join(", ")}`
-      : `\nMCP: config write failed (${mcpResult?.error?.message ?? "unknown"}) — add \`${CMD} serve\` manually`
-    : "";
+  const hookLine = hooks && !projectOnly ? "\nhooks: enabled (session-start → mental status --json)" : "";
+  const mcpLine =
+    mcp && !projectOnly
+      ? mcpResult?.ok
+        ? `\nMCP: ${CMD} serve registered in ${mcpResult.written.join(", ")}`
+        : `\nMCP: config write failed (${mcpResult?.error?.message ?? "unknown"}) — add \`${CMD} serve\` manually`
+      : "";
   const legacyLine = legacy.removed.length
     ? `\nremoved ${legacy.removed.length} Balakit Mental leftover(s)`
     : "";
@@ -104,14 +115,25 @@ export function cmdInstall(args, io = {}) {
     legacy.leftover.length
       ? `\nstill mixed Balakit block(s) (Mental text inside a kit block): ${legacy.leftover.join(", ")}`
       : "";
+  const failLine = installed.failed.length
+    ? `\nfailed ${installed.failed.length} dest(s)`
+    : "";
   printResult(
     stdout,
     args,
-    true,
+    ok,
     data,
-    undefined,
+    ok
+      ? undefined
+      : {
+          code: installed.failed[0]?.code || "install",
+          message: `install failed ${installed.failed.length} dest(s)`,
+          path: installed.failed[0]?.path,
+          hint: "target not writable — if you are a sandboxed agent, widen file permissions or rerun unsandboxed",
+        },
     () =>
-      `${brandLine(`installed skill + rule (${installed.written.length} paths)`)}\n~/.mental skeleton: ${personal}${hookLine}${mcpLine}${importLine}${legacyLine}${leftoverLine}\n${formatOptionalsTable(optionals.optionals)}`,
+      `${brandLine(`installed skill + rule (${installed.written.length} paths)`)}\n${projectOnly ? "project dests only" : `~/.mental skeleton: ${personal}`}${hookLine}${mcpLine}${importLine}${legacyLine}${leftoverLine}${failLine}${projectOnly ? "" : `\n${formatOptionalsTable(optionals.optionals)}`}`,
   );
+  if (!ok) return EXIT_IO;
   return 0;
 }

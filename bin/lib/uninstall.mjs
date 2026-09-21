@@ -33,24 +33,27 @@ export function removeManaged(file) {
 /**
  * @param {{ home: string, projectDir?: string | null }} opts
  */
-export function uninstallSkills({ home, projectDir = null }) {
+export function uninstallSkills({ home, projectDir = null, homeUninstall = true }) {
   const targets = userInstallTargets(home);
   /** @type {string[]} */
   const removed = [];
-  for (const dest of targets.skills) {
-    if (existsSync(dest)) {
-      rmSync(dest, { recursive: true, force: true });
-      removed.push(dest);
+  if (homeUninstall) {
+    for (const dest of targets.skills) {
+      if (existsSync(dest)) {
+        rmSync(dest, { recursive: true, force: true });
+        removed.push(dest);
+      }
     }
-  }
-  for (const file of [targets.cursorRule, targets.claudeRule, targets.agentsRule]) {
-    if (existsSync(file)) {
-      rmSync(file, { force: true });
-      removed.push(file);
+    for (const file of [targets.cursorRule, targets.claudeRule, targets.agentsRule]) {
+      if (existsSync(file)) {
+        rmSync(file, { force: true });
+        removed.push(file);
+      }
     }
-  }
-  for (const doc of [...targets.managedDocs, targets.opencodeAgents]) {
-    if (removeManaged(doc)) removed.push(doc);
+    for (const doc of [...targets.managedDocs, targets.opencodeAgents]) {
+      if (removeManaged(doc)) removed.push(doc);
+    }
+    removed.push(...removeTrackSkills(home));
   }
   if (projectDir) {
     const vendored = join(projectDir, ".github", "skills", "mental");
@@ -64,6 +67,5 @@ export function uninstallSkills({ home, projectDir = null }) {
       removed.push(projectRule);
     }
   }
-  removed.push(...removeTrackSkills(home));
   return { ok: true, removed };
 }

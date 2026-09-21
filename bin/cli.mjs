@@ -8,7 +8,7 @@
 import { isCliEntry } from "./lib/entry.mjs";
 import { parseArgv, usage, formatUsageShort, formatCommandHelp } from "./lib/args.mjs";
 import { VERSION } from "./lib/pkg.mjs";
-import { printResult, EXIT_USAGE } from "./lib/output.mjs";
+import { printResult, EXIT_USAGE, thrownErrorPayload, exitCodeForThrown } from "./lib/output.mjs";
 import {
   DAILY_COMMANDS,
   getCommand,
@@ -191,6 +191,11 @@ async function main() {
 
 if (isCliEntry(import.meta.url)) {
   main().catch((err) => {
+    const args = parseArgv(process.argv.slice(2));
+    if (args.json) {
+      printResult(process.stdout, { json: true, env: process.env }, false, undefined, thrownErrorPayload(err));
+      process.exit(exitCodeForThrown(err));
+    }
     console.error(err);
     process.exit(1);
   });

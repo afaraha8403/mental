@@ -5,12 +5,15 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
+import { EXIT_IO } from "../bin/lib/output.mjs";
 import { ensureMentalExcluded, MENTAL_IGNORE_LINE } from "../bin/lib/ignore.mjs";
 import { defaultExcludesFile } from "../bin/lib/ignore.mjs";
 import { skillSourceDir } from "../bin/lib/install-skills.mjs";
@@ -336,4 +339,79 @@ test("doctor --fix on a bare home installs skills", () => {
   assert.equal(existsSync(join(home, ".cursor", "rules", "mental.mdc")), true);
   assert.equal(existsSync(join(root, ".cursor", "rules", "mental.mdc")), false);
 });
+
+test("install --json envelopes a thrown IO error as JSON", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  writeFileSync(join(home, ".claude"), "not-a-dir\n");
+  const r = mental(home, root, ["install", "--json"]);
+  assert.equal(r.status, EXIT_IO, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, false);
+  assert.ok(body.error);
+  assert.ok(body.data?.failed?.length >= 1);
+  assert.ok(body.data.failed.some((f) => f.code === "enotdir" || f.code === "eexist"));
+});
+
+test("handoff --json envelopes a thrown journal write", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  parseOkInstall(home, root);
+  const slice = JSON.parse(mental(home, root, ["where", "--json"]).stdout).data.root;
+  rmSync(join(slice, "journal"), { recursive: true, force: true });
+  writeFileSync(join(slice, "journal"), "blocked\n");
+  const r = mental(home, root, ["handoff", "--json", "--title", "x", "--resume", "y"]);
+  assert.notEqual(r.status, 0);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, false);
+  assert.ok(body.error?.code);
+  assert.match(body.error.code, /enotdir|eexist|eisdir/);
+});
+
+test("install skips recopies when skill version matches unless --force", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  const dest = join(home, ".claude", "skills", "mental", "SKILL.md");
+  const first = statSync(dest).mtimeMs;
+  utimesSync(dest, first / 1000 - 20, first / 1000 - 20);
+  const aged = statSync(dest).mtimeMs;
+  const skip = JSON.parse(mental(home, root, ["install", "--json"]).stdout);
+  assert.equal(skip.ok, true);
+  assert.ok(skip.data.skipped?.length >= 1);
+  assert.equal(statSync(dest).mtimeMs, aged);
+  const forced = JSON.parse(mental(home, root, ["install", "--force", "--json"]).stdout);
+  assert.equal(forced.ok, true);
+  assert.ok(statSync(dest).mtimeMs > aged);
+});
+
+test("install --project is project-only and survives a blocked home", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  writeFileSync(join(home, ".claude"), "not-a-dir\n");
+  const r = mental(home, root, ["install", "--project", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, true);
+  assert.equal(existsSync(join(root, ".github", "skills", "mental", "SKILL.md")), true);
+  assert.equal(existsSync(join(root, ".cursor", "rules", "mental.mdc")), true);
+  assert.equal(existsSync(join(home, ".claude", "skills", "mental")), false);
+});
+
+test("uninstall --project does not strip home dests", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  assert.equal(mental(home, root, ["install", "--project", "--json"]).status, 0);
+  assert.equal(existsSync(join(home, ".claude", "rules", "mental.md")), true);
+  assert.equal(mental(home, root, ["uninstall", "--json", "--project"]).status, 0);
+  assert.equal(existsSync(join(home, ".claude", "rules", "mental.md")), true);
+  assert.equal(existsSync(join(root, ".cursor", "rules", "mental.mdc")), false);
+});
+
+function parseOkInstall(home, root) {
+  const seed = mental(home, root, ["journal", "--json", "--title", "Seed", "--resume", "Continue"]);
+  assert.equal(seed.status, 0, seed.stderr || seed.stdout);
+}
 

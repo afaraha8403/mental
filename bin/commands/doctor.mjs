@@ -24,12 +24,13 @@ import { findGitRoot } from "../lib/git.mjs";
 import { indexPath } from "../lib/index.mjs";
 import { checkForUpdate, cmpSemver, updateHint } from "../lib/update.mjs";
 import { hostPluginChecks } from "../lib/host-plugins.mjs";
-import { DECISION_HEARTBEAT_CAP, listOpenDecisions, ensureSkeleton } from "../lib/okf.mjs";
+import { DECISION_HEARTBEAT_CAP, listOpenDecisions, ensureSkeleton, latestJournalHandoff, localDate } from "../lib/okf.mjs";
 import { parseDays, scanStale } from "../lib/stale.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
-import { FEATURES, listOptionals, loadConfig, markOptionalSeen } from "../lib/config.mjs";
+import { FEATURES, listOptionals, loadConfig, markOptionalSeen, isFeatureOn } from "../lib/config.mjs";
 import { formatOptionalsTable } from "./option.mjs";
-import { TIME_DB, formatHmm, listOrphanTimeDbs, runningHealth } from "../lib/time.mjs";
+import { TIME_DB, formatHmm, glanceTime, listOrphanTimeDbs, runningHealth } from "../lib/time.mjs";
+import { countParkHopsSinceMs, localDayStartMs } from "../lib/delta.mjs";
 import { skillMetadataVersion } from "../lib/lockstep.mjs";
 import {
   inspectLegacyBins,
@@ -64,7 +65,7 @@ function applySafeDoctorFixes({ home, cwd, env }) {
   if (ignore.ok) applied.push("ignore");
   const legacy = purgeBalakitMental({ home, projectDir: cwd });
   if (legacy.removed.length) applied.push("legacy-balakit");
-  const installed = installSkills({ home, projectDir: null });
+  const installed = installSkills({ home, projectDir: null, force: true });
   applied.push("install");
   ensureSkeleton(userMentalDir(home), { name: "personal" });
   return {
@@ -371,6 +372,24 @@ export function cmdDoctor(args, io = {}) {
         );
       } else if (health.count > 0) {
         checks.push(check("time-running", true, `${health.count} running interval(s) in time.sqlite`, "info"));
+      }
+      if (home && isFeatureOn(home, "track", resolved.data.id || null)) {
+        const hopsToday = countParkHopsSinceMs(resolved.data.root, localDayStartMs());
+        const handoff = latestJournalHandoff(resolved.data.root);
+        const hopToday = Boolean(handoff?.when?.date && handoff.when.date === localDate());
+        const glance = glanceTime(resolved.data.root);
+        const noClock =
+          glance.ok && glance.data.runningCount === 0 && glance.data.stoppedToday.length === 0;
+        if (noClock && (hopsToday > 0 || hopToday)) {
+          checks.push(
+            check(
+              "time-unclocked",
+              false,
+              "track on; work today with no clock row (ledger accepts rows; agents call mental track start)",
+              "warn",
+            ),
+          );
+        }
       }
     }
     const trackTargets = userTrackTargets(home);

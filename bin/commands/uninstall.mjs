@@ -30,14 +30,16 @@ export function cmdUninstall(args, io = {}) {
     return EXIT_USAGE;
   }
 
+  const projectOnly = Boolean(args.flags?.project);
   const skills = uninstallSkills({
     home,
-    projectDir: args.flags?.project ? args.cwd ?? process.cwd() : null,
+    projectDir: projectOnly ? args.cwd ?? process.cwd() : null,
+    homeUninstall: !projectOnly,
   });
-  const hooks = disableHooks(home);
-  const mcp = disableMcp(home);
+  const hooks = projectOnly ? { written: [] } : disableHooks(home);
+  const mcp = projectOnly ? { written: [] } : disableMcp(home);
   let wiped = null;
-  if (deleteData && confirm === "DELETE") {
+  if (!projectOnly && deleteData && confirm === "DELETE") {
     const root = userMentalDir(home);
     if (existsSync(root)) {
       rmSync(root, { recursive: true, force: true });

@@ -67,7 +67,7 @@ Mid-chat, not just start/finish:
 | Claude Code | `~/.claude/rules/mental.md` | body, no `paths:` (loads every session) |
 | Claude Code | `~/.claude/CLAUDE.md` managed block | body (kept for older Claude Code and OpenCode fallback) |
 | Cursor | `~/.cursor/rules/mental.mdc` | `.mdc` with `alwaysApply: true` — Cursor 2.1+ loads this; `doctor` fails if missing |
-| Cursor | `.cursor/rules/mental.mdc` | same `.mdc`, only with `mental install --project` (Cloud/CLI / git-shared; `doctor` warns) |
+| Cursor | `.cursor/rules/mental.mdc` | same `.mdc`, only with `mental install --project` (project-only; no home recopy; Cloud/CLI / git-shared; `doctor` warns) |
 | Codex | `~/.codex/AGENTS.md` managed block | body |
 | OpenCode | `~/.config/opencode/AGENTS.md` managed block | body, **only if that file already exists** (creating it would drop the CLAUDE.md fallback) |
 | Convention | `~/.agents/AGENTS.md` + `~/.agents/rules/mental.md` | body |

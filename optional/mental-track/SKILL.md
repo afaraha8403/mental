@@ -53,7 +53,9 @@ is not permission to run `mental option track on`.
 ## Commands (always `--json`)
 
 ```text
-mental track --json
+mental heartbeat --json                  # is a clock running? data.track
+mental track --json                      # glance: running + today (not history)
+mental track --history --json            # nested tasks[] (large)
 mental track start --via cursor --json
 mental track start --title-internal "…" --body-internal "…" --title-external "…" --body-external "…" --via cursor --json
 mental track start --new --title-internal "…" --title-external "…" --json
@@ -76,7 +78,9 @@ mental handoff --title "…" --body "…" --title-external "…" --body-external
 
 - When tracking is on, `track start --via <host>` after heartbeat if
   `runningCount` is 0 (or the runner is another day / past 12h). Not only when
-  the user asked about hours. Generate and pass internal + customer title/body
+  the user asked about hours. Hooks never start a clock (`session-start.sh` is
+  status-only). If `data.track.unclocked` is true, say the gap and start now.
+  Generate and pass internal + customer title/body
   from the current task. Do not ask for wording by default. Calling start again
   the same sit-down is **ensure-running**
   (`ensured: true`): ping, maybe amend title, same `started`. Do not fear a
@@ -84,8 +88,8 @@ mental handoff --title "…" --body "…" --title-external "…" --body-external
   simultaneous work or explicitly asks for another clock.
 - New chat or host is not a new interval. Park, a new calendar day, or 12h
   since `started` is. Start is **machine-wide**: a second session joins the
-  existing clock (`ensured: true`). `--task <id>` only when inserting a new interval and glance
-  already shows that id. `--new` ignores `--task` (new task).
+  existing clock (`ensured: true`). `--task <id>` only when inserting a new interval and a prior
+  interval on that task exists. `--new` ignores `--task` (new task).
 - `start` without `--task` on a **new** interval = new task. `--task` is
   ignored while ensuring.
 - `stop` without `--id` hits the **focused** interval only. If none is focused, usage — do not pick a random runner.
