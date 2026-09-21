@@ -8,10 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Features
-- `mental dashboard` opens an optional read-only localhost explorer (`127.0.0.1:3847`, ephemeral fallback if busy) so a human can browse the catalog or peek at one file. The CLI stays heartbeat-and-exit; agents keep `--json`.
+- `mental dashboard` opens an optional read-only localhost explorer (`127.0.0.1:3847`, ephemeral fallback if busy) so a human can browse the catalog, orbit a 3D mind map of linked files, or peek at one file as rendered markdown. When Track is on, the page shows running clocks and today's stops. The CLI stays heartbeat-and-exit; agents keep `--json`.
 - `mental backup --out <dir>` packs this machine's OKF and identities into a portable directory (no sqlite, no hours, no machine paths). `mental restore --from` merges per UUID so dest-ahead work stays; `--replace --confirm REPLACE` is disaster-only for packed slices.
 
 ### Fixes
+- `mental dashboard` listens on IPv6 loopback (`::1`) as well as `127.0.0.1`, so Chrome's IPv6-first `localhost` does not get connection refused.
+- CLI update check no longer treats a failed `npm view` (timeout, Windows `ENOENT`, junk stdout) as a successful check. Failures record `lastFailedAt` and retry after 15 minutes instead of locking out discovery for 24h/7d. Windows now spawns `npm.cmd` the same way install does. Envelope refresh uses the same 5s timeout as `doctor`.
 - Personal-mode `list` / `search` no longer walk `~/.mental/projects` (project slices stay exclusive; `mental pulse` / dashboard project switcher remain the other-repos view).
 - Park, handoff, and journal stop the sole remaining Track interval when none is focused (a nested `--new` hop can steal focus and stop, leaving the sit-down clock running). Two or more unfocused runners still skip.
 - `mental restore` refuses a backup whose slice ids are not UUIDs, so a packed `id` cannot escape `~/.mental/projects`.
@@ -23,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mental doctor` warns `time-unclocked` when Track is on and today has a hop with no clock row. Hooks still do not start a clock.
 
 ### Changes
+- Dashboard type labels are chips with the same emoji the CLI uses (📓 journal, 🚦 attention, 🎯 decision, 📝 note). Each kind has its own background and text color. The page title is Mental CLI Dashboard.
+- The project mark is the brain emoji. The README and the Cursor plugin use `assets/logo.png`. The dashboard tab uses the same image. The previous pixel character is gone.
 - Optional feature listings say what hooks and Track actually do: hooks load `mental status --json`; Track is a ledger until `mental track start`.
 
 ## [0.10.2] - 2026-09-09

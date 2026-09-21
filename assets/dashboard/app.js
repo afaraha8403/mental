@@ -1,3 +1,6 @@
+import { renderFrontmatter, renderMarkdown } from "./markdown.js";
+import { startMap } from "./map.js";
+
 const state = {
   id: "",
   type: "",
@@ -9,6 +12,30 @@ const state = {
 };
 
 const TYPES = ["", "Decision", "Attention", "Note", "Journal"];
+
+/** Same marks as CLI `kindMark` (journal, attention, decision, note). */
+const KIND = {
+  Decision: { emoji: "🎯", label: "Decision" },
+  Attention: { emoji: "🚦", label: "Attention" },
+  Note: { emoji: "📝", label: "Note" },
+  Journal: { emoji: "📓", label: "Journal" },
+};
+
+function kindChip(type) {
+  const spec = KIND[type];
+  const chip = document.createElement("span");
+  chip.className = spec ? `kind kind-${type.toLowerCase()}` : "kind";
+  if (!spec) {
+    chip.textContent = type || "";
+    return chip;
+  }
+  const mark = document.createElement("span");
+  mark.className = "mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = spec.emoji;
+  chip.append(mark, document.createTextNode(spec.label));
+  return chip;
+}
 
 function qs(extra = {}) {
   const p = new URLSearchParams();
@@ -44,7 +71,7 @@ async function loadProjects() {
   for (const p of projects) {
     const opt = document.createElement("option");
     opt.value = p.id;
-    opt.textContent = `${p.name} (${p.attentionCount} air · ${p.openDecisionCount} open)`;
+    opt.textContent = `${p.name} (🚦 ${p.attentionCount} air · 🎯 ${p.openDecisionCount} open)`;
     sel.append(opt);
   }
   if (!state.id && active) {
@@ -66,22 +93,55 @@ async function loadHeartbeat() {
   const git = d.git?.branch ? `${d.git.branch}${d.git.dirty ? " dirty" : ""}` : "";
   setText(
     "strip",
-    [resume, outcome && `Last: ${outcome}`, git, `${d.attentionCount} in the air`, `${d.openDecisionCount} open decisions`]
+    [resume, outcome && `Last: ${outcome}`, git, `🚦 ${d.attentionCount} in the air`, `🎯 ${d.openDecisionCount} open decisions`]
       .filter(Boolean)
       .join(" · "),
   );
+  state.track = d.track || null;
+  if (state.track) await loadTrack();
+  else document.getElementById("track").hidden = true;
+}
+
+function clockRow(title, detail) {
+  const li = document.createElement("li");
+  li.className = "clock";
+  const name = document.createElement("span");
+  name.textContent = title || "Untitled";
+  const time = document.createElement("span");
+  time.textContent = detail;
+  li.append(name, time);
+  return li;
+}
+
+async function loadTrack() {
   const trackEl = document.getElementById("track");
-  if (d.track) {
-    const glance = await api(`/api/track/glance${qs()}`);
-    if (glance.status === 200 && glance.body.ok) {
-      const g = glance.body.data;
-      trackEl.hidden = false;
-      trackEl.textContent = `Track · ${g.runningCount} running · ${g.stoppedToday?.length || 0} stopped today`;
-    } else {
-      trackEl.hidden = true;
-    }
-  } else {
+  const glance = await api(`/api/track/glance${qs()}`);
+  if (glance.status !== 200 || !glance.body.ok) {
     trackEl.hidden = true;
+    return;
+  }
+  const g = glance.body.data;
+  trackEl.hidden = false;
+  const note = [];
+  if (state.track?.unclocked) note.push("A hop today has no clock.");
+  if (g.truncated) note.push("List is capped.");
+  setText("track-note", note.join(" "));
+  document.getElementById("track-note").hidden = note.length === 0;
+  const running = document.getElementById("track-running");
+  running.replaceChildren();
+  const runningRows = g.running || [];
+  if (runningRows.length === 0) running.append(clockRow("None running", ""));
+  for (const row of runningRows) {
+    const flags = [row.focused ? "focused" : "", row.stale ? "stale" : ""].filter(Boolean).join(", ");
+    const hours = row.live_wall || "0:00";
+    running.append(clockRow(row.title_internal, flags ? `${hours} · ${flags}` : hours));
+  }
+  const stopped = document.getElementById("track-stopped");
+  stopped.replaceChildren();
+  const stoppedRows = g.stoppedToday || [];
+  if (stoppedRows.length === 0) stopped.append(clockRow("Nothing stopped today", ""));
+  for (const row of stoppedRows) {
+    stopped.append(clockRow(row.title_internal, `${row.wall || "0:00"} wall · ${row.billable || "0:00"} billable`));
   }
 }
 
@@ -106,7 +166,10 @@ async function loadList() {
   for (const row of rows) {
     const li = document.createElement("li");
     if (row.path === state.path) li.className = "active";
-    li.textContent = `[${row.type}] ${row.title}`;
+    const title = document.createElement("span");
+    title.className = "row-title";
+    title.textContent = row.title;
+    li.append(kindChip(row.type), title);
     li.addEventListener("click", () => peek(row.path));
     ul.append(li);
   }
@@ -114,13 +177,21 @@ async function loadList() {
   document.getElementById("next").disabled = end >= state.total;
 }
 
+function clearPeek(title, meta) {
+  setText("peek-title", title);
+  setText("peek-meta", meta);
+  const fm = document.getElementById("peek-fm");
+  fm.hidden = true;
+  fm.replaceChildren();
+  document.getElementById("peek-body").replaceChildren();
+}
+
 async function peek(path) {
   state.path = path;
   const { body } = await api(`/api/show${qs({ path })}`);
   if (!body?.ok) {
-    setText("peek-title", "Not found");
-    setText("peek-meta", "");
-    setText("peek-body", body?.error?.message || "not found");
+    clearPeek("Not found", "");
+    document.getElementById("peek-body").textContent = body?.error?.message || "not found";
     document.getElementById("backlinks").replaceChildren();
     return;
   }
@@ -129,13 +200,26 @@ async function peek(path) {
   const type = d.frontmatter?.type || "";
   const status = d.frontmatter?.status || "";
   setText("peek-title", title);
-  setText("peek-meta", [d.path, type, status].filter(Boolean).join(" · "));
-  setText("peek-body", d.text || d.body || "");
+  const meta = document.getElementById("peek-meta");
+  meta.replaceChildren(document.createTextNode(d.path));
+  if (type) meta.append(document.createTextNode(" · "), kindChip(type));
+  if (status) meta.append(document.createTextNode(` · ${status}`));
+  const fm = document.getElementById("peek-fm");
+  const fmHtml = renderFrontmatter(d.frontmatter);
+  fm.hidden = !fmHtml;
+  fm.innerHTML = fmHtml;
+  const preview = document.getElementById("peek-body");
+  const rendered = renderMarkdown(d.body || "");
+  preview.innerHTML = rendered || "<p class=\"muted\">No body.</p>";
+  map.select(path);
   const ul = document.getElementById("backlinks");
   ul.replaceChildren();
   for (const b of d.backlinks || []) {
     const li = document.createElement("li");
-    li.textContent = `from [${b.type}] ${b.title}`;
+    const title = document.createElement("span");
+    title.className = "row-title";
+    title.textContent = b.title;
+    li.append(document.createTextNode("from"), kindChip(b.type), title);
     li.addEventListener("click", () => peek(b.path));
     ul.append(li);
   }
@@ -148,7 +232,9 @@ function renderChips() {
   for (const t of TYPES) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = t || "All";
+    const spec = KIND[t];
+    btn.className = spec ? `kind kind-${t.toLowerCase()}` : "kind kind-all";
+    btn.textContent = spec ? `${spec.emoji} ${spec.label}` : "🧠 All";
     btn.setAttribute("aria-pressed", String(state.type === t));
     btn.addEventListener("click", () => {
       state.type = t;
@@ -164,12 +250,11 @@ document.getElementById("project").addEventListener("change", (ev) => {
   state.id = ev.target.value;
   state.offset = 0;
   state.path = "";
-  setText("peek-title", "Peek");
-  setText("peek-meta", "Select a file.");
-  setText("peek-body", "");
+  clearPeek("Peek", "Select a file.");
   document.getElementById("backlinks").replaceChildren();
   loadHeartbeat();
   loadList();
+  if (state.view === "map") loadGraph();
 });
 
 document.getElementById("q").addEventListener("input", () => {
@@ -187,8 +272,49 @@ document.getElementById("next").addEventListener("click", () => {
   loadList();
 });
 
+const map = startMap(document.getElementById("map"), (path) => peek(path));
+
+function showView(view) {
+  state.view = view;
+  const mapMode = view === "map";
+  document.getElementById("main").classList.toggle("map-mode", mapMode);
+  document.getElementById("catalog").hidden = mapMode;
+  document.getElementById("map").hidden = !mapMode;
+  document.getElementById("map-hint").hidden = !mapMode;
+  document.getElementById("view-list").setAttribute("aria-pressed", String(!mapMode));
+  document.getElementById("view-map").setAttribute("aria-pressed", String(mapMode));
+  if (mapMode) {
+    map.start();
+    loadGraph();
+  } else {
+    map.stop();
+  }
+}
+
+async function loadGraph() {
+  const { body } = await api(`/api/graph${qs()}`);
+  const data = body?.ok ? body.data : { nodes: [], edges: [] };
+  map.setGraph(data);
+  const hint = document.getElementById("map-hint");
+  const cap = data.truncated ? ` Showing ${data.nodes.length} of ${data.total}.` : "";
+  hint.textContent = `Drag to orbit. Scroll to zoom. Click a node.${cap}`;
+}
+
+document.getElementById("view-list").addEventListener("click", () => showView("list"));
+document.getElementById("view-map").addEventListener("click", () => showView("map"));
+document.getElementById("peek-body").addEventListener("click", (ev) => {
+  const link = ev.target.closest("a[data-path]");
+  if (!link) return;
+  ev.preventDefault();
+  peek(link.dataset.path.split("#")[0]);
+});
+
+state.view = "list";
 renderChips();
 loadProjects().then(() => {
   loadHeartbeat();
   loadList();
 });
+setInterval(() => {
+  if (!document.getElementById("track").hidden) loadTrack();
+}, 20000);

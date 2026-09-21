@@ -3,13 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mental dashboard</title>
+    <title>Mental CLI Dashboard</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />
     <link rel="stylesheet" href="/style.css" />
   </head>
   <body>
     <header class="top">
       <div>
-        <h1>Mental</h1>
+        <h1><span class="mark" aria-hidden="true">🧠</span> Mental CLI Dashboard</h1>
         <p id="strip" class="strip">Loading…</p>
       </div>
       <label>
@@ -17,25 +18,41 @@
         <select id="project"></select>
       </label>
     </header>
-    <section id="track" class="track" hidden></section>
-    <main>
+    <section id="track" class="track" hidden>
+      <h2>Track</h2>
+      <p id="track-note" class="muted"></p>
+      <h3>Running</h3>
+      <ul id="track-running"></ul>
+      <h3>Stopped today</h3>
+      <ul id="track-stopped"></ul>
+    </section>
+    <main id="main">
       <aside>
-        <div class="chips" id="chips"></div>
-        <input id="q" type="search" placeholder="Search titles and bodies" autocomplete="off" />
-        <p id="page" class="muted"></p>
-        <ul id="list"></ul>
-        <div class="pager">
-          <button type="button" id="prev">Previous</button>
-          <button type="button" id="next">Next</button>
+        <div class="view">
+          <button type="button" id="view-list" aria-pressed="true">List</button>
+          <button type="button" id="view-map" aria-pressed="false">Mind map</button>
         </div>
+        <div id="catalog">
+          <div class="chips" id="chips"></div>
+          <input id="q" type="search" placeholder="Search titles and bodies" autocomplete="off" />
+          <p id="page" class="muted"></p>
+          <ul id="list"></ul>
+          <div class="pager">
+            <button type="button" id="prev">Previous</button>
+            <button type="button" id="next">Next</button>
+          </div>
+        </div>
+        <p id="map-hint" class="muted" hidden>Drag to orbit. Scroll to zoom. Click a node.</p>
+        <canvas id="map" hidden></canvas>
       </aside>
       <article>
         <h2 id="peek-title">Peek</h2>
         <p id="peek-meta" class="muted">Select a file.</p>
-        <pre id="peek-body"></pre>
+        <div id="peek-fm" hidden></div>
+        <div id="peek-body" class="md"></div>
         <ul id="backlinks"></ul>
       </article>
     </main>
-    <script src="/app.js"></script>
+    <script type="module" src="/app.js"></script>
   </body>
 </html>

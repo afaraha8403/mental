@@ -1,15 +1,19 @@
 /**
- * Fail-open npm update check. Live `npm view` is not on the heartbeat hot path.
+ * Fail-open npm update check. Live `npm view` runs only when the cache is stale
+ * and not in failure backoff — not on every heartbeat.
  *
  * Discovery TTL (24h) applies when the cache says this CLI is current or ahead —
  * so a ship is visible by the next day. Behind TTL (7d) applies only while already
- * nagging, so ordinary commands do not keep hitting npm. TTY nags once per day;
+ * nagging, so ordinary commands do not keep hitting npm. A failed `npm view`
+ * records `lastFailedAt` without bumping `checkedAt`, then backs off 15 minutes
+ * so a timeout cannot lock out discovery for a full TTL. TTY nags once per day;
  * `--json` still attaches `update` on every envelope. `MENTAL_SKIP_UPDATE_CHECK=1`
- * skips. `MENTAL_NPM_LATEST` pins a version (tests).
+ * skips. `MENTAL_NPM_LATEST` pins a version (tests) and ignores failure backoff.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { win32SpawnCommand } from "./install-recipe.mjs";
 import { NAME, PKG_ROOT, VERSION } from "./pkg.mjs";
 import { cacheMentalDir } from "./watermark.mjs";
 
@@ -21,7 +25,10 @@ export const UPDATE_BEHIND_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const UPDATE_TTY_NAG_TTL_MS = 24 * 60 * 60 * 1000;
 /** Alias of the behind TTL (older tests import this name). */
 export const UPDATE_CACHE_TTL_MS = UPDATE_BEHIND_TTL_MS;
-export const UPDATE_REFRESH_TIMEOUT_MS = 1200;
+/** Shared `npm view` timeout for envelope refresh and `mental doctor`. */
+export const UPDATE_REFRESH_TIMEOUT_MS = 5000;
+/** How long to skip another live spawn after a failed `npm view`. */
+export const UPDATE_FAILURE_BACKOFF_MS = 15 * 60 * 1000;
 
 /**
  * @param {string} v
@@ -120,7 +127,7 @@ export function updateCachePath(env = process.env) {
 
 /**
  * @param {NodeJS.ProcessEnv} [env]
- * @returns {{ latest: string | null, checkedAt: string, lastNaggedAt: string | null } | null}
+ * @returns {{ latest: string | null, checkedAt: string, lastNaggedAt: string | null, lastFailedAt: string | null } | null}
  */
 export function readUpdateCache(env = process.env) {
   const file = updateCachePath(env);
@@ -134,7 +141,9 @@ export function readUpdateCache(env = process.env) {
     }
     const lastNaggedAt =
       typeof parsed.lastNaggedAt === "string" && parsed.lastNaggedAt ? parsed.lastNaggedAt : null;
-    return { latest, checkedAt: parsed.checkedAt, lastNaggedAt };
+    const lastFailedAt =
+      typeof parsed.lastFailedAt === "string" && parsed.lastFailedAt ? parsed.lastFailedAt : null;
+    return { latest, checkedAt: parsed.checkedAt, lastNaggedAt, lastFailedAt };
   } catch {
     return null;
   }
@@ -142,8 +151,8 @@ export function readUpdateCache(env = process.env) {
 
 /**
  * @param {NodeJS.ProcessEnv} env
- * @param {{ latest?: string | null, checkedAt?: string, lastNaggedAt?: string | null }} patch
- * @returns {{ latest: string | null, checkedAt: string, lastNaggedAt: string | null, path: string } | null}
+ * @param {{ latest?: string | null, checkedAt?: string, lastNaggedAt?: string | null, lastFailedAt?: string | null }} patch
+ * @returns {{ latest: string | null, checkedAt: string, lastNaggedAt: string | null, lastFailedAt: string | null, path: string } | null}
  */
 function persistUpdateCache(env, patch) {
   const file = updateCachePath(env);
@@ -157,12 +166,15 @@ function persistUpdateCache(env, patch) {
     if ("lastNaggedAt" in patch) lastNaggedAt = patch.lastNaggedAt ?? null;
     else if (prev && latest !== prev.latest) lastNaggedAt = null;
     else lastNaggedAt = prev?.lastNaggedAt ?? null;
+    const lastFailedAt =
+      "lastFailedAt" in patch ? (patch.lastFailedAt ?? null) : (prev?.lastFailedAt ?? null);
     mkdirSync(dirname(file), { recursive: true });
-    /** @type {{ latest: string | null, checkedAt: string, lastNaggedAt?: string }} */
+    /** @type {{ latest: string | null, checkedAt: string, lastNaggedAt?: string, lastFailedAt?: string }} */
     const payload = { latest, checkedAt };
     if (lastNaggedAt) payload.lastNaggedAt = lastNaggedAt;
+    if (lastFailedAt) payload.lastFailedAt = lastFailedAt;
     writeFileSync(file, `${JSON.stringify(payload)}\n`);
-    return { latest, checkedAt, lastNaggedAt, path: file };
+    return { latest, checkedAt, lastNaggedAt, lastFailedAt, path: file };
   } catch {
     return null;
   }
@@ -177,20 +189,23 @@ export function writeUpdateCache(env, latest, now = Date.now()) {
   return persistUpdateCache(env, {
     latest: latest ?? null,
     checkedAt: new Date(now).toISOString(),
+    lastFailedAt: null,
   });
 }
 
 /**
- * Bump `checkedAt` without changing `latest`. Failed refreshes use this so the
- * next command does not pay another npm timeout.
+ * Record a failed `npm view` without treating it as a successful check.
+ * Keeps `latest` and `checkedAt` so a timeout cannot burn the discovery or
+ * behind TTL. First failure uses epoch `checkedAt` so the cache stays stale.
  * @param {NodeJS.ProcessEnv} env
  * @param {number} [now]
  */
-export function touchUpdateCache(env, now = Date.now()) {
+export function markUpdateCheckFailed(env, now = Date.now()) {
   const prev = readUpdateCache(env);
   return persistUpdateCache(env, {
     latest: prev?.latest ?? null,
-    checkedAt: new Date(now).toISOString(),
+    checkedAt: prev?.checkedAt ?? new Date(0).toISOString(),
+    lastFailedAt: new Date(now).toISOString(),
   });
 }
 
@@ -225,31 +240,61 @@ export function takeTtyNag(notice, opts = {}) {
 }
 
 /**
- * @param {{ env?: NodeJS.ProcessEnv, name?: string, timeoutMs?: number, cache?: boolean, now?: number }} [opts]
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {string | null}
+ */
+function pinnedLatest(env = process.env) {
+  const pinned = env.MENTAL_NPM_LATEST;
+  if (typeof pinned === "string" && /^\d+\.\d+\.\d+/.test(pinned.trim())) {
+    return pinned.trim().split(/\s+/)[0];
+  }
+  return null;
+}
+
+/**
+ * @param {{ latest?: string | null, lastFailedAt?: string | null } | null} cached
+ * @param {number} now
+ */
+function inFailureBackoff(cached, now) {
+  const t = cached?.lastFailedAt ? Date.parse(cached.lastFailedAt) : NaN;
+  return Number.isFinite(t) && now - t >= 0 && now - t <= UPDATE_FAILURE_BACKOFF_MS;
+}
+
+/**
+ * @param {string} name
+ * @param {{ env?: NodeJS.ProcessEnv, timeoutMs?: number, spawn?: typeof spawnSync, platform?: NodeJS.Platform }} opts
+ */
+function spawnNpmView(name, opts) {
+  const platform = opts.platform ?? process.platform;
+  const spawn = opts.spawn ?? spawnSync;
+  const command = win32SpawnCommand("npm", platform);
+  return spawn(command, ["view", name, "version"], {
+    encoding: "utf8",
+    env: opts.env,
+    timeout: opts.timeoutMs ?? UPDATE_REFRESH_TIMEOUT_MS,
+    shell: platform === "win32",
+    windowsHide: platform === "win32",
+  });
+}
+
+/**
+ * @param {{ env?: NodeJS.ProcessEnv, name?: string, timeoutMs?: number, cache?: boolean, now?: number, spawn?: typeof spawnSync, platform?: NodeJS.Platform }} [opts]
  * @returns {{ skipped: boolean, latest: string | null }}
  */
 export function checkForUpdate(opts = {}) {
   const env = opts.env ?? process.env;
   if (skipUpdateCheck(env)) return { skipped: true, latest: null };
-  const pinned = env.MENTAL_NPM_LATEST;
-  let latest = null;
-  if (typeof pinned === "string" && /^\d+\.\d+\.\d+/.test(pinned.trim())) {
-    latest = pinned.trim().split(/\s+/)[0];
-  } else {
+  let latest = pinnedLatest(env);
+  if (!latest) {
     const name = opts.name ?? NAME;
-    const timeout = opts.timeoutMs ?? 5000;
-    const r = spawnSync("npm", ["view", name, "version"], {
-      encoding: "utf8",
-      env,
-      timeout,
-    });
-    if (r.status !== 0) {
-      if (opts.cache !== false) touchUpdateCache(env, opts.now);
+    const r = spawnNpmView(name, opts);
+    if (r.error || r.status !== 0) {
+      if (opts.cache !== false) markUpdateCheckFailed(env, opts.now);
       return { skipped: false, latest: null };
     }
     const v = (r.stdout || "").trim().split(/\s+/)[0];
     if (!/^\d+\.\d+\.\d+/.test(v)) {
-      if (opts.cache !== false) touchUpdateCache(env, opts.now);
+      if (opts.cache !== false) markUpdateCheckFailed(env, opts.now);
       return { skipped: false, latest: null };
     }
     latest = v;
@@ -269,10 +314,11 @@ export function updateHint(current, latest, pkg = NAME) {
 
 /**
  * Cheap notice for every CLI/MCP envelope. Refreshes npm when the cache is older
- * than the discovery TTL (current) or the behind TTL (already nagging). Null when
- * this CLI is current or the check is skipped.
+ * than the discovery TTL (current) or the behind TTL (already nagging), unless a
+ * failed view is still inside the 15-minute backoff. Null when this CLI is
+ * current or the check is skipped.
  *
- * @param {{ env?: NodeJS.ProcessEnv, version?: string, now?: number, ttlMs?: number, timeoutMs?: number }} [opts]
+ * @param {{ env?: NodeJS.ProcessEnv, version?: string, now?: number, ttlMs?: number, timeoutMs?: number, spawn?: typeof spawnSync, platform?: NodeJS.Platform }} [opts]
  * @returns {{ current: string, latest: string, hint: string } | null}
  */
 export function peekUpdateNotice(opts = {}) {
@@ -286,12 +332,15 @@ export function peekUpdateNotice(opts = {}) {
   const knownBehind = Boolean(cached?.latest) && cmpSemver(cached.latest, current) > 0;
   const ttl = opts.ttlMs ?? (knownBehind ? UPDATE_BEHIND_TTL_MS : UPDATE_DISCOVERY_TTL_MS);
   const stale = !cached || age < 0 || age > ttl;
+  const backoff = !pinnedLatest(env) && inFailureBackoff(cached, now);
   let latest = cached?.latest ?? null;
-  if (stale) {
+  if (stale && !backoff) {
     const upd = checkForUpdate({
       env,
       timeoutMs: opts.timeoutMs ?? UPDATE_REFRESH_TIMEOUT_MS,
       now,
+      spawn: opts.spawn,
+      platform: opts.platform,
     });
     if (upd.latest) latest = upd.latest;
   }

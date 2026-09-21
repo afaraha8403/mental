@@ -76,6 +76,37 @@ test("listenDashboard binds 127.0.0.1 and serves where", async (t) => {
   assert.equal(body.data.mode, "home");
 });
 
+test("listenDashboard also serves IPv6 loopback when the stack exists", async (t) => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const dash = await listenDashboard({
+    cwd: root,
+    home,
+    env: gitEnv(home),
+    port: 0,
+    fallbackOnBusy: false,
+    open: false,
+  });
+  t.after(() => dash.close());
+  let res;
+  try {
+    res = await fetch(`http://[::1]:${dash.port}/api/where`, {
+      headers: { Host: `[::1]:${dash.port}` },
+    });
+  } catch (err) {
+    const code = err && typeof err === "object" && "code" in err ? err.code : "";
+    const cause = err && typeof err === "object" && "cause" in err ? err.cause : null;
+    const nested = cause && typeof cause === "object" && "code" in cause ? cause.code : "";
+    if (code === "EADDRNOTAVAIL" || nested === "EADDRNOTAVAIL" || code === "EAFNOSUPPORT" || nested === "EAFNOSUPPORT") {
+      return;
+    }
+    throw err;
+  }
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+});
+
 test("default port 3847 falls back when busy; explicit --port does not", async (t) => {
   const home = tempHome();
   const { root } = initRepo(home);
@@ -216,6 +247,11 @@ test("list pages past 50 and show returns exact file text", async (t) => {
   const target = await fetch(`${dash.url}api/show?path=notes/pad-00.md`);
   const targetBody = await target.json();
   assert.ok(targetBody.data.backlinks.some((b) => b.path === "notes/linked.md"));
+  const graphed = await fetch(`${dash.url}api/graph`);
+  const graph = await graphed.json();
+  assert.equal(graphed.status, 200);
+  assert.ok(graph.data.nodes.some((n) => n.path === "notes/linked.md"));
+  assert.ok(graph.data.edges.some((e) => e.from === "notes/linked.md" && e.to === "notes/pad-00.md"));
 });
 
 test("track glance is 404 when tracking is off", async (t) => {
@@ -234,7 +270,14 @@ test("track glance is 404 when tracking is off", async (t) => {
   assert.equal(res.status, 404);
   const html = await fetch(dash.url);
   assert.equal(html.status, 200);
-  assert.match(await html.text(), /Mental dashboard/);
+  const page = await html.text();
+  assert.match(page, /Mental CLI Dashboard/);
+  assert.match(page, /favicon\.png/);
+  const icon = await fetch(`${dash.url}favicon.png`);
+  assert.equal(icon.status, 200);
+  assert.match(icon.headers.get("content-type") || "", /image\/png/);
+  const bytes = Buffer.from(await icon.arrayBuffer());
+  assert.equal(bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), true);
 });
 
 test("dashboard --help lists the command", async () => {

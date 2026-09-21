@@ -10,7 +10,7 @@ import { resolveBundle } from "./resolve.mjs";
 import { catalogRoot, collectHeartbeat } from "./heartbeat.mjs";
 import { loadBindings } from "./bindings.mjs";
 import { collectPulseProjects, pulseRootForBinding } from "./pulse.mjs";
-import { filterConcepts, listConcepts, listBacklinks, searchBundle } from "./index.mjs";
+import { extractLinks, filterConcepts, listConcepts, listBacklinks, searchBundle } from "./index.mjs";
 import { readBundleFile } from "./okf.mjs";
 import { isFeatureOn } from "./config.mjs";
 import { glanceTime } from "./time.mjs";
@@ -22,12 +22,16 @@ export const DASHBOARD_PORT = 3847;
 
 const PAGE_CAP = 50;
 const PAGE_MAX = 100;
+const GRAPH_CAP = 400;
 
 const STATIC_FILES = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
   "/app.js": { file: "app.js", type: "application/javascript; charset=utf-8" },
+  "/markdown.js": { file: "markdown.js", type: "application/javascript; charset=utf-8" },
+  "/map.js": { file: "map.js", type: "application/javascript; charset=utf-8" },
   "/style.css": { file: "style.css", type: "text/css; charset=utf-8" },
+  "/favicon.png": { file: "favicon.png", type: "image/png" },
 };
 
 const SECURITY_HEADERS = {
@@ -76,6 +80,39 @@ function intParam(value, fallback, max) {
   const n = Number(value);
   if (!Number.isInteger(n) || n < 0) return fallback;
   return Math.min(n, max);
+}
+
+/**
+ * Nodes are files. Edges are markdown links whose dest is also in the catalog.
+ * @param {ReturnType<typeof listConcepts>} concepts
+ */
+function catalogGraph(concepts) {
+  const sorted = [...concepts].sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+  const capped = sorted.slice(0, GRAPH_CAP);
+  const nodes = capped.map((c) => ({
+    path: c.path,
+    type: c.type,
+    title: c.title,
+    status: c.status,
+  }));
+  const known = new Set(nodes.map((n) => n.path));
+  const edges = [];
+  const seen = new Set();
+  for (const c of capped) {
+    for (const link of extractLinks(c.path, c.body || "")) {
+      if (!known.has(link.dest) || link.dest === c.path) continue;
+      const key = `${link.src}\0${link.dest}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push({ from: link.src, to: link.dest });
+    }
+  }
+  return {
+    nodes,
+    edges,
+    total: concepts.length,
+    truncated: concepts.length > capped.length,
+  };
 }
 
 function summarize(c) {
@@ -385,6 +422,14 @@ function routeApi(method, url, res, base, id) {
     return;
   }
 
+  if (path === "/api/graph") {
+    const concepts = session.root
+      ? hideForeignSlices(session.where, listConcepts(session.root))
+      : [];
+    sendJson(res, method, 200, { ok: true, data: catalogGraph(concepts) });
+    return;
+  }
+
   if (path === "/api/track/glance") {
     const trackId = session.where.id || null;
     if (!base.home || !isFeatureOn(base.home, "track", trackId)) {
@@ -410,9 +455,10 @@ function routeApi(method, url, res, base, id) {
 /**
  * @param {(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => void} handler
  * @param {number} port
+ * @param {string} host
  * @returns {Promise<{ server: import("node:http").Server, port: number }>}
  */
-function listenOnce(handler, port) {
+function listenAddr(handler, port, host) {
   return new Promise((resolve, reject) => {
     const server = createServer(handler);
     const onErr = (err) => {
@@ -428,8 +474,27 @@ function listenOnce(handler, port) {
     };
     server.once("error", onErr);
     server.once("listening", onListen);
-    server.listen(port, DASHBOARD_HOST);
+    const opts = { port, host };
+    if (host === "::1") opts.ipv6Only = true;
+    server.listen(opts);
   });
+}
+
+/**
+ * Bind IPv4 loopback, then IPv6 loopback on the same port when the stack exists.
+ * @param {(req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => void} handler
+ * @param {number} port
+ * @returns {Promise<{ server: import("node:http").Server, v6: import("node:http").Server | null, port: number }>}
+ */
+async function listenOnce(handler, port) {
+  const v4 = await listenAddr(handler, port, DASHBOARD_HOST);
+  let v6 = null;
+  try {
+    v6 = await listenAddr(handler, v4.port, "::1");
+  } catch {
+    v6 = null;
+  }
+  return { server: v4.server, v6: v6?.server ?? null, port: v4.port };
 }
 
 /**
@@ -455,7 +520,7 @@ export function openBrowser(url) {
 }
 
 /**
- * Bind 127.0.0.1. Default port 3847; if busy and fallbackOnBusy, retry port 0.
+ * Bind 127.0.0.1 and ::1. Default port 3847; if busy and fallbackOnBusy, retry port 0.
  * @param {{
  *   cwd?: string,
  *   home?: string | null,
@@ -503,13 +568,18 @@ export async function listenDashboard(opts = {}) {
   let opened = false;
   if (wantOpen) opened = openBrowser(url);
 
-  const close = () =>
+  const closeOne = (server) =>
     new Promise((resolve, reject) => {
-      if (typeof bound.server.closeAllConnections === "function") {
-        bound.server.closeAllConnections();
+      if (!server) {
+        resolve();
+        return;
       }
-      bound.server.close((err) => (err ? reject(err) : resolve()));
+      if (typeof server.closeAllConnections === "function") {
+        server.closeAllConnections();
+      }
+      server.close((err) => (err ? reject(err) : resolve()));
     });
+  const close = () => Promise.all([closeOne(bound.server), closeOne(bound.v6)]).then(() => undefined);
 
   return {
     server: bound.server,
