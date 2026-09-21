@@ -94,6 +94,33 @@ test("e2e: journal stops the focused timer with billable = wall", () => {
   assert.equal(row.needs_user, 0);
 });
 
+test("e2e: journal stops the sole running interval when none is focused", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  enableTrack(home, root);
+  const a = parseOk(
+    mental(home, root, ["track", "start", "--json", "--title-internal", "Sit-down"]),
+    "start A",
+  );
+  parseOk(
+    mental(home, root, ["track", "start", "--json", "--new", "--title-internal", "Nested hop"]),
+    "start B",
+  );
+  parseOk(mental(home, root, ["track", "stop", "--json"]), "stop focused B");
+  const mid = parseOk(mental(home, root, ["track", "--json"]), "unfocused leftover");
+  assert.equal(mid.data.running.length, 1);
+  assert.equal(mid.data.running[0].id, a.data.id);
+  assert.equal(mid.data.running[0].focused, false);
+  parseOk(
+    mental(home, root, ["journal", "--json", "--title", "Closed sit-down", "--resume", "Next"]),
+    "journal",
+  );
+  const after = parseOk(mental(home, root, ["track", "--json"]), "after journal");
+  assert.equal(after.data.running.length, 0);
+  const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
+  assert.equal(getRow(slice, a.data.id).status, "stopped");
+});
+
 test("e2e: handoff records AI-generated internal and customer copy in one command", () => {
   const home = tempHome();
   const { root } = initRepo(home);

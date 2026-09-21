@@ -83,20 +83,25 @@ export function formatWhen(when, now = new Date()) {
 
 /**
  * @param {object} args
+ * @param {{ pingTrack?: boolean, where?: object | null }} [opts]
+ *        Dashboard HTTP passes pingTrack: false so polling does not refresh last_seen.
  */
-export function collectHeartbeat(args) {
-  const resolved = resolveBundle({
-    cwd: args.cwd ?? process.cwd(),
-    home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
-    env: args.env ?? process.env,
-    dir: args.dir ?? null,
-    write: false,
-  });
-  if (!resolved.ok) return { ok: false, error: resolved.error };
+export function collectHeartbeat(args, { pingTrack = true, where: whereOverride = null } = {}) {
+  let where = whereOverride;
+  if (!where) {
+    const resolved = resolveBundle({
+      cwd: args.cwd ?? process.cwd(),
+      home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
+      env: args.env ?? process.env,
+      dir: args.dir ?? null,
+      write: false,
+    });
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    where = resolved.data;
+  }
 
-  const where = resolved.data;
   const git = gitSnapshot(where.gitRoot, { env: args.env ?? process.env });
-  const root = isBundleRoot(where) ? where.root : null;
+  const root = isBundleRoot(where) && where.root ? where.root : null;
   const handoff = root
     ? latestJournalHandoff(root)
     : { resume: null, outcome: null, file: null, when: null, against: null, via: null };
@@ -136,7 +141,7 @@ export function collectHeartbeat(args) {
 
   if (root && home && isBundleRoot(where) && isFeatureOn(home, "track", where.id || null)) {
     const track = heartbeatTrack(root, {
-      pingFocused: true,
+      pingFocused: pingTrack,
       hopsToday,
       hopToday: Boolean(handoff?.when?.date && handoff.when.date === localDate()),
     });

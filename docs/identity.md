@@ -14,6 +14,8 @@ Two clones of the same origin share one brain until you split.
 | Opt in to `./.mental` in this repo | `mental doctor --fix-ignore` then `mental local` |
 | Copy home slice into `./.mental` | `mental local --import` |
 | Same, and mark store=local | `mental local --move` |
+| Carry this HOME to another PC | `mental backup --out <dir>` then `mental restore --from <dir>` on the other machine |
+| Disaster: replace packed slices only | `mental restore --from <dir> --replace --confirm REPLACE` |
 
 ## How a bundle is chosen
 
@@ -40,6 +42,7 @@ Leftover Balakit `./.mental` (no `.mental-local` marker) is ingested into `~/.me
 - Agents must not edit `.gitignore`
 - Never store secrets, tokens, or private keys in Mental files
 - Uninstall does not delete OKF unless you type `DELETE`
+- Do not live-sync `~/.mental` with Syncthing, Dropbox, or iCloud. Use `mental backup` / `mental restore`
 
 ## On-disk shape
 

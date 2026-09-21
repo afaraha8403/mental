@@ -51,7 +51,7 @@ Settled
   UUID bindings survive a repo move
 ```
 
-One shot. Then exit. Not a menu. Not a todo app.
+One shot. Then exit. Not a menu. Not a todo app. Optional `mental dashboard` opens a localhost page over the same files.
 
 ## Quick start
 
@@ -204,6 +204,9 @@ Agents continue the coding task and mention the three-command install block. The
 
 **Where does data live?**
 `~/.mental` (never commit). Project `./.mental` only after `mental local`. Uninstall does not delete OKF unless you type `DELETE`. [Identity](docs/identity.md) · [Privacy](#privacy)
+
+**Laptop and desktop?**
+`mental backup --out ~/mental-backup` on one machine, copy the directory, then `mental restore --from ~/mental-backup` on the other. Restore will not overwrite newer work already on this PC. Do not Syncthing or Dropbox `~/.mental`. `--replace --confirm REPLACE` is disaster-only.
 
 **Does Mental CLI track my hours?**
 Only if you turn it on (`mental option track on`). Agents automatically record private and customer-ready descriptions, wall time, and billable time (wall by default). If input is genuinely needed, they use a plain-text draft with short single-select choices that maps to native host question renderers and falls back to numbered text. Export produces dated customer rows with work descriptions and hours; it never reconstructs missing time from git. [Track](docs/track.md).

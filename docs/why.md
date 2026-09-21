@@ -26,7 +26,7 @@ Mental CLI does not replace git, issues, or `PLAN.md`. It holds the small amount
 1. **OKF markdown is the source of truth.** Deleting the sqlite file must not lose knowledge.
 2. **The CLI is the write path.** Humans type `mental`. Agents call `mental … --json`.
 3. **Home by default.** Data lives in `~/.mental`, partitioned by a UUID. Project `./.mental` only after `mental local`.
-4. **Identity survives a move.** Two clones of the same origin share one brain until you `split`.
+4. **Identity survives a move.** Two clones of the same origin share one brain until you `split`. Across machines, `mental backup` / `mental restore` merge per UUID so dest-ahead work stays.
 5. **Fail open.** Missing Mental CLI must not block coding.
 6. **Private by default.** Never commit the store. Never write secrets.
 
@@ -50,7 +50,7 @@ Layers never invert: files → resolver → CLI → index → skill / rule / hoo
 - Not a second `PLAN.md` — point at the plan with `--against`, do not copy it
 - Not a secret store
 - Not a hosted SaaS, vector database, or graph as source of truth
-- Not a standing TUI. `mental` prints a pulse and exits.
+- Not a standing TUI. `mental` prints a pulse and exits. Optional `mental dashboard` is a localhost page over the same read paths, not a terminal session.
 - Not a reconstruction from git. Optional Track is a default-off automated project-time record: private/customer descriptions, wall/billable, and dated client export. [Track](./track.md).
 
 ## Vocabulary

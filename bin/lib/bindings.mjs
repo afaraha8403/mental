@@ -31,6 +31,15 @@ export function projectSliceDir(home, id) {
 }
 
 /**
+ * Packed slice ids are UUIDs so they cannot be used as path-escape segments.
+ * @param {unknown} id
+ * @returns {boolean}
+ */
+export function isPortableSliceId(id) {
+  return typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+}
+
+/**
  * @param {string} home
  * @returns {{ version: number, bindings: Array<{
  *   id: string,
@@ -65,6 +74,31 @@ export function saveBindings(home, data) {
   const file = bindingsPath(home);
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+}
+
+/**
+ * Insert a packed identity with empty paths so this machine's clones keep matching by path.
+ * @param {string} home
+ * @param {{ id: string, name?: string, origins?: string[] }} identity
+ * @param {{ now?: string }} [opts]
+ */
+export function adoptPortableIdentity(home, identity, { now = nowIso() } = {}) {
+  if (!isPortableSliceId(identity?.id)) {
+    return { created: false, binding: null };
+  }
+  const data = loadBindings(home);
+  const existing = data.bindings.find((b) => b.id === identity.id);
+  if (existing) return { created: false, binding: existing };
+  const binding = {
+    id: identity.id,
+    name: identity.name || identity.id,
+    origins: Array.isArray(identity.origins) ? [...identity.origins] : [],
+    paths: [],
+    updatedAt: now,
+  };
+  data.bindings.push(binding);
+  saveBindings(home, data);
+  return { created: true, binding };
 }
 
 /**

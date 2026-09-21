@@ -302,6 +302,31 @@ export const CATALOG = {
     flags: [v("to", { required: true })],
     effects: "non_idempotent",
   },
+  backup: {
+    name: "backup",
+    group: "Identity",
+    summary: "Pack ~/.mental OKF and identities into a portable directory (no sqlite, no hours, no machine paths).",
+    usage: `${CMD} backup --out <dir>`,
+    examples: [`${CMD} backup --out ~/mental-backup`, `${CMD} backup --out ~/mental-backup --json`],
+    flags: [v("out", { required: true, summary: "Directory outside any git worktree" })],
+    effects: "non_idempotent",
+  },
+  restore: {
+    name: "restore",
+    group: "Identity",
+    summary: "Merge a backup into this machine per UUID. Newer dest work stays. --replace --confirm REPLACE is disaster-only.",
+    usage: `${CMD} restore --from <dir>`,
+    examples: [
+      `${CMD} restore --from ~/mental-backup --json`,
+      `${CMD} restore --from ~/mental-backup --replace --confirm REPLACE`,
+    ],
+    flags: [
+      v("from", { required: true, summary: "Backup directory from mental backup --out" }),
+      b("replace", { summary: "Replace packed slices only (requires --confirm REPLACE)" }),
+      v("confirm", { summary: "Must be REPLACE with --replace" }),
+    ],
+    effects: "non_idempotent",
+  },
   install: {
     name: "install",
     group: "Setup",
@@ -383,6 +408,18 @@ export const CATALOG = {
     usage: `${CMD} serve`,
     examples: [`${CMD} serve`],
     flags: [],
+    effects: "read_only",
+  },
+  dashboard: {
+    name: "dashboard",
+    group: "Setup",
+    summary: "Optional read-only localhost explorer (127.0.0.1:3847, ephemeral fallback if busy).",
+    usage: `${CMD} dashboard`,
+    examples: [`${CMD} dashboard`, `${CMD} dashboard --port 3848 --no-open`, `${CMD} dashboard --no-open --json`],
+    flags: [
+      v("port", { summary: "Loopback port (default 3847; busy port falls back unless --port is given)" }),
+      b("no-open", { summary: "Print the URL; do not open a browser" }),
+    ],
     effects: "read_only",
   },
   doctor: {

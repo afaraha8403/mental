@@ -356,6 +356,7 @@ Optional `./.mental-id`: write on first bind, add to global exclude. Helps remap
 | `mental install [--project] [--hooks] [--mcp]` | Copy skill+rule to user agent dirs; optional project vendor; optional hooks; optional MCP config snippet                                                |
 | `mental hooks on|off`                          | User-level Claude/Cursor hook snippets calling `mental status --json`                                                                                   |
 | `mental serve`                                 | Optional MCP stdio wrapping the same commands                                                                                                           |
+| `mental dashboard`                             | Optional read-only localhost explorer; not a standing TUI, not MCP                                                                                      |
 | `mental uninstall`                             | Remove installed skills/rules/hooks from **user** agent dirs. Does **not** delete `~/.mental` unless `--delete-data` + typed `DELETE`.                  |
 | `mental reindex`                               | Rebuild sqlite from files                                                                                                                               |
 
@@ -736,7 +737,7 @@ Depends on A+B (help and schema exist).
 
 ### Out of scope (explicit)
 
-- Standing TUI / pager / interactive wizards.
+- Standing TUI / pager / interactive wizards. (`mental dashboard` is a named localhost command, not this.)
 - JSON-when-piped default for named commands.
 - Renaming pulse/heartbeat/status.
 - `--dry-run` on OKF writes.

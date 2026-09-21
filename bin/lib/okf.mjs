@@ -2,7 +2,7 @@
  * OKF markdown SoT: tiny frontmatter parse/write + bundle skeleton.
  * No YAML library — templates only need scalars and `[tag, lists]`.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, cpSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, cpSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve as resolvePath, sep } from "node:path";
 import { backupTimeDb, isTimeSidecarName, TIME_DB } from "./time.mjs";
 
@@ -853,4 +853,217 @@ export function copyOkfTree(src, dest, { skip = new Set(["status"]) } = {}) {
     if (b.ok && !b.skipped) copied.push(TIME_DB);
   }
   return copied;
+}
+
+/** Dirs packed by backup/restore. Never `status/` or hours. */
+export const OKF_PACK_DIRS = ["journal", "decisions", "attention", "notes"];
+
+/**
+ * Map of posix-relative OKF paths → absolute files under a bundle root.
+ * @param {string} root
+ * @returns {Map<string, string>}
+ */
+export function listPackedOkfFiles(root) {
+  /** @type {Map<string, string>} */
+  const out = new Map();
+  if (!root || !existsSync(root)) return out;
+  for (const dir of OKF_PACK_DIRS) {
+    walkPacked(join(root, dir), dir, out);
+  }
+  return out;
+}
+
+/**
+ * @param {string} abs
+ * @param {string} rel
+ * @param {Map<string, string>} out
+ */
+function walkPacked(abs, rel, out) {
+  if (!existsSync(abs)) return;
+  let entries;
+  try {
+    entries = readdirSync(abs, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const ent of entries) {
+    if (ent.name.startsWith(".")) continue;
+    if (isTimeSidecarName(ent.name)) continue;
+    const nextAbs = join(abs, ent.name);
+    const nextRel = `${rel}/${ent.name}`;
+    if (ent.isDirectory()) walkPacked(nextAbs, nextRel, out);
+    else if (ent.isFile()) out.set(nextRel, nextAbs);
+  }
+}
+
+/**
+ * Merge pack OKF into dest without last-write-wins on journals.
+ * @param {string} destRoot
+ * @param {Map<string, string>} packFiles rel → abs in the archive
+ * @returns {{ wrote: string[], kept: string[], journalMerged: string[] }}
+ */
+export function mergeOkfTree(destRoot, packFiles) {
+  mkdirSync(destRoot, { recursive: true });
+  const destFiles = listPackedOkfFiles(destRoot);
+  /** @type {string[]} */
+  const wrote = [];
+  /** @type {string[]} */
+  const kept = [];
+  /** @type {string[]} */
+  const journalMerged = [];
+  const rels = new Set([...destFiles.keys(), ...packFiles.keys()]);
+  for (const rel of rels) {
+    const destAbs = destFiles.get(rel);
+    const packAbs = packFiles.get(rel);
+    if (!packAbs) {
+      kept.push(rel);
+      continue;
+    }
+    if (!destAbs) {
+      copyPackedFile(packAbs, join(destRoot, ...rel.split("/")));
+      wrote.push(rel);
+      continue;
+    }
+    if (rel.startsWith("journal/") && rel.endsWith(".md")) {
+      const r = mergeJournalFile(destAbs, packAbs);
+      if (r.changed) journalMerged.push(rel);
+      else kept.push(rel);
+      continue;
+    }
+    if (packConceptNewer(destAbs, packAbs)) {
+      copyPackedFile(packAbs, destAbs);
+      wrote.push(rel);
+    } else {
+      kept.push(rel);
+    }
+  }
+  return { wrote, kept, journalMerged };
+}
+
+/**
+ * Replace dest OKF (four dirs only) with pack files. Leaves hours/status/index.
+ * @param {string} destRoot
+ * @param {Map<string, string>} packFiles
+ */
+export function replaceOkfTree(destRoot, packFiles) {
+  mkdirSync(destRoot, { recursive: true });
+  const destFiles = listPackedOkfFiles(destRoot);
+  for (const [rel, abs] of destFiles) {
+    if (!packFiles.has(rel)) {
+      try {
+        rmSync(abs);
+      } catch {
+        // dest-only file already gone
+      }
+    }
+  }
+  for (const [rel, packAbs] of packFiles) {
+    copyPackedFile(packAbs, join(destRoot, ...rel.split("/")));
+  }
+}
+
+/**
+ * @param {string} destAbs
+ * @param {string} packAbs
+ */
+function packConceptNewer(destAbs, packAbs) {
+  const destText = readFileSync(destAbs, "utf8");
+  const packText = readFileSync(packAbs, "utf8");
+  const destMs = conceptTimeFromText(destAbs, destText);
+  const packMs = conceptTimeFromText(packAbs, packText);
+  return packMs > destMs;
+}
+
+/**
+ * @param {string} abs
+ * @param {string} text
+ */
+function conceptTimeFromText(abs, text) {
+  const { data } = parseFrontmatter(text);
+  const raw = data?.timestamp;
+  if (raw) {
+    const t = Date.parse(String(raw));
+    if (!Number.isNaN(t)) return t;
+  }
+  try {
+    return statSync(abs).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Union journal hops. Same heading + different body keeps dest and appends
+ * the pack hop as `## HH:MM — Title (from backup)`.
+ * @param {string} destAbs
+ * @param {string} packAbs
+ * @returns {{ changed: boolean }}
+ */
+export function mergeJournalFile(destAbs, packAbs) {
+  const destRaw = readFileSync(destAbs, "utf8");
+  const packRaw = readFileSync(packAbs, "utf8");
+  const dest = parseFrontmatter(destRaw);
+  const pack = parseFrontmatter(packRaw);
+  const destHops = journalHops(dest.body);
+  const packHops = journalHops(pack.body);
+  const destExact = new Set(destHops.map((h) => hopIdentity(h)));
+  /** @type {typeof destHops} */
+  const extra = [];
+  for (const hop of packHops) {
+    if (destExact.has(hopIdentity(hop))) continue;
+    const clash = destHops.some((d) => d.heading === hop.heading && normHopBody(d.body) !== normHopBody(hop.body));
+    if (clash) {
+      const renamed = {
+        ...hop,
+        heading: backupHopHeading(hop.heading),
+      };
+      if (destExact.has(hopIdentity(renamed))) continue;
+      if (extra.some((e) => hopIdentity(e) === hopIdentity(renamed))) continue;
+      extra.push(renamed);
+      continue;
+    }
+    extra.push(hop);
+  }
+  if (extra.length === 0) return { changed: false };
+  const preamble = journalPreamble(dest.body);
+  const destBlocks = destHops.map((h) => `## ${h.heading}\n${h.body.replace(/\s+$/, "")}`).join("\n\n");
+  const extraBlocks = extra.map((h) => `## ${h.heading}\n${h.body.replace(/\s+$/, "")}`).join("\n\n");
+  const nextBody = [preamble.replace(/\s+$/, ""), destBlocks, extraBlocks].filter(Boolean).join("\n\n") + "\n";
+  dest.data.timestamp = new Date().toISOString();
+  writeFileSync(destAbs, stringifyFrontmatter(dest.data, nextBody));
+  return { changed: true };
+}
+
+/**
+ * @param {{ heading: string, body: string }} hop
+ */
+function hopIdentity(hop) {
+  return `${hop.heading}\n${normHopBody(hop.body)}`;
+}
+
+/** @param {string} body */
+function normHopBody(body) {
+  return String(body || "").replace(/\s+$/g, "").trim();
+}
+
+/** @param {string} heading */
+function backupHopHeading(heading) {
+  if (/\s+\(from backup\)$/.test(heading)) return heading;
+  return `${heading} (from backup)`;
+}
+
+/** @param {string} body */
+function journalPreamble(body) {
+  const idx = String(body || "").search(/^## /m);
+  if (idx < 0) return String(body || "").trim();
+  return String(body).slice(0, idx).trim();
+}
+
+/**
+ * @param {string} src
+ * @param {string} dest
+ */
+function copyPackedFile(src, dest) {
+  mkdirSync(dirname(dest), { recursive: true });
+  cpSync(src, dest);
 }

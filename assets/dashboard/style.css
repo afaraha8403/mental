@@ -1,0 +1,82 @@
+:root {
+  color-scheme: light dark;
+  --bg: #0f1115;
+  --panel: #181b21;
+  --ink: #e8eaed;
+  --muted: #9aa0a6;
+  --line: #2a2f38;
+  --accent: #8ab4f8;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f6f7f9;
+    --panel: #fff;
+    --ink: #1a1d23;
+    --muted: #5f6368;
+    --line: #dadce0;
+    --accent: #1a73e8;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font: 15px/1.45 system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+.top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-end;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+h1 { margin: 0; font-size: 1.1rem; }
+.strip { margin: 0.25rem 0 0; color: var(--muted); max-width: 52rem; }
+select, input, button {
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0.35rem 0.55rem;
+}
+.track {
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+main {
+  display: grid;
+  grid-template-columns: minmax(16rem, 22rem) 1fr;
+  min-height: calc(100vh - 5rem);
+}
+aside, article { padding: 1rem 1.25rem; }
+aside { border-right: 1px solid var(--line); }
+.chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem; }
+.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+#q { width: 100%; margin-bottom: 0.5rem; }
+ul { list-style: none; padding: 0; margin: 0; }
+#list li {
+  padding: 0.45rem 0.2rem;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+#list li:hover, #list li.active { color: var(--accent); }
+.muted { color: var(--muted); font-size: 0.85rem; }
+.pager { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem;
+  min-height: 12rem;
+}
+@media (max-width: 800px) {
+  main { grid-template-columns: 1fr; }
+  aside { border-right: 0; border-bottom: 1px solid var(--line); }
+}

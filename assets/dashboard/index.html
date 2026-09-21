@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mental dashboard</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div>
+        <h1>Mental</h1>
+        <p id="strip" class="strip">Loading…</p>
+      </div>
+      <label>
+        Project
+        <select id="project"></select>
+      </label>
+    </header>
+    <section id="track" class="track" hidden></section>
+    <main>
+      <aside>
+        <div class="chips" id="chips"></div>
+        <input id="q" type="search" placeholder="Search titles and bodies" autocomplete="off" />
+        <p id="page" class="muted"></p>
+        <ul id="list"></ul>
+        <div class="pager">
+          <button type="button" id="prev">Previous</button>
+          <button type="button" id="next">Next</button>
+        </div>
+      </aside>
+      <article>
+        <h2 id="peek-title">Peek</h2>
+        <p id="peek-meta" class="muted">Select a file.</p>
+        <pre id="peek-body"></pre>
+        <ul id="backlinks"></ul>
+      </article>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

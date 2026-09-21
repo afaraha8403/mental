@@ -777,8 +777,9 @@ export function stopIntervals(root, opts = {}) {
 }
 
 /**
- * Park/handoff: stop focused only. Fail closed for hours (no ok if txn rolls back).
- * Caller still journals if this fails (fail open for coding).
+ * Park/handoff/journal: stop focused if any, else the sole running interval.
+ * Two or more unfocused runners skip (do not guess). Fail closed for hours
+ * (no ok if txn rolls back). Caller still journals if this fails (fail open for coding).
  * @param {string} root
  * @param {{
  *   now?: Date,
@@ -808,11 +809,7 @@ export function stopFocusedForPark(root, opts = {}) {
   const { db } = opened;
   try {
     const row = withImmediateTxn(db, () => {
-      const focused = mapRow(
-        db.prepare("SELECT * FROM intervals WHERE focused = 1 AND discarded = 0 AND status = 'running'").get(),
-      );
-      if (!focused) return null;
-      return applyStopRow(db, focused, {
+      const stopOpts = {
         now,
         userMinutes: billableMinutes,
         useSuggested,
@@ -822,7 +819,18 @@ export function stopFocusedForPark(root, opts = {}) {
         titleExternal: opts.titleExternal,
         bodyExternal: opts.bodyExternal,
         projectName: project.name,
-      });
+      };
+      const focused = mapRow(
+        db.prepare("SELECT * FROM intervals WHERE focused = 1 AND discarded = 0 AND status = 'running'").get(),
+      );
+      if (focused) return applyStopRow(db, focused, stopOpts);
+      const running = db
+        .prepare("SELECT * FROM intervals WHERE discarded = 0 AND status = 'running'")
+        .all()
+        .map(mapRow)
+        .filter(Boolean);
+      if (running.length === 1) return applyStopRow(db, running[0], stopOpts);
+      return null;
     });
     const data = row ? annotate(row, now) : null;
     const review = data ? customerCopyReview([data]) : null;
@@ -1443,11 +1451,14 @@ function toMd(rows, cols, banner) {
  * @param {string} out
  * @param {{ cwd: string, gitRoot?: string | null }} ctx
  */
-export function assertExportOutPath(out, { cwd, gitRoot }) {
+export function assertExportOutPath(out, { cwd, gitRoot, emptyMessage, insideMessage } = {}) {
   if (!out || typeof out !== "string" || !out.trim()) {
     return {
       ok: false,
-      error: { code: "usage", message: "mental track export requires --out <path> outside the git worktree" },
+      error: {
+        code: "usage",
+        message: emptyMessage || "mental track export requires --out <path> outside the git worktree",
+      },
     };
   }
   const abs = canonicalPath(resolve(cwd, out));
@@ -1459,7 +1470,10 @@ export function assertExportOutPath(out, { cwd, gitRoot }) {
     if (isInsideDir(canonicalPath(gitRoot), abs)) {
       return {
         ok: false,
-        error: { code: "usage", message: "--out must be outside the git worktree (hours must never land in git)" },
+        error: {
+          code: "usage",
+          message: insideMessage || "--out must be outside the git worktree (hours must never land in git)",
+        },
       };
     }
   }

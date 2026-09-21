@@ -129,6 +129,8 @@ function walk(base, dir, out) {
   }
   for (const name of names) {
     if (name.startsWith(".") || name === "status") continue;
+    // Personal ~/.mental contains UUID slices here; never mix them into this catalog.
+    if (dir === base && name === "projects") continue;
     const abs = join(dir, name);
     let st;
     try {

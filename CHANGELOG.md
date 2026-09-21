@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+- `mental dashboard` opens an optional read-only localhost explorer (`127.0.0.1:3847`, ephemeral fallback if busy) so a human can browse the catalog or peek at one file. The CLI stays heartbeat-and-exit; agents keep `--json`.
+- `mental backup --out <dir>` packs this machine's OKF and identities into a portable directory (no sqlite, no hours, no machine paths). `mental restore --from` merges per UUID so dest-ahead work stays; `--replace --confirm REPLACE` is disaster-only for packed slices.
+
 ### Fixes
+- Personal-mode `list` / `search` no longer walk `~/.mental/projects` (project slices stay exclusive; `mental pulse` / dashboard project switcher remain the other-repos view).
+- Park, handoff, and journal stop the sole remaining Track interval when none is focused (a nested `--new` hop can steal focus and stop, leaving the sit-down clock running). Two or more unfocused runners still skip.
+- `mental restore` refuses a backup whose slice ids are not UUIDs, so a packed `id` cannot escape `~/.mental/projects`.
 - `mental track --json` glance is compact (running + today's stops + counts). It no longer dumps nested `tasks[]` history, so agent hosts with a 64 KiB stdout cap can parse it. Full history is `mental track --history --json` or `mental track report`.
 - Thrown errors under `--json` (install, handoff, journal) return a JSON envelope with `error.code` / `path` / `hint` instead of a raw Node stack. IO failures exit 4.
 - `mental install` skips recopies when the dest skill version already matches the CLI (pass `--force` to recopy). `mental doctor --fix` still force-recopies.

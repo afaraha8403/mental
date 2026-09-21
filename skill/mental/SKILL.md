@@ -72,6 +72,8 @@ If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Tr
   user data.
 - Not a dependency. Work must continue when Mental is absent, stale, or
   unavailable (fail open).
+- Not live folder sync. Do not Syncthing, Dropbox, or git `~/.mental`.
+  Cross-PC Part 1 is `mental backup --out` / `mental restore --from`.
 
 ## Commands (always `--json`)
 
@@ -92,6 +94,8 @@ mental attention --title "…" --kind direction --status open --via cursor --jso
 mental attention --title "…" --kind thread --status later --via cursor --json
 mental decide --title "…" --body "…" --status open --via cursor --json
 mental note --title "…" --json
+mental backup --out <dir> --json
+mental restore --from <dir> --json
 ```
 
 ## Mental receipt (end of turn)

@@ -1,9 +1,11 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, writeFileSync, cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { join, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { canonicalPath } from "../bin/lib/git.mjs";
+import { listPackedOkfFiles } from "../bin/lib/okf.mjs";
 
 export const CLI = fileURLToPath(new URL("../bin/cli.mjs", import.meta.url));
 
@@ -83,4 +85,79 @@ export function initRepo(home, { origin = "git@github.com:afaraha8403/mental.git
     mkdirSync(cwd, { recursive: true });
   }
   return { root, cwd };
+}
+
+/**
+ * Live ~/.mental of the test *process* (not spawn HOME). Read-only source.
+ */
+export function liveMentalDir() {
+  return canonicalPath(join(homedir(), ".mental"));
+}
+
+/**
+ * Fingerprint used to prove the live store was not mutated.
+ * @param {string} root
+ * @returns {{ bindingsHash: string, projectIds: string[], okfHash: string }}
+ */
+export function fingerprintMental(root) {
+  const bindings = join(root, "bindings.json");
+  const bindingsHash = existsSync(bindings)
+    ? createHash("sha256").update(readFileSync(bindings)).digest("hex")
+    : "";
+  const projects = join(root, "projects");
+  let projectIds = [];
+  if (existsSync(projects)) {
+    try {
+      projectIds = readdirSync(projects).sort();
+    } catch {
+      projectIds = [];
+    }
+  }
+  const okf = createHash("sha256");
+  hashPackedTree(okf, root, "");
+  for (const id of projectIds) {
+    if (!id || id.startsWith(".")) continue;
+    hashPackedTree(okf, join(projects, id), `projects/${id}/`);
+  }
+  return { bindingsHash, projectIds, okfHash: okf.digest("hex") };
+}
+
+/**
+ * @param {import("node:crypto").Hash} hash
+ * @param {string} root
+ * @param {string} prefix
+ */
+function hashPackedTree(hash, root, prefix) {
+  const files = [...listPackedOkfFiles(root).entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  for (const [rel, abs] of files) {
+    hash.update(prefix);
+    hash.update(rel);
+    hash.update("\0");
+    hash.update(readFileSync(abs));
+  }
+}
+
+/**
+ * Copy live Mental home into destHome/.mental. Never writes the source.
+ * Dest must be under os.tmpdir().
+ * @param {string} destHome
+ * @param {{ live?: string }} [opts]
+ */
+export function snapshotLiveMental(destHome, { live = liveMentalDir() } = {}) {
+  const src = canonicalPath(live);
+  const dest = canonicalPath(join(destHome, ".mental"));
+  const tmp = canonicalPath(tmpdir());
+  if (dest !== tmp && !dest.startsWith(`${tmp}${sep}`)) {
+    throw new Error("snapshot dest must be under os.tmpdir()");
+  }
+  if (src === dest || dest.startsWith(`${src}${sep}`) || src.startsWith(`${dest}${sep}`)) {
+    throw new Error("refusing to snapshot onto the live store");
+  }
+  if (!existsSync(join(src, "bindings.json"))) {
+    return { skipped: true, src, dest };
+  }
+  if (existsSync(dest)) rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dest, { recursive: true });
+  cpSync(src, dest, { recursive: true, dereference: false });
+  return { skipped: false, src, dest, fingerprint: fingerprintMental(src) };
 }

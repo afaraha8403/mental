@@ -32,9 +32,12 @@ import { cmdAttention } from "./commands/attention.mjs";
 import { cmdRemap } from "./commands/remap.mjs";
 import { cmdSplit } from "./commands/split.mjs";
 import { cmdLink } from "./commands/link.mjs";
+import { cmdBackup } from "./commands/backup.mjs";
+import { cmdRestore } from "./commands/restore.mjs";
 import { cmdUninstall } from "./commands/uninstall.mjs";
 import { cmdHooks } from "./commands/hooks.mjs";
 import { cmdServe } from "./commands/serve.mjs";
+import { cmdDashboard } from "./commands/dashboard.mjs";
 import { cmdPark } from "./commands/park.mjs";
 import { cmdHandoff } from "./commands/handoff.mjs";
 import { cmdPulse } from "./commands/pulse.mjs";
@@ -70,9 +73,12 @@ export const COMMANDS = {
   split: cmdSplit,
   new: cmdSplit,
   link: cmdLink,
+  backup: cmdBackup,
+  restore: cmdRestore,
   uninstall: cmdUninstall,
   hooks: cmdHooks,
   serve: cmdServe,
+  dashboard: cmdDashboard,
   park: cmdPark,
   handoff: cmdHandoff,
   pulse: cmdPulse,

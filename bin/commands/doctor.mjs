@@ -2,7 +2,7 @@
  * `mental doctor` — PATH, where, bindings, ignore, skill presence.
  * Exit 3 when problems exist (still prints JSON).
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join, resolve as resolvePath } from "node:path";
 import { spawnSync } from "node:child_process";
 import { resolveBundle, findLocalMental } from "../lib/resolve.mjs";
@@ -40,6 +40,27 @@ import {
 
 function check(id, ok, message, level = "error") {
   return { id, ok, level, message };
+}
+
+/**
+ * Syncthing/Dropbox conflict copies of bindings.json.
+ * @param {string} home
+ */
+function bindingsConflictFiles(home) {
+  const dir = userMentalDir(home);
+  if (!existsSync(dir)) return [];
+  let names = [];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return names.filter((n) => {
+    if (n === "bindings.json") return false;
+    const lower = n.toLowerCase();
+    if (!lower.includes("bindings")) return false;
+    return /sync-conflict|conflicted copy|conflicted/i.test(n);
+  });
 }
 
 /**
@@ -187,6 +208,18 @@ export function cmdDoctor(args, io = {}) {
       checks.push(check("bindings", true, `${bindings.bindings.length} binding(s)`));
     } catch (err) {
       checks.push(check("bindings", false, err instanceof Error ? err.message : String(err)));
+    }
+
+    const conflicted = bindingsConflictFiles(home);
+    if (conflicted.length > 0) {
+      checks.push(
+        check(
+          "bindings-conflict",
+          false,
+          `conflict copy of bindings.json (${conflicted.join(", ")}); live folder sync is unsupported — use mental backup / mental restore`,
+          "warn",
+        ),
+      );
     }
 
     checks.push(

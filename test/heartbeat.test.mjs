@@ -177,7 +177,7 @@ test("formatHeartbeat omits uuid chrome", () => {
   assert.doesNotMatch(text, /indexed/);
 });
 
-test("usage no longer mentions a dashboard", () => {
+test("usage does not mention a standing dashboard", () => {
   const u = usage();
   assert.match(u, /Heartbeat/);
   assert.doesNotMatch(u, /standing dashboard/i);
