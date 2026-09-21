@@ -59,7 +59,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental track` | Optional automated project-time record (off until `option track on`): private/customer copy, wall/billable, several clocks, dated client export. [Full contract](./track.md) |
 | `mental hooks on\|off` | Optional session hooks (default off; alias of `option hooks`) |
 | `mental serve` | Optional MCP stdio (session verbs: heartbeat, journal, park, …). Identity/setup stay CLI |
-| `mental dashboard` | Optional read-only localhost explorer (`127.0.0.1:3847`; busy port falls back unless `--port` is set). List or a 3D mind map, markdown peek, and Track glance when tracking is on. `--no-open` prints the URL. Loopback only; GET/HEAD; no CORS. Agents still `--json` |
+| `mental dashboard` | Optional read-only localhost explorer (`127.0.0.1:3847`; busy port falls back unless `--port` is set). Opens on where you left off, then a catalog, 3D mind map, or sit-down timeline beside the open file. Track clocks stay collapsed until opened. `--no-open` prints the URL. Loopback only; GET/HEAD; no CORS. Agents still `--json` |
 | `mental doctor` | PATH, bindings, ignore, skills, npm update, host plugin / skill-copy lag, decision budget, stale residue, `optionals[]`, `time.sqlite` never git-tracked (exit 3). `--fix` recopies home skills/rules and git excludes (never `--project` or optionals). `--fix-ignore` is ignore-only. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns). TTY: ✓ ok, ⚠ failed warn, ✖ error; ASCII fallback OK / ! / X. Footer `next:` is a portable command (no `&&`). JSON `data.next`. `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips host CLIs. |
 
 ## Writes

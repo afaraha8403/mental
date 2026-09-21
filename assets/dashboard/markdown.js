@@ -66,41 +66,73 @@ function renderInline(src) {
 }
 
 /**
- * @param {string} block
+ * Headings and lists count even when the source has no blank line before them.
+ * @param {string} line
  */
-function renderBlock(block) {
-  const lines = block.split("\n").filter((line) => line.trim().length > 0);
-  if (lines.length === 0) return "";
-  const heading = lines.length === 1 ? lines[0].match(/^(#{1,6})\s+(.+)$/) : null;
-  if (heading) {
-    const level = heading[1].length;
-    return `<h${level}>${renderInline(heading[2])}</h${level}>`;
-  }
-  if (lines.every((line) => /^---+$/.test(line.trim()))) return "<hr>";
-  if (lines.every((line) => /^[-*]\s+/.test(line))) {
-    const items = lines.map((line) => `<li>${renderInline(line.replace(/^[-*]\s+/, ""))}</li>`).join("");
-    return `<ul>${items}</ul>`;
-  }
-  if (lines.every((line) => /^\d+\.\s+/.test(line))) {
-    const items = lines.map((line) => `<li>${renderInline(line.replace(/^\d+\.\s+/, ""))}</li>`).join("");
-    return `<ol>${items}</ol>`;
-  }
-  if (lines.every((line) => /^>\s?/.test(line))) {
-    const quote = lines.map((line) => line.replace(/^>\s?/, "")).join(" ");
-    return `<blockquote>${renderInline(quote)}</blockquote>`;
-  }
-  return `<p>${lines.map((line) => renderInline(line)).join("<br>")}</p>`;
+function structural(line) {
+  return /^(#{1,6})\s+/.test(line) || /^---+$/.test(line.trim()) || /^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line) || /^>\s?/.test(line);
 }
 
 /**
  * @param {string} src
  */
 function renderBlocks(src) {
-  return src
-    .split(/\n{2,}/)
-    .map((block) => renderBlock(block))
-    .filter(Boolean)
-    .join("");
+  const lines = src.split("\n");
+  const out = [];
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) {
+      i += 1;
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      const level = heading[1].length;
+      out.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+      i += 1;
+      continue;
+    }
+    if (/^---+$/.test(line.trim())) {
+      out.push("<hr>");
+      i += 1;
+      continue;
+    }
+    if (/^[-*]\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^[-*]\s+/.test(lines[i])) {
+        items.push(`<li>${renderInline(lines[i].replace(/^[-*]\s+/, ""))}</li>`);
+        i += 1;
+      }
+      out.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+    if (/^\d+\.\s+/.test(line)) {
+      const items = [];
+      while (i < lines.length && /^\d+\.\s+/.test(lines[i])) {
+        items.push(`<li>${renderInline(lines[i].replace(/^\d+\.\s+/, ""))}</li>`);
+        i += 1;
+      }
+      out.push(`<ol>${items.join("")}</ol>`);
+      continue;
+    }
+    if (/^>\s?/.test(line)) {
+      const quote = [];
+      while (i < lines.length && /^>\s?/.test(lines[i])) {
+        quote.push(lines[i].replace(/^>\s?/, ""));
+        i += 1;
+      }
+      out.push(`<blockquote>${renderInline(quote.join(" "))}</blockquote>`);
+      continue;
+    }
+    const para = [];
+    while (i < lines.length && lines[i].trim() && !structural(lines[i])) {
+      para.push(lines[i]);
+      i += 1;
+    }
+    if (para.length) out.push(`<p>${para.map((row) => renderInline(row)).join("<br>")}</p>`);
+  }
+  return out.join("");
 }
 
 /**

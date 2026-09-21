@@ -1128,6 +1128,45 @@ function reportShape({
 }
 
 /**
+ * Recent sit-downs, newest start first. Discarded rows are omitted.
+ * Pass `id` to return that one interval.
+ * @param {string} root
+ * @param {{ now?: Date, limit?: number, id?: string }} [opts]
+ */
+export function listSessions(root, { now = new Date(), limit = 40, id } = {}) {
+  const file = timeDbPath(root);
+  if (!existsSync(file)) return { ok: true, data: { sessions: [] } };
+  const opened = openTimeDb(file, { write: false });
+  if (!opened.ok) return opened;
+  try {
+    let rows = allIntervals(opened.db).map((row) => annotate(row, now));
+    if (id) rows = rows.filter((row) => row.id === id);
+    else {
+      rows.sort((a, b) => Date.parse(b.started) - Date.parse(a.started));
+      rows = rows.slice(0, limit);
+    }
+    return {
+      ok: true,
+      data: {
+        sessions: rows.map((row) => ({
+          id: row.id,
+          title: row.title_internal || "Session",
+          status: row.status,
+          started: row.started,
+          stopped: row.stopped,
+          wall: row.status === "running" ? row.live_wall : row.wall || "0:00",
+          billable: row.billable || "0:00",
+          focused: Boolean(row.focused),
+          via: row.via || "",
+        })),
+      },
+    };
+  } finally {
+    opened.db.close();
+  }
+}
+
+/**
  * @param {string} root
  * @param {{ since?: string, until?: string, external?: boolean, project?: string, now?: Date, bundleId?: string, gitRoot?: string | null, env?: NodeJS.ProcessEnv }} [opts]
  */

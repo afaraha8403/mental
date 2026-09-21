@@ -9,48 +9,216 @@
   </head>
   <body>
     <header class="top">
-      <div>
-        <h1><span class="mark" aria-hidden="true">🧠</span> Mental CLI Dashboard</h1>
-        <p id="strip" class="strip">Loading…</p>
-      </div>
-      <label>
-        Project
-        <select id="project"></select>
-      </label>
-    </header>
-    <section id="track" class="track" hidden>
-      <h2>Track</h2>
-      <p id="track-note" class="muted"></p>
-      <h3>Running</h3>
-      <ul id="track-running"></ul>
-      <h3>Stopped today</h3>
-      <ul id="track-stopped"></ul>
-    </section>
-    <main id="main">
-      <aside>
-        <div class="view">
-          <button type="button" id="view-list" aria-pressed="true">List</button>
-          <button type="button" id="view-map" aria-pressed="false">Mind map</button>
+      <div class="brand">
+        <img src="/favicon.png" alt="" width="26" height="26" class="brand-logo" />
+        <div class="brand-text">
+          <h1>Mental</h1>
+          <span class="brand-tag">CLI</span>
         </div>
+      </div>
+      <div class="header-center">
+        <label class="project-field" for="project">
+          <span class="project-field-label">
+            <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+            Project
+          </span>
+          <div class="select-wrapper">
+            <select id="project"></select>
+            <svg class="select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </div>
+        </label>
+      </div>
+      <div class="header-actions">
+        <div class="view" role="group" aria-label="View">
+          <button type="button" id="view-list" aria-pressed="true">
+            <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            <span>Catalog</span>
+          </button>
+          <button type="button" id="view-map" aria-pressed="false">
+            <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+            <span>Mind map</span>
+          </button>
+          <button type="button" id="view-sessions" aria-pressed="false" hidden>
+            <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span>Sit-downs</span>
+          </button>
+        </div>
+        <button type="button" id="theme-toggle" class="theme-btn" title="Toggle theme" aria-label="Toggle color theme">
+          <svg class="icon icon-theme-dark" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          <svg class="icon icon-theme-light" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+        </button>
+      </div>
+    </header>
+
+    <section class="pulse" aria-label="Where you left off">
+      <div class="pulse-lead">
+        <div class="pulse-badge-row">
+          <span class="status-badge"><span class="status-pulse-dot" aria-hidden="true"></span> Where you left off</span>
+        </div>
+        <p id="strip" class="resume">Loading…</p>
+        <div id="facts" class="facts"></div>
+        <details id="track" class="clock-drawer" hidden>
+          <summary>
+            <div class="summary-content">
+              <svg class="icon summary-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+              <span id="clock-summary">Clock</span>
+            </div>
+            <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          </summary>
+          <div class="clock-body">
+            <p id="track-note" class="muted"></p>
+            <div class="clock-section">
+              <h3>Running</h3>
+              <ul id="track-running"></ul>
+            </div>
+            <div class="clock-section">
+              <h3>Stopped today</h3>
+              <ul id="track-stopped"></ul>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div class="boards">
+        <section id="board-eyes" class="board-card board-eyes" hidden>
+          <div class="board-head">
+            <h2><span class="board-icon" aria-hidden="true">⚠️</span> Needs eyes</h2>
+            <span id="eyes-count" class="board-count" aria-hidden="true"></span>
+          </div>
+          <ul id="eyes-list"></ul>
+        </section>
+        <section class="board-card board-air">
+          <div class="board-head">
+            <h2><span class="board-icon" aria-hidden="true">⚡</span> In the air</h2>
+            <span id="air-count" class="board-count" aria-hidden="true"></span>
+          </div>
+          <ul id="air-list"></ul>
+        </section>
+        <section id="board-later" class="board-card board-later" hidden>
+          <div class="board-head">
+            <h2><span class="board-icon" aria-hidden="true">📌</span> Later</h2>
+            <span id="later-count" class="board-count" aria-hidden="true"></span>
+          </div>
+          <ul id="later-list"></ul>
+        </section>
+        <section class="board-card board-open">
+          <div class="board-head">
+            <h2><span class="board-icon" aria-hidden="true">🎯</span> Unsettled</h2>
+            <span id="open-count" class="board-count" aria-hidden="true"></span>
+          </div>
+          <ul id="open-list"></ul>
+        </section>
+      </div>
+    </section>
+
+    <main id="main">
+      <aside aria-label="Browse">
         <div id="catalog">
-          <div class="chips" id="chips"></div>
-          <input id="q" type="search" placeholder="Search titles and bodies" autocomplete="off" />
-          <p id="page" class="muted"></p>
-          <ul id="list"></ul>
+          <div class="chips-container">
+            <div class="chips" id="chips" role="group" aria-label="Type filter"></div>
+          </div>
+          <div class="search-wrap">
+            <label class="search" for="q">
+              <span class="visually-hidden">Search titles and bodies</span>
+              <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input id="q" type="search" placeholder="Search titles and bodies" autocomplete="off" />
+              <button type="button" id="q-clear" class="search-clear" title="Clear search" aria-label="Clear search" hidden>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+              <span class="search-kbd" aria-hidden="true"><kbd>/</kbd></span>
+            </label>
+          </div>
+          <div class="catalog-status">
+            <p id="page" class="muted"></p>
+          </div>
+          <ul id="list" aria-label="Catalog items"></ul>
           <div class="pager">
-            <button type="button" id="prev">Previous</button>
-            <button type="button" id="next">Next</button>
+            <button type="button" id="prev">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              <span>Previous</span>
+            </button>
+            <button type="button" id="next">
+              <span>Next</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
           </div>
         </div>
-        <p id="map-hint" class="muted" hidden>Drag to orbit. Scroll to zoom. Click a node.</p>
-        <canvas id="map" hidden></canvas>
+
+        <div id="map-hint" class="map-card-hint" hidden>
+          <div class="map-toolbar-bar">
+            <div class="map-legend-items" id="map-chips" role="group" aria-label="Filter map by type">
+              <button type="button" class="kind kind-all active" data-type="">All</button>
+              <button type="button" class="kind kind-decision" data-type="Decision"><span class="mark" aria-hidden="true">🎯</span> Decision</button>
+              <button type="button" class="kind kind-attention" data-type="Attention"><span class="mark" aria-hidden="true">🚦</span> Attention</button>
+              <button type="button" class="kind kind-note" data-type="Note"><span class="mark" aria-hidden="true">📝</span> Note</button>
+              <button type="button" class="kind kind-journal" data-type="Journal"><span class="mark" aria-hidden="true">📓</span> Journal</button>
+            </div>
+            <div class="map-layout-switcher" role="group" aria-label="Layout style">
+              <button type="button" class="layout-toggle-btn active" id="btn-layout-organic" title="Organic Brain: natural force clustering where connected items gravitate together">🧠 Brain</button>
+              <button type="button" class="layout-toggle-btn" id="btn-layout-tree" title="Structured Tree: organized column layout">🌲 Tree</button>
+            </div>
+            <div class="map-search-box">
+              <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input id="map-q" type="search" placeholder="Filter by tag or keyword..." autocomplete="off" />
+            </div>
+          </div>
+          <span id="map-help" class="map-help-text">Scroll to zoom. Drag to pan or rearrange. Click a hub to fold/unfold. Click a node to peek.</span>
+        </div>
+
+        <div id="map-wrap" hidden>
+          <div id="map-empty" class="map-overlay-empty" hidden>
+            <svg class="empty-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
+            <p>No files in this project yet.</p>
+          </div>
+          <div id="map"></div>
+        </div>
+
+        <div id="sessions" hidden>
+          <div class="sessions-head">
+            <h2>Sit-downs</h2>
+          </div>
+          <p id="session-empty" class="empty-state-text muted" hidden>No sit-downs yet.</p>
+          <ul id="session-list" aria-label="Sit-downs"></ul>
+        </div>
       </aside>
-      <article>
-        <h2 id="peek-title">Peek</h2>
-        <p id="peek-meta" class="muted">Select a file.</p>
-        <div id="peek-fm" hidden></div>
-        <div id="peek-body" class="md"></div>
-        <ul id="backlinks"></ul>
+
+      <article aria-label="File">
+        <div id="timeline-wrap" class="timeline-wrap" hidden>
+          <h2 id="timeline-heading" hidden>During this sit-down</h2>
+          <ol id="timeline" hidden></ol>
+        </div>
+
+        <div id="peek-container">
+          <header class="doc-head">
+            <div class="doc-meta-bar">
+              <p id="peek-meta" class="doc-meta-tags muted">Select a file.</p>
+              <div class="doc-actions" id="doc-actions" hidden>
+                <button type="button" id="copy-path-btn" class="doc-btn" title="Copy file path">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  <span class="btn-text">Copy path</span>
+                </button>
+                <button type="button" id="copy-body-btn" class="doc-btn" title="Copy markdown content">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                  <span class="btn-text">Copy markdown</span>
+                </button>
+              </div>
+            </div>
+            <h2 id="peek-title">No file open</h2>
+          </header>
+
+          <div id="peek-empty" class="peek-empty-state">
+            <svg class="empty-doc-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+            <p class="empty-title">No file selected</p>
+            <p class="empty-subtitle muted">Pick an item from the catalog, explore nodes in the mind map, or view sit-down events.</p>
+          </div>
+
+          <div id="peek-fm" hidden></div>
+          <div id="peek-body" class="md"></div>
+          <div id="backlinks-section" class="backlinks-section" hidden>
+            <h3 id="backlinks-label" hidden>Linked from</h3>
+            <ul id="backlinks"></ul>
+          </div>
+        </div>
       </article>
     </main>
     <script type="module" src="/app.js"></script>

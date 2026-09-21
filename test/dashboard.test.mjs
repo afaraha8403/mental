@@ -272,12 +272,51 @@ test("track glance is 404 when tracking is off", async (t) => {
   assert.equal(html.status, 200);
   const page = await html.text();
   assert.match(page, /Mental CLI Dashboard/);
+  assert.match(page, /id="air-list"/);
+  assert.match(page, /id="view-map"/);
+  assert.match(page, /id="map-wrap"/);
+  const vendor = await fetch(`${dash.url}vendor/mind-map.js`);
+  assert.equal(vendor.status, 200);
+  assert.match(vendor.headers.get("content-type") || "", /javascript/);
+  const bundle = await vendor.text();
+  assert.match(bundle, /D3\.js 7\.9\.0/);
+  assert.match(bundle, /export \{ _d3 as d3 \}/);
   assert.match(page, /favicon\.png/);
   const icon = await fetch(`${dash.url}favicon.png`);
   assert.equal(icon.status, 200);
   assert.match(icon.headers.get("content-type") || "", /image\/png/);
   const bytes = Buffer.from(await icon.arrayBuffer());
   assert.equal(bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), true);
+});
+
+test("session timeline lists the hop written during that sit-down", async (t) => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const seeded = mental(home, root, ["journal", "--json", "--title", "Seed", "--resume", "Continue"]);
+  assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
+  const enabled = mental(home, root, ["option", "track", "on", "--json"]);
+  assert.equal(enabled.status, 0, enabled.stderr || enabled.stdout);
+  const started = mental(home, root, ["track", "start", "--json", "--via", "cli", "--title-internal", "Sit down"]);
+  assert.equal(started.status, 0, started.stderr || started.stdout);
+  const sessionId = JSON.parse(started.stdout).data.id;
+  const hopped = mental(home, root, ["journal", "--json", "--title", "During sit", "--resume", "Next"]);
+  assert.equal(hopped.status, 0, hopped.stderr || hopped.stdout);
+  const dash = await listenDashboard({
+    cwd: root,
+    home,
+    env: gitEnv(home),
+    port: 0,
+    open: false,
+  });
+  t.after(() => dash.close());
+  const listed = await fetch(`${dash.url}api/sessions`);
+  const sessions = await listed.json();
+  assert.equal(listed.status, 200);
+  assert.ok(sessions.data.sessions.some((row) => row.id === sessionId));
+  const detail = await fetch(`${dash.url}api/sessions?session=${sessionId}`);
+  const timeline = await detail.json();
+  assert.equal(detail.status, 200);
+  assert.ok(timeline.data.events.some((event) => event.type === "Journal" && event.title === "During sit"));
 });
 
 test("dashboard --help lists the command", async () => {

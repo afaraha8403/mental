@@ -1,270 +1,895 @@
-const KIND_COLOR = {
-  Decision: "#9ec1ff",
-  Attention: "#f6c56b",
-  Note: "#8fd6a8",
-  Journal: "#d2a8ff",
-};
+import { d3 } from "./vendor/mind-map.js";
+import { KIND_META, toMindMapGraph, resolveBoxCollisions } from "./map-data.js";
 
 /**
- * Fibonacci sphere, then a short repulsion/spring pass so linked files sit nearer.
- * @param {Array<{ path: string }>} nodes
- * @param {Array<{ from: string, to: string }>} edges
+ * Truncate long strings with ellipsis.
+ * @param {string} text
+ * @param {number} max
  */
-export function layoutNodes(nodes, edges) {
-  /** @type {Map<string, { x: number, y: number, z: number }>} */
-  const pos = new Map();
-  const count = nodes.length || 1;
-  nodes.forEach((node, i) => {
-    const y = count === 1 ? 0 : 1 - (i / (count - 1)) * 2;
-    const radius = Math.sqrt(Math.max(0, 1 - y * y));
-    const theta = i * Math.PI * (3 - Math.sqrt(5));
-    pos.set(node.path, {
-      x: Math.cos(theta) * radius * 8,
-      y: y * 6,
-      z: Math.sin(theta) * radius * 8,
-    });
-  });
-  const index = new Map(nodes.map((node, i) => [node.path, i]));
-  for (let step = 0; step < 36; step++) {
-    const force = nodes.map(() => ({ x: 0, y: 0, z: 0 }));
-    for (let i = 0; i < nodes.length; i++) {
-      const a = pos.get(nodes[i].path);
-      for (let j = i + 1; j < nodes.length; j++) {
-        const b = pos.get(nodes[j].path);
-        let dx = a.x - b.x;
-        let dy = a.y - b.y;
-        let dz = a.z - b.z;
-        let dist2 = dx * dx + dy * dy + dz * dz;
-        if (dist2 < 0.04) dist2 = 0.04;
-        const push = 0.2 / dist2;
-        dx *= push;
-        dy *= push;
-        dz *= push;
-        force[i].x += dx;
-        force[i].y += dy;
-        force[i].z += dz;
-        force[j].x -= dx;
-        force[j].y -= dy;
-        force[j].z -= dz;
-      }
-      force[i].x -= a.x * 0.012;
-      force[i].y -= a.y * 0.012;
-      force[i].z -= a.z * 0.012;
-    }
-    for (const edge of edges) {
-      const i = index.get(edge.from);
-      const j = index.get(edge.to);
-      if (i == null || j == null) continue;
-      const a = pos.get(nodes[i].path);
-      const b = pos.get(nodes[j].path);
-      const dx = (b.x - a.x) * 0.02;
-      const dy = (b.y - a.y) * 0.02;
-      const dz = (b.z - a.z) * 0.02;
-      force[i].x += dx;
-      force[i].y += dy;
-      force[i].z += dz;
-      force[j].x -= dx;
-      force[j].y -= dy;
-      force[j].z -= dz;
-    }
-    for (let i = 0; i < nodes.length; i++) {
-      const point = pos.get(nodes[i].path);
-      point.x += Math.max(-0.8, Math.min(0.8, force[i].x));
-      point.y += Math.max(-0.8, Math.min(0.8, force[i].y));
-      point.z += Math.max(-0.8, Math.min(0.8, force[i].z));
-    }
-  }
-  return pos;
+function shortText(text, max = 32) {
+  const s = String(text || "").replace(/\s+/g, " ").trim();
+  if (s.length <= max) return s || "Untitled";
+  return `${s.slice(0, max - 1)}…`;
 }
 
 /**
- * Orbit a catalog graph. Drag rotates, wheel zooms, click reports a path.
- * @param {HTMLCanvasElement} canvas
+ * D3.js SVG Mind Map.
+ * Renders an interactive, hierarchical knowledge graph with a central project root,
+ * category hubs (Decisions, Attention, Notes, Journals), leaf concepts arranged in clean non-overlapping columns,
+ * smooth organic branch curves, pan/zoom, sticky drag-and-drop, and collapsible branches.
+ *
+ * @param {HTMLElement} container
  * @param {(path: string) => void} onPick
  */
-export function startMap(canvas, onPick) {
-  const ctx = canvas.getContext("2d");
-  let nodes = [];
-  let edges = [];
-  /** @type {Map<string, { x: number, y: number, z: number }>} */
-  let positions = new Map();
-  let yaw = 0.4;
-  let pitch = 0.3;
-  let distance = 22;
-  let selected = "";
-  let hover = "";
-  let running = false;
-  let frame = 0;
-  let dragging = false;
-  let moved = false;
-  let lastX = 0;
-  let lastY = 0;
+export function startMap(container, onPick) {
+  container.replaceChildren();
 
-  function resize() {
-    const rect = canvas.getBoundingClientRect();
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const width = Math.max(1, Math.floor(rect.width));
-    const height = Math.max(1, Math.floor(rect.height));
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // Root SVG
+  const svg = d3
+    .select(container)
+    .append("svg")
+    .attr("class", "mind-map-svg")
+    .attr("width", "100%")
+    .attr("height", "100%");
+
+  // SVG Definitions
+  const defs = svg.append("defs");
+
+  // Cross-link directional marker
+  defs
+    .append("marker")
+    .attr("id", "mindmap-cross-arrow")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 18)
+    .attr("refY", 0)
+    .attr("markerWidth", 5)
+    .attr("markerHeight", 5)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-4L8,0L0,4")
+    .attr("fill", "var(--accent, #38bdf8)");
+
+  // Main viewport for D3 zoom & pan
+  const viewport = svg.append("g").attr("class", "mind-map-viewport");
+  const linksLayer = viewport.append("g").attr("class", "mind-map-links-layer");
+  const crossLinksLayer = viewport.append("g").attr("class", "mind-map-cross-links-layer");
+  const nodesLayer = viewport.append("g").attr("class", "mind-map-nodes-layer");
+
+  // Floating controls overlay
+  const wrap = container.closest("#map-wrap") || container;
+  let controls = wrap.querySelector(".map-controls");
+  if (!controls) {
+    controls = document.createElement("div");
+    controls.className = "map-controls";
+    controls.innerHTML = `
+      <button type="button" class="map-ctrl-btn" id="map-zoom-in" title="Zoom In" aria-label="Zoom in">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </button>
+      <button type="button" class="map-ctrl-btn" id="map-zoom-out" title="Zoom Out" aria-label="Zoom out">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+      </button>
+      <button type="button" class="map-ctrl-btn" id="map-fit" title="Fit to View" aria-label="Fit to view">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><polyline points="21 15 21 21 15 21"></polyline><polyline points="3 9 3 3 9 3"></polyline></svg>
+      </button>
+      <button type="button" class="map-ctrl-btn" id="map-expand" title="Toggle Fullscreen" aria-label="Toggle fullscreen">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+      </button>
+      <button type="button" class="map-ctrl-btn" id="map-toggle-all" title="Toggle Expand/Collapse All" aria-label="Toggle expand or collapse all">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="3"></circle><path d="M3 12h3m12 0h3M12 3v3m0 12v3"></path></svg>
+      </button>
+      <button type="button" class="map-ctrl-btn" id="map-reset" title="Reset View & Unpin" aria-label="Reset view">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><polyline points="3 3 3 8 8 8"></polyline></svg>
+      </button>
+    `;
+    wrap.append(controls);
   }
 
-  /**
-   * @param {{ x: number, y: number, z: number }} point
-   */
-  function project(point) {
-    const cosY = Math.cos(yaw);
-    const sinY = Math.sin(yaw);
-    const cosP = Math.cos(pitch);
-    const sinP = Math.sin(pitch);
-    const x1 = point.x * cosY - point.z * sinY;
-    const z1 = point.x * sinY + point.z * cosY;
-    const y2 = point.y * cosP - z1 * sinP;
-    const z2 = point.y * sinP + z1 * cosP;
-    const depth = distance - z2;
-    const scale = 280 / Math.max(4, depth);
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: rect.width / 2 + x1 * scale,
-      y: rect.height / 2 - y2 * scale,
-      depth,
-      scale,
+  // Floating tooltip element
+  let tooltip = wrap.querySelector(".mind-map-tooltip");
+  if (!tooltip) {
+    tooltip = document.createElement("div");
+    tooltip.className = "mind-map-tooltip";
+    tooltip.hidden = true;
+    wrap.append(tooltip);
+  }
+
+  const emptyOverlay = document.getElementById("map-empty");
+
+  // State
+  let rawPayload = { nodes: [], edges: [] };
+  let selected = "";
+  let hoveredId = "";
+  let layoutMode = "organic"; // "organic" (default) or "tree"
+  const collapsedHubs = new Set();
+  let initializedCollapsed = false;
+  const pinnedNodes = new Map(); // id -> { x, y }
+  let activeNodes = [];
+  let activeLinks = [];
+  let activeCrossLinks = [];
+  let nodeMap = new Map();
+
+  // D3 Zoom configuration
+  const zoom = d3
+    .zoom()
+    .scaleExtent([0.1, 4.0])
+    .on("zoom", (event) => {
+      viewport.attr("transform", event.transform);
+    });
+
+  svg.call(zoom).on("dblclick.zoom", null);
+
+  // Zoom control buttons
+  const btnIn = controls.querySelector("#map-zoom-in");
+  const btnOut = controls.querySelector("#map-zoom-out");
+  const btnFit = controls.querySelector("#map-fit");
+  const btnExpand = controls.querySelector("#map-expand");
+  const btnToggleAll = controls.querySelector("#map-toggle-all");
+  const btnReset = controls.querySelector("#map-reset");
+
+  if (btnIn) btnIn.onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 1.3);
+  if (btnOut) btnOut.onclick = () => svg.transition().duration(250).call(zoom.scaleBy, 0.77);
+  if (btnFit) btnFit.onclick = () => zoomToFit(true);
+  if (btnExpand) {
+    btnExpand.onclick = () => {
+      wrap.classList.toggle("expanded");
+      setTimeout(() => zoomToFit(true), 250);
+    };
+  }
+  if (btnToggleAll) {
+    btnToggleAll.onclick = () => {
+      const graph = toMindMapGraph(rawPayload, getProjectName(), null, layoutMode);
+      const allHubIds = graph.hubs.map((h) => h.id);
+      if (collapsedHubs.size > 0) {
+        collapsedHubs.clear();
+      } else {
+        for (const id of allHubIds) {
+          collapsedHubs.add(id);
+        }
+      }
+      renderGraph();
+      setTimeout(() => zoomToFit(true), 150);
+    };
+  }
+  if (btnReset) {
+    btnReset.onclick = () => {
+      pinnedNodes.clear();
+      activeNodes.forEach((n) => {
+        n.x = n.origX;
+        n.y = n.origY;
+        n.isPinned = false;
+      });
+      nodesLayer.selectAll(".mindmap-node").classed("pinned", false);
+      updateNodePositions();
+      updateLinkPositions();
+      resetZoom(true);
     };
   }
 
-  function draw() {
-    const rect = canvas.getBoundingClientRect();
-    ctx.clearRect(0, 0, rect.width, rect.height);
-    if (nodes.length === 0) {
-      ctx.fillStyle = getComputedStyle(canvas).color || "#9aa0a6";
-      ctx.font = "14px system-ui, sans-serif";
-      ctx.fillText("No files in this project yet.", 16, 28);
+  function resetZoom(animate = false) {
+    const rect = container.getBoundingClientRect();
+    const w = rect.width || 600;
+    const h = rect.height || 400;
+    const t = d3.zoomIdentity.translate(w / 2, h / 2).scale(0.85);
+    if (animate) svg.transition().duration(400).call(zoom.transform, t);
+    else svg.call(zoom.transform, t);
+  }
+
+  function zoomToFit(animate = false) {
+    if (!activeNodes.length) return;
+    const rect = container.getBoundingClientRect();
+    const w = rect.width || 600;
+    const h = rect.height || 400;
+    if (w < 10 || h < 10) return;
+
+    let minX = Infinity,
+      maxX = -Infinity,
+      minY = Infinity,
+      maxY = -Infinity;
+
+    for (const d of activeNodes) {
+      if (!Number.isFinite(d.x) || !Number.isFinite(d.y)) continue;
+      const hw = (d.w || 280) / 2 + 30;
+      const hh = (d.h || 34) / 2 + 20;
+      minX = Math.min(minX, d.x - hw);
+      maxX = Math.max(maxX, d.x + hw);
+      minY = Math.min(minY, d.y - hh);
+      maxY = Math.max(maxY, d.y + hh);
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(maxX)) {
+      resetZoom(animate);
       return;
     }
-    const projected = new Map();
-    for (const node of nodes) {
-      const point = positions.get(node.path);
-      if (point) projected.set(node.path, project(point));
-    }
-    ctx.lineWidth = 1;
-    for (const edge of edges) {
-      const a = projected.get(edge.from);
-      const b = projected.get(edge.to);
-      if (!a || !b) continue;
-      ctx.strokeStyle = "rgba(154, 160, 166, 0.45)";
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-    }
-    const ordered = [...nodes].sort((a, b) => (projected.get(b.path)?.depth || 0) - (projected.get(a.path)?.depth || 0));
-    for (const node of ordered) {
-      const p = projected.get(node.path);
-      if (!p) continue;
-      const hot = node.path === selected || node.path === hover;
-      const radius = hot ? 7 : 4.5;
-      ctx.beginPath();
-      ctx.fillStyle = KIND_COLOR[node.type] || "#c5d0dc";
-      ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-      ctx.fill();
-      if (hot) {
-        ctx.fillStyle = getComputedStyle(document.body).color || "#e8eaed";
-        ctx.font = "12px system-ui, sans-serif";
-        ctx.fillText(node.title, p.x + 10, p.y + 4);
-      }
-    }
-  }
 
-  function tick() {
-    if (!running) return;
-    if (!dragging) yaw += 0.003;
-    draw();
-    frame = requestAnimationFrame(tick);
-  }
-
-  /**
-   * @param {number} x
-   * @param {number} y
-   */
-  function pick(x, y) {
-    let best = "";
-    let bestDist = 16;
-    for (const node of nodes) {
-      const point = positions.get(node.path);
-      if (!point) continue;
-      const p = project(point);
-      const dist = Math.hypot(p.x - x, p.y - y);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = node.path;
-      }
-    }
-    return best;
-  }
-
-  canvas.addEventListener("pointerdown", (ev) => {
-    dragging = true;
-    moved = false;
-    lastX = ev.clientX;
-    lastY = ev.clientY;
-    canvas.setPointerCapture(ev.pointerId);
-  });
-  canvas.addEventListener("pointermove", (ev) => {
-    const rect = canvas.getBoundingClientRect();
-    if (!dragging) {
-      hover = pick(ev.clientX - rect.left, ev.clientY - rect.top);
+    const dx = maxX - minX;
+    const dy = maxY - minY;
+    if (dx <= 0 || dy <= 0) {
+      resetZoom(animate);
       return;
     }
-    const dx = ev.clientX - lastX;
-    const dy = ev.clientY - lastY;
-    if (Math.hypot(dx, dy) > 3) moved = true;
-    yaw += dx * 0.008;
-    pitch = Math.max(-1.2, Math.min(1.2, pitch + dy * 0.008));
-    lastX = ev.clientX;
-    lastY = ev.clientY;
+
+    const padding = 60;
+    const scale = Math.min(1.1, Math.max(0.35, Math.min((w - padding * 2) / dx, (h - padding * 2) / dy)));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    const t = d3.zoomIdentity
+      .translate(w / 2, h / 2)
+      .scale(scale)
+      .translate(-centerX, -centerY);
+
+    if (animate) svg.transition().duration(500).call(zoom.transform, t);
+    else svg.call(zoom.transform, t);
+  }
+
+  // Smooth organic mind map branch curves (cubic Bezier connecting node perimeter to node perimeter)
+  function linkPath(d) {
+    const s = typeof d.source === "object" ? d.source : nodeMap.get(d.source);
+    const t = typeof d.target === "object" ? d.target : nodeMap.get(d.target);
+    if (!s || !t || !Number.isFinite(s.x) || !Number.isFinite(s.y) || !Number.isFinite(t.x) || !Number.isFinite(t.y)) {
+      return "";
+    }
+    const dx = t.x - s.x;
+    const dy = t.y - s.y;
+    const sw = (s.w || 180) / 2;
+    const sh = (s.h || 36) / 2;
+    const tw = (t.w || 270) / 2;
+    const th = (t.h || 34) / 2;
+
+    let sx, sy, tx, ty;
+    if (Math.abs(dx) >= Math.abs(dy) * 0.6) {
+      const rightward = dx >= 0;
+      sx = rightward ? s.x + sw : s.x - sw;
+      sy = s.y;
+      tx = rightward ? t.x - tw : t.x + tw;
+      ty = t.y;
+      const cdx = (tx - sx) * 0.45;
+      return `M ${sx} ${sy} C ${sx + cdx} ${sy}, ${tx - cdx} ${ty}, ${tx} ${ty}`;
+    } else {
+      const downward = dy >= 0;
+      sx = s.x;
+      sy = downward ? s.y + sh : s.y - sh;
+      tx = t.x;
+      ty = downward ? t.y - th : t.y + th;
+      const cdy = (ty - sy) * 0.45;
+      return `M ${sx} ${sy} C ${sx} ${sy + cdy}, ${tx} ${ty - cdy}, ${tx} ${ty}`;
+    }
+  }
+
+  function crossLinkPath(d) {
+    const s = typeof d.source === "object" ? d.source : nodeMap.get(d.source);
+    const t = typeof d.target === "object" ? d.target : nodeMap.get(d.target);
+    if (!s || !t || !Number.isFinite(s.x) || !Number.isFinite(s.y) || !Number.isFinite(t.x) || !Number.isFinite(t.y)) {
+      return "";
+    }
+    const sw = (s.w || 270) / 2;
+    const sh = (s.h || 34) / 2;
+    const tw = (t.w || 270) / 2;
+    const th = (t.h || 34) / 2;
+    const dx = t.x - s.x;
+    const dy = t.y - s.y;
+
+    let sx, sy, tx, ty;
+    if (Math.abs(dx) >= Math.abs(dy) * 0.6) {
+      const rightward = dx >= 0;
+      sx = rightward ? s.x + sw : s.x - sw;
+      sy = s.y;
+      tx = rightward ? t.x - tw : t.x + tw;
+      ty = t.y;
+    } else {
+      const downward = dy >= 0;
+      sx = s.x;
+      sy = downward ? s.y + sh : s.y - sh;
+      tx = t.x;
+      ty = downward ? t.y - th : t.y + th;
+    }
+
+    const dist = Math.hypot(tx - sx, ty - sy);
+    const dr = dist * 1.15;
+    return `M ${sx} ${sy} A ${dr} ${dr} 0 0,1 ${tx} ${ty}`;
+  }
+
+  function updateNodePositions() {
+    nodesLayer
+      .selectAll(".mindmap-node")
+      .attr("transform", (d) => `translate(${d.x || 0},${d.y || 0})`);
+  }
+
+  function updateLinkPositions() {
+    linksLayer.selectAll(".link-structural").attr("d", linkPath);
+    crossLinksLayer.selectAll(".link-cross").attr("d", crossLinkPath);
+  }
+
+  let filterType = "";
+  let filterQuery = "";
+
+  function applyFilter() {
+    const fType = (filterType || "").toLowerCase().trim();
+    const fQuery = (filterQuery || "").toLowerCase().trim();
+    const hasFilter = Boolean(fType || fQuery);
+
+    if (!hasFilter) {
+      nodesLayer.selectAll(".mindmap-node").classed("dimmed", false).classed("filter-matched", false);
+      linksLayer.selectAll(".link-structural").classed("dimmed", false);
+      crossLinksLayer.selectAll(".link-cross").classed("dimmed", false);
+      return;
+    }
+
+    const matchedConceptIds = new Set();
+    const matchedHubIds = new Set();
+
+    nodesLayer.selectAll(".node-concept").each(function (d) {
+      const typeKey = (d.type || "").toLowerCase();
+      const typeMatch = !fType || typeKey === fType;
+      const qMatch =
+        !fQuery ||
+        (d.title && d.title.toLowerCase().includes(fQuery)) ||
+        (d.path && d.path.toLowerCase().includes(fQuery)) ||
+        (d.description && d.description.toLowerCase().includes(fQuery)) ||
+        (d.matterLabel && d.matterLabel.toLowerCase().includes(fQuery)) ||
+        (Array.isArray(d.tags) && d.tags.some((t) => String(t).toLowerCase().includes(fQuery)));
+
+      const isMatch = typeMatch && qMatch;
+      if (isMatch) {
+        matchedConceptIds.add(d.id);
+        if (d.hubId) matchedHubIds.add(d.hubId);
+      }
+      d3.select(this)
+        .classed("dimmed", !isMatch)
+        .classed("filter-matched", isMatch);
+    });
+
+    nodesLayer.selectAll(".node-hub").each(function (d) {
+      const hubMatchesQuery = fQuery && d.title && d.title.toLowerCase().includes(fQuery);
+      const isMatch = matchedHubIds.has(d.id) || Boolean(hubMatchesQuery);
+      d3.select(this)
+        .classed("dimmed", !isMatch)
+        .classed("filter-matched", isMatch && !matchedHubIds.has(d.id));
+    });
+
+    linksLayer.selectAll(".link-structural").classed("dimmed", (l) => {
+      const targetId = typeof l.target === "object" ? l.target.id : l.target;
+      return !matchedConceptIds.has(targetId) && !matchedHubIds.has(targetId);
+    });
+
+    crossLinksLayer.selectAll(".link-cross").classed("dimmed", (l) => {
+      const sId = typeof l.source === "object" ? l.source.id : l.source;
+      const tId = typeof l.target === "object" ? l.target.id : l.target;
+      return !matchedConceptIds.has(sId) && !matchedConceptIds.has(tId);
+    });
+  }
+
+  function applyHighlights() {
+    const activeId = hoveredId || selected;
+    const allLinks = linksLayer.selectAll(".link-structural");
+    const allCrossLinks = crossLinksLayer.selectAll(".link-cross");
+    const allNodes = nodesLayer.selectAll(".mindmap-node");
+
+    if (!activeId) {
+      allLinks.classed("highlighted", false);
+      allCrossLinks.classed("highlighted", false);
+      allNodes.classed("linked-highlight", false);
+      return;
+    }
+
+    const connectedIds = new Set([activeId]);
+    allLinks.classed("highlighted", (l) => {
+      const sId = typeof l.source === "object" ? l.source.id : l.source;
+      const tId = typeof l.target === "object" ? l.target.id : l.target;
+      const isMatch = sId === activeId || tId === activeId;
+      if (isMatch) {
+        connectedIds.add(sId);
+        connectedIds.add(tId);
+      }
+      return isMatch;
+    });
+
+    allCrossLinks.classed("highlighted", (l) => {
+      const sId = typeof l.source === "object" ? l.source.id : l.source;
+      const tId = typeof l.target === "object" ? l.target.id : l.target;
+      const isMatch = sId === activeId || tId === activeId;
+      if (isMatch) {
+        connectedIds.add(sId);
+        connectedIds.add(tId);
+      }
+      return isMatch;
+    });
+
+    allNodes.classed("linked-highlight", (n) => connectedIds.has(n.id) && n.id !== activeId);
+  }
+
+  function getProjectName() {
+    const sel = document.getElementById("project");
+    if (sel && sel.selectedIndex >= 0 && sel.options[sel.selectedIndex]?.text) {
+      const text = sel.options[sel.selectedIndex].text;
+      if (text !== "This folder") return text;
+    }
+    return "Mental";
+  }
+
+  function renderGraph() {
+    // Initialize collapsed state on first run so the map opens with a clean, uncrowded overview
+    if (!initializedCollapsed) {
+      const probe = toMindMapGraph(rawPayload, getProjectName(), null, layoutMode);
+      if (probe.hubs.length > 0) {
+        initializedCollapsed = true;
+        for (const h of probe.hubs) {
+          collapsedHubs.add(h.id);
+        }
+      }
+    }
+
+    const graph = toMindMapGraph(rawPayload, getProjectName(), collapsedHubs, layoutMode);
+
+    if (graph.allNodes.length <= 1 && (!rawPayload.nodes || rawPayload.nodes.length === 0)) {
+      if (emptyOverlay) emptyOverlay.hidden = false;
+      linksLayer.selectAll("*").remove();
+      crossLinksLayer.selectAll("*").remove();
+      nodesLayer.selectAll("*").remove();
+      return;
+    }
+    if (emptyOverlay) emptyOverlay.hidden = true;
+
+    // Filter nodes based on collapsed hubs
+    const hiddenHubIds = new Set(collapsedHubs);
+
+    activeNodes = [
+      graph.root,
+      ...graph.hubs,
+      ...graph.concepts.filter((c) => !hiddenHubIds.has(c.hubId)),
+    ];
+
+    // Restore any previously pinned user positions
+    for (const node of activeNodes) {
+      if (pinnedNodes.has(node.id)) {
+        const pin = pinnedNodes.get(node.id);
+        node.x = pin.x;
+        node.y = pin.y;
+        node.isPinned = true;
+      }
+    }
+
+    nodeMap = new Map(activeNodes.map((n) => [n.id, n]));
+
+    activeLinks = graph.structuralLinks.filter(
+      (l) => nodeMap.has(l.source) && nodeMap.has(l.target)
+    );
+
+    activeCrossLinks = graph.crossLinks.filter(
+      (l) => nodeMap.has(l.source) && nodeMap.has(l.target)
+    );
+
+    // If organic mode is active and D3 force simulation is available, run spring relaxation
+    if (layoutMode === "organic" && d3.forceSimulation && activeNodes.length > 1) {
+      const activeNodeIds = new Set(activeNodes.map((n) => n.id));
+      const simLinks = [
+        ...activeLinks.map((l) => ({
+          source: typeof l.source === "object" ? l.source.id : l.source,
+          target: typeof l.target === "object" ? l.target.id : l.target,
+          distance: l.isRootLink ? 320 : 130,
+          strength: l.isRootLink ? 0.9 : 0.6,
+        })),
+        ...activeCrossLinks.map((l) => ({
+          source: l.source,
+          target: l.target,
+          distance: 190,
+          strength: 0.35,
+        })),
+      ].filter((l) => activeNodeIds.has(l.source) && activeNodeIds.has(l.target));
+
+      const sim = d3
+        .forceSimulation(activeNodes)
+        .force(
+          "link",
+          d3.forceLink(simLinks)
+            .id((d) => d.id)
+            .distance((l) => l.distance || 140)
+            .strength((l) => l.strength || 0.5)
+        )
+        .force("charge", d3.forceManyBody().strength(-200).distanceMax(550))
+        .force("collide", d3.forceCollide((d) => (d.isRoot ? 90 : d.isHub ? 75 : 60)).iterations(2))
+        .force(
+          "x",
+          d3.forceX((d) => (d.isRoot ? 0 : d.isHub ? d.origX : (nodeMap.get(d.hubId)?.x || d.x))).strength((d) => (d.isRoot ? 1 : d.isHub ? 0.4 : 0.08))
+        )
+        .force(
+          "y",
+          d3.forceY((d) => (d.isRoot ? 0 : d.isHub ? d.origY : (nodeMap.get(d.hubId)?.y || d.y))).strength((d) => (d.isRoot ? 1 : d.isHub ? 0.4 : 0.08))
+        )
+        .stop();
+
+      for (let i = 0; i < 90; i++) sim.tick();
+
+      // Restore user-pinned positions
+      for (const node of activeNodes) {
+        if (node.isPinned && pinnedNodes.has(node.id)) {
+          const pin = pinnedNodes.get(node.id);
+          node.x = pin.x;
+          node.y = pin.y;
+        }
+      }
+
+      // Final sweep to guarantee zero overlaps
+      resolveBoxCollisions(activeNodes, 16);
+    }
+
+    // Bind structural links
+    const linkSel = linksLayer
+      .selectAll(".link-structural")
+      .data(activeLinks, (d) => `${d.source}->${d.target}`);
+
+    linkSel.exit().remove();
+
+    const linkEnter = linkSel
+      .enter()
+      .append("path")
+      .attr("class", "link-structural")
+      .attr("stroke", (d) => d.color || "#64748b");
+
+    const allLinks = linkEnter.merge(linkSel);
+
+    // Bind cross links (semantic OKF brain connections)
+    const crossSel = crossLinksLayer
+      .selectAll(".link-cross")
+      .data(activeCrossLinks, (d) => `${d.source}->${d.target}`);
+
+    crossSel.exit().remove();
+
+    const crossEnter = crossSel
+      .enter()
+      .append("path")
+      .attr("class", (d) => (d.isSameHub ? "link-cross link-intra" : "link-cross link-inter"))
+      .attr("marker-end", "url(#mindmap-cross-arrow)");
+
+    const allCrossLinks = crossEnter.merge(crossSel);
+
+    allCrossLinks
+      .on("mouseenter", (event, d) => {
+        const s = typeof d.source === "object" ? d.source : nodeMap.get(d.source);
+        const t = typeof d.target === "object" ? d.target : nodeMap.get(d.target);
+        if (!s || !t) return;
+        allNodes.classed("linked-highlight", (n) => n.id === s.id || n.id === t.id);
+        allCrossLinks.classed("highlighted", (l) => l.id === d.id);
+        tooltip.hidden = false;
+        tooltip.innerHTML = `
+          <div class="tt-title">🔗 OKF Relation: ${d.rel || "related"}</div>
+          <div class="tt-meta">${s.typeEmoji || ""} ${s.title || s.path}</div>
+          <div class="tt-meta" style="margin-top:2px; color:var(--accent);">↕ ${t.typeEmoji || ""} ${t.title || t.path}</div>
+        `;
+        positionTooltip(event);
+      })
+      .on("mousemove", positionTooltip)
+      .on("mouseleave", () => {
+        applyHighlights();
+        tooltip.hidden = true;
+      });
+
+    // Bind nodes
+    const nodeSel = nodesLayer.selectAll(".mindmap-node").data(activeNodes, (d) => d.id);
+
+    nodeSel.exit().remove();
+
+    const dragBehavior = d3
+      .drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended);
+
+    const nodeEnter = nodeSel
+      .enter()
+      .append("g")
+      .attr("class", (d) => {
+        if (d.isRoot) return "mindmap-node node-root";
+        if (d.isHub) return "mindmap-node node-hub";
+        return "mindmap-node node-concept";
+      })
+      .call(dragBehavior);
+
+    // Render node shapes based on kind and dimensions
+    nodeEnter.each(function (d) {
+      const g = d3.select(this);
+
+      if (d.isRoot) {
+        const w = d.w || 160;
+        const h = d.h || 38;
+        g.append("rect")
+          .attr("x", -w / 2)
+          .attr("y", -h / 2)
+          .attr("width", w)
+          .attr("height", h)
+          .attr("rx", h / 2);
+
+        g.append("text")
+          .attr("text-anchor", "middle")
+          .attr("dy", 5)
+          .text(`🧠 ${shortText(d.title, 16)}`);
+      } else if (d.isHub) {
+        const w = d.w || 180;
+        const h = d.h || 36;
+        g.append("rect")
+          .attr("class", "hub-rect")
+          .attr("x", -w / 2)
+          .attr("y", -h / 2)
+          .attr("width", w)
+          .attr("height", h)
+          .attr("rx", h / 2)
+          .attr("stroke", d.color || "#38bdf8");
+
+        g.append("text")
+          .attr("class", "hub-label")
+          .attr("text-anchor", "middle")
+          .attr("dy", 4.5)
+          .attr("fill", "var(--ink-primary)")
+          .text(`${d.emoji || "📁"} ${d.title} (${d.count || 0})`);
+      } else {
+        const w = d.w || 270;
+        const h = d.h || 34;
+        g.append("rect")
+          .attr("class", "pill-bg")
+          .attr("x", -w / 2)
+          .attr("y", -h / 2)
+          .attr("width", w)
+          .attr("height", h)
+          .attr("rx", h / 2);
+
+        // Type-colored dot on left (Decision = blue, Attention = amber, Journal = purple, Note = emerald)
+        g.append("circle")
+          .attr("class", "concept-dot")
+          .attr("cx", -w / 2 + 14)
+          .attr("cy", 0)
+          .attr("r", 4.5)
+          .attr("fill", d.color || "#94a3b8");
+
+        // Type emoji and concept title
+        g.append("text")
+          .attr("class", "concept-title")
+          .attr("x", -w / 2 + 27)
+          .attr("y", 4.5)
+          .text(`${d.typeEmoji || ""} ${shortText(d.title, 26)}`);
+
+        // Badges on right: explicit tags or links count
+        const nonJournalTags = (d.tags || []).filter((t) => t !== "journal");
+        if (nonJournalTags.length > 0) {
+          g.append("text")
+            .attr("class", "status-badge tag-badge")
+            .attr("x", w / 2 - 12)
+            .attr("y", 4.5)
+            .attr("text-anchor", "end")
+            .attr("fill", "var(--ink-secondary, #94a3b8)")
+            .text(`🏷️${nonJournalTags[0]}`);
+        } else if (d.links > 0) {
+          g.append("text")
+            .attr("class", "status-badge link-badge")
+            .attr("x", w / 2 - 12)
+            .attr("y", 4.5)
+            .attr("text-anchor", "end")
+            .attr("fill", "var(--accent, #38bdf8)")
+            .text(`🔗${d.links}`);
+        }
+      }
+    });
+
+    const allNodes = nodeEnter.merge(nodeSel);
+
+    // Update hub labels on expand/collapse
+    allNodes.filter((d) => d.isHub).each(function (d) {
+      const isCollapsed = collapsedHubs.has(d.id);
+      const g = d3.select(this);
+      g.select("rect").attr("stroke-dasharray", isCollapsed ? "4, 3" : null);
+      g.select("text").text(
+        isCollapsed ? `${d.emoji || "📁"} ${d.title} +${d.count || 0}` : `${d.emoji || "📁"} ${d.title} (${d.count || 0})`
+      );
+    });
+
+    // Update selection and pinned state
+    allNodes
+      .filter((d) => d.isConcept)
+      .classed("selected", (d) => d.path === selected)
+      .classed("pinned", (d) => !!d.isPinned);
+
+    // Double-click to unpin a pinned node back to default tree spot
+    allNodes.on("dblclick", (event, d) => {
+      event.stopPropagation();
+      if (!d.isRoot && d.isPinned) {
+        pinnedNodes.delete(d.id);
+        d.x = d.origX;
+        d.y = d.origY;
+        d.isPinned = false;
+        d3.select(event.currentTarget).classed("pinned", false);
+        updateNodePositions();
+        updateLinkPositions();
+      }
+    });
+
+    // Click events
+    allNodes.on("click", (event, d) => {
+      event.stopPropagation();
+      if (isDragging) return;
+      if (d.isHub) {
+        if (collapsedHubs.has(d.id)) {
+          collapsedHubs.delete(d.id);
+        } else {
+          collapsedHubs.add(d.id);
+        }
+        renderGraph();
+        setTimeout(() => zoomToFit(true), 150);
+      } else if (d.isConcept) {
+        selected = d.path;
+        allNodes.filter((n) => n.isConcept).classed("selected", (n) => n.path === selected);
+        applyHighlights();
+        onPick(d.path);
+      } else if (d.isRoot) {
+        resetZoom(true);
+      }
+    });
+
+    // Hover events
+    allNodes
+      .on("mouseenter", (event, d) => {
+        hoveredId = d.id;
+        applyHighlights();
+
+        if (d.isConcept) {
+          tooltip.hidden = false;
+          const tagsStr = d.tags && d.tags.length
+            ? `<div class="tt-tags">Tags: ${d.tags.map((t) => `<span class="badge">#${t}</span>`).join(" ")}</div>`
+            : "";
+          tooltip.innerHTML = `
+            <div class="tt-title">${d.typeEmoji || ""} ${d.title || d.path}</div>
+            <div class="tt-meta">${d.type} · ${d.matterEmoji || ""} ${d.matterLabel || ""}${d.status ? ` · ${d.status}` : ""}${d.links ? ` · ${d.links} connection${d.links === 1 ? "" : "s"}` : ""}</div>
+            ${d.description ? `<div class="tt-desc" style="margin-top:4px; font-size:0.75rem; color:var(--ink-secondary); max-width:320px; line-height:1.35;">${d.description}</div>` : ""}
+            ${tagsStr}
+            <div class="tt-path">${d.path}</div>
+            ${d.isPinned ? '<div class="tt-pinned">📌 Pinned (double-click to unpin)</div>' : ""}
+          `;
+          positionTooltip(event);
+        } else if (d.isHub) {
+          tooltip.hidden = false;
+          const isCollapsed = collapsedHubs.has(d.id);
+          tooltip.innerHTML = `
+            <div class="tt-title">${d.emoji || "📁"} ${d.title}</div>
+            <div class="tt-meta">${d.count} file${d.count === 1 ? "" : "s"} · Click to ${isCollapsed ? "expand" : "collapse"}</div>
+          `;
+          positionTooltip(event);
+        }
+      })
+      .on("mousemove", (event) => {
+        if (!tooltip.hidden) positionTooltip(event);
+      })
+      .on("mouseleave", () => {
+        hoveredId = "";
+        applyHighlights();
+        tooltip.hidden = true;
+      });
+
+    // Canvas background click clears selection
+    svg.on("click", () => {
+      selected = "";
+      hoveredId = "";
+      allNodes.filter((n) => n.isConcept).classed("selected", false);
+      applyHighlights();
+    });
+
+    updateNodePositions();
+    updateLinkPositions();
+    applyFilter();
+    applyHighlights();
+
+    // Re-center on initial render with comfortable readable scale
+    setTimeout(() => resetZoom(false), 150);
+  }
+
+  function positionTooltip(event) {
+    const wrapRect = wrap.getBoundingClientRect();
+    const x = event.clientX - wrapRect.left + 14;
+    const y = event.clientY - wrapRect.top + 14;
+    const ttRect = tooltip.getBoundingClientRect();
+
+    let left = x;
+    let top = y;
+    if (left + ttRect.width > wrapRect.width - 10) left = x - ttRect.width - 24;
+    if (top + ttRect.height > wrapRect.height - 10) top = y - ttRect.height - 24;
+    tooltip.style.left = `${Math.max(8, left)}px`;
+    tooltip.style.top = `${Math.max(8, top)}px`;
+  }
+
+  // Persistent Sticky Dragging — Node stays permanently where dropped, never snaps back
+  let isDragging = false;
+  let dragStartPos = null;
+  function dragstarted(event, d) {
+    isDragging = false;
+    dragStartPos = { x: d.x, y: d.y };
+  }
+
+  function dragged(event, d) {
+    isDragging = true;
+    d.x = event.x;
+    d.y = event.y;
+    d3.select(this).attr("transform", `translate(${d.x},${d.y})`);
+    updateLinkPositions();
+  }
+
+  function dragended(event, d) {
+    if (!isDragging) return;
+    d.x = event.x;
+    d.y = event.y;
+    d.isPinned = true;
+    pinnedNodes.set(d.id, { x: d.x, y: d.y });
+    d3.select(this).classed("pinned", true);
+    updateNodePositions();
+    updateLinkPositions();
+    setTimeout(() => {
+      isDragging = false;
+    }, 60);
+  }
+
+  const resizeObs = new ResizeObserver(() => {
+    const rect = container.getBoundingClientRect();
+    if (rect.width > 20 && rect.height > 20) {
+      updateLinkPositions();
+    }
   });
-  canvas.addEventListener("pointerup", (ev) => {
-    dragging = false;
-    if (moved) return;
-    const rect = canvas.getBoundingClientRect();
-    const path = pick(ev.clientX - rect.left, ev.clientY - rect.top);
-    if (!path) return;
-    selected = path;
-    onPick(path);
+  resizeObs.observe(container);
+
+  // Theme listener to refresh colors
+  const themeObserver = new MutationObserver(() => {
+    renderGraph();
   });
-  canvas.addEventListener(
-    "wheel",
-    (ev) => {
-      ev.preventDefault();
-      distance = Math.max(10, Math.min(60, distance + ev.deltaY * 0.02));
-    },
-    { passive: false },
-  );
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
 
   return {
     /**
      * @param {{ nodes?: Array<{ path: string, type?: string, title?: string }>, edges?: Array<{ from: string, to: string }> }} data
      */
     setGraph(data) {
-      nodes = data.nodes || [];
-      edges = data.edges || [];
-      positions = layoutNodes(nodes, edges);
-      resize();
+      rawPayload = data || { nodes: [], edges: [] };
+      renderGraph();
     },
-    /** @param {string} path */
+
+    /**
+     * Select node by path
+     * @param {string} path
+     */
     select(path) {
-      selected = path;
+      selected = path || "";
+      nodesLayer
+        .selectAll(".node-concept")
+        .classed("selected", (d) => d.path === selected);
+      applyHighlights();
     },
+
+    /**
+     * Filter or highlight nodes by type or search query
+     * @param {{ type?: string, query?: string }} filter
+     */
+    setFilter(filter = {}) {
+      filterType = (filter.type || "").toLowerCase().trim();
+      filterQuery = (filter.query || "").toLowerCase().trim();
+      applyFilter();
+    },
+
+    /**
+     * Switch layout mode: "organic" (radial force constellation) or "tree" (columnar)
+     * @param {"organic" | "tree"} mode
+     */
+    setLayoutMode(mode) {
+      if (mode && mode !== layoutMode) {
+        layoutMode = mode;
+        renderGraph();
+        setTimeout(() => zoomToFit(true), 150);
+      }
+    },
+
     start() {
-      if (running) return;
-      running = true;
-      resize();
-      frame = requestAnimationFrame(tick);
+      renderGraph();
+      setTimeout(() => resetZoom(true), 200);
     },
+
     stop() {
-      running = false;
-      cancelAnimationFrame(frame);
+      // Clean up if needed
     },
   };
 }

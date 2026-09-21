@@ -11,9 +11,9 @@ import { catalogRoot, collectHeartbeat } from "./heartbeat.mjs";
 import { loadBindings } from "./bindings.mjs";
 import { collectPulseProjects, pulseRootForBinding } from "./pulse.mjs";
 import { extractLinks, filterConcepts, listConcepts, listBacklinks, searchBundle } from "./index.mjs";
-import { readBundleFile } from "./okf.mjs";
+import { journalHops, readBundleFile } from "./okf.mjs";
 import { isFeatureOn } from "./config.mjs";
-import { glanceTime } from "./time.mjs";
+import { glanceTime, listSessions } from "./time.mjs";
 
 /** Loopback address the dashboard binds. Never 0.0.0.0. */
 export const DASHBOARD_HOST = "127.0.0.1";
@@ -30,6 +30,8 @@ const STATIC_FILES = {
   "/app.js": { file: "app.js", type: "application/javascript; charset=utf-8" },
   "/markdown.js": { file: "markdown.js", type: "application/javascript; charset=utf-8" },
   "/map.js": { file: "map.js", type: "application/javascript; charset=utf-8" },
+  "/map-data.js": { file: "map-data.js", type: "application/javascript; charset=utf-8" },
+  "/vendor/mind-map.js": { file: "vendor/mind-map.js", type: "application/javascript; charset=utf-8" },
   "/style.css": { file: "style.css", type: "text/css; charset=utf-8" },
   "/favicon.png": { file: "favicon.png", type: "image/png" },
 };
@@ -38,8 +40,9 @@ const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Cache-Control": "no-store",
+  // 3d-force-graph injects a <style> for its tooltip and cursor. Scripts stay same-origin.
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
 };
 
 /**
@@ -82,37 +85,201 @@ function intParam(value, fallback, max) {
   return Math.min(n, max);
 }
 
+const STOPWORDS = new Set([
+  "about", "above", "across", "after", "again", "against", "all", "almost", "along", "already", "also",
+  "although", "always", "among", "an", "and", "another", "any", "anyone", "anything", "are", "around",
+  "as", "at", "away", "back", "be", "because", "become", "been", "before", "behind", "being", "between",
+  "both", "but", "by", "came", "can", "cannot", "case", "certain", "clear", "come", "could", "did",
+  "different", "do", "does", "done", "down", "during", "each", "either", "end", "even", "ever", "every",
+  "everyone", "everything", "find", "first", "for", "from", "full", "further", "gave", "general", "get",
+  "give", "given", "go", "going", "good", "got", "great", "had", "has", "have", "having", "he", "her",
+  "here", "high", "him", "his", "how", "however", "if", "in", "into", "is", "it", "its", "just", "keep",
+  "kind", "knew", "know", "known", "large", "last", "later", "latest", "least", "less", "let", "like",
+  "long", "made", "make", "many", "may", "me", "might", "more", "most", "much", "must", "my", "near",
+  "need", "never", "new", "next", "no", "not", "nothing", "now", "number", "of", "off", "often", "old",
+  "on", "once", "one", "only", "open", "or", "other", "others", "our", "out", "over", "part", "per",
+  "place", "point", "possible", "present", "put", "quite", "rather", "really", "right", "said", "same",
+  "saw", "say", "saying", "see", "seem", "seemed", "seems", "several", "shall", "she", "should", "show",
+  "shown", "shows", "side", "since", "small", "so", "some", "someone", "something", "still", "such",
+  "sure", "take", "than", "that", "the", "their", "them", "then", "there", "therefore", "these", "they",
+  "thing", "things", "think", "this", "those", "though", "three", "through", "thus", "to", "today",
+  "together", "too", "took", "toward", "two", "under", "until", "up", "upon", "us", "use", "used", "uses",
+  "very", "want", "was", "way", "we", "well", "went", "were", "what", "when", "where", "whether", "which",
+  "while", "who", "whole", "whose", "why", "will", "with", "within", "without", "work", "would", "year",
+  "yet", "you", "your",
+]);
+
+function extractKeywords(str) {
+  return Array.from(
+    new Set(
+      String(str || "")
+        .toLowerCase()
+        .split(/[^a-z0-9_-]+/)
+        .filter((w) => w.length >= 4 && !STOPWORDS.has(w) && !/^\d+$/.test(w))
+    )
+  );
+}
+
 /**
- * Nodes are files. Edges are markdown links whose dest is also in the catalog.
+ * Nodes are files. Edges are markdown links, frontmatter references, and mentions whose dest is also in the catalog.
  * @param {ReturnType<typeof listConcepts>} concepts
  */
 function catalogGraph(concepts) {
   const sorted = [...concepts].sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
   const capped = sorted.slice(0, GRAPH_CAP);
-  const nodes = capped.map((c) => ({
-    path: c.path,
-    type: c.type,
-    title: c.title,
-    status: c.status,
-  }));
+  const nodes = capped.map((c) => {
+    let description = c.description || "";
+    let hopSummary = "";
+    if (c.type === "Journal") {
+      const hops = journalHops(c.body || "");
+      if (hops.length > 0) {
+        hopSummary = hops.slice(-3).reverse().map((h) => h.title).join(" · ");
+        description = hopSummary;
+      }
+    }
+    return {
+      path: c.path,
+      type: c.type,
+      title: c.title,
+      status: c.status,
+      tags: c.tags || [],
+      description,
+      hopSummary,
+      kind: c.kind || "",
+      against: c.against || "",
+      from: c.from || "",
+    };
+  });
   const known = new Set(nodes.map((n) => n.path));
+  const slugToPath = new Map();
+  const cleanSlugToPath = new Map();
+  for (const n of nodes) {
+    const slug = n.path.split("/").pop().replace(/\.md$/, "");
+    if (slug.length >= 8) slugToPath.set(slug, n.path);
+    const clean = slug.replace(/^\d{4}-\d{2}-\d{2}-/, "");
+    if (clean.length >= 8 && clean !== slug) cleanSlugToPath.set(clean, n.path);
+  }
+
   const edges = [];
   const seen = new Set();
+
+  function addEdge(src, dest, rel = "link") {
+    if (!known.has(dest) || dest === src) return;
+    const key = `${src}\0${dest}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    edges.push({ from: src, to: dest, rel });
+  }
+
   for (const c of capped) {
+    // 1. Markdown links
     for (const link of extractLinks(c.path, c.body || "")) {
-      if (!known.has(link.dest) || link.dest === c.path) continue;
-      const key = `${link.src}\0${link.dest}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      edges.push({ from: link.src, to: link.dest });
+      addEdge(link.src, link.dest, "markdown");
+    }
+    // 2. Frontmatter against
+    if (c.against) {
+      if (known.has(c.against)) addEdge(c.path, c.against, "against");
+      else if (slugToPath.has(c.against)) addEdge(c.path, slugToPath.get(c.against), "against");
+      else if (cleanSlugToPath.has(c.against)) addEdge(c.path, cleanSlugToPath.get(c.against), "against");
+    }
+    // 3. Frontmatter from
+    if (c.from) {
+      if (known.has(c.from)) addEdge(c.path, c.from, "from");
+      else if (slugToPath.has(c.from)) addEdge(c.path, slugToPath.get(c.from), "from");
+      else if (cleanSlugToPath.has(c.from)) addEdge(c.path, cleanSlugToPath.get(c.from), "from");
+    }
+    // 4. Body mentions of concept slugs or paths
+    const body = c.body || "";
+    for (const [slug, destPath] of slugToPath.entries()) {
+      if (destPath === c.path) continue;
+      if (body.includes(slug) || body.includes(destPath)) {
+        addEdge(c.path, destPath, "mention");
+      }
+    }
+    for (const [cleanSlug, destPath] of cleanSlugToPath.entries()) {
+      if (destPath === c.path) continue;
+      if (body.includes(cleanSlug)) {
+        addEdge(c.path, destPath, "mention");
+      }
     }
   }
+
+  // 5. Cross-cutting shared tags between concepts (OKF tag connections)
+  for (let i = 0; i < capped.length; i++) {
+    const a = capped[i];
+    const tagsA = (a.tags || []).filter((t) => t && t !== "journal");
+    if (tagsA.length === 0) continue;
+
+    for (let j = i + 1; j < capped.length; j++) {
+      const b = capped[j];
+      const sharedTags = tagsA.filter((t) => (b.tags || []).includes(t));
+      if (sharedTags.length > 0) {
+        addEdge(a.path, b.path, `tag:${sharedTags[0]}`);
+      }
+    }
+  }
+
   return {
     nodes,
     edges,
     total: concepts.length,
     truncated: concepts.length > capped.length,
   };
+}
+
+/**
+ * Local clock time of a journal heading (`HH:MM`) on that file's date.
+ * The instant is the end of that minute so a hop in the start minute still counts.
+ * @param {string} day `YYYY-MM-DD`
+ * @param {string} heading
+ */
+function hopInstant(day, heading) {
+  const time = heading.match(/^(\d{1,2}):(\d{2})/);
+  if (!time) return null;
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(year, month - 1, date, Number(time[1]), Number(time[2]), 59).getTime();
+}
+
+/**
+ * Files and journal hops whose time falls inside the sit-down.
+ * Two minutes after stop still count, so the closing hop is on the timeline.
+ * @param {ReturnType<typeof listConcepts>} concepts
+ * @param {{ started: string, stopped: string | null }} session
+ */
+function sessionEvents(concepts, session) {
+  const start = Date.parse(session.started);
+  let end = session.stopped ? Date.parse(session.stopped) : Date.now();
+  if (!Number.isFinite(end)) end = Date.now();
+  end += 2 * 60 * 1000;
+  /** @type {Array<{ at: string, path: string, type: string, title: string }>} */
+  const events = [];
+  for (const concept of concepts) {
+    const day = concept.path.match(/^journal\/(\d{4}-\d{2}-\d{2})\.md$/)?.[1];
+    if (concept.type === "Journal" && day) {
+      for (const hop of journalHops(concept.body)) {
+        const ms = hopInstant(day, hop.heading);
+        if (ms == null || ms < start || ms > end) continue;
+        events.push({
+          at: new Date(ms).toISOString(),
+          path: `${concept.path}#${hop.fragment}`,
+          type: "Journal",
+          title: hop.title,
+        });
+      }
+      continue;
+    }
+    const stamped = Date.parse(concept.timestamp || "");
+    const ms = Number.isFinite(stamped) ? stamped : concept.mtime;
+    if (!Number.isFinite(ms) || ms < start || ms > end) continue;
+    events.push({
+      at: new Date(ms).toISOString(),
+      path: concept.path,
+      type: concept.type,
+      title: concept.title,
+    });
+  }
+  events.sort((a, b) => a.at.localeCompare(b.at) || a.path.localeCompare(b.path));
+  return events;
 }
 
 function summarize(c) {
@@ -427,6 +594,36 @@ function routeApi(method, url, res, base, id) {
       ? hideForeignSlices(session.where, listConcepts(session.root))
       : [];
     sendJson(res, method, 200, { ok: true, data: catalogGraph(concepts) });
+    return;
+  }
+
+  if (path === "/api/sessions") {
+    const trackId = session.where.id || null;
+    if (!base.home || !isFeatureOn(base.home, "track", trackId)) {
+      sendJson(res, method, 404, { ok: false, error: { code: "track-disabled", message: "Time tracking is off for this project." } });
+      return;
+    }
+    if (!session.root) {
+      sendJson(res, method, 404, { ok: false, error: { code: "not-found", message: "no bundle" } });
+      return;
+    }
+    const sessionId = url.searchParams.get("session") || undefined;
+    const listed = listSessions(session.root, { id: sessionId });
+    if (!listed.ok) {
+      sendJson(res, method, 400, listed);
+      return;
+    }
+    if (!sessionId) {
+      sendJson(res, method, 200, listed);
+      return;
+    }
+    const one = listed.data.sessions[0];
+    if (!one) {
+      sendJson(res, method, 404, { ok: false, error: { code: "not-found", message: "no such session" } });
+      return;
+    }
+    const concepts = hideForeignSlices(session.where, listConcepts(session.root));
+    sendJson(res, method, 200, { ok: true, data: { session: one, events: sessionEvents(concepts, one) } });
     return;
   }
 

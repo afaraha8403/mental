@@ -8,10 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Features
-- `mental dashboard` opens an optional read-only localhost explorer (`127.0.0.1:3847`, ephemeral fallback if busy) so a human can browse the catalog, orbit a 3D mind map of linked files, or peek at one file as rendered markdown. When Track is on, the page shows running clocks and today's stops. The CLI stays heartbeat-and-exit; agents keep `--json`.
+- `mental dashboard` opens an optional read-only localhost explorer (`127.0.0.1:3847`, ephemeral fallback if busy) so a human can browse the catalog, explore an interactive 2D SVG mind map with D3.js (structured non-overlapping columnar layout per category, sticky drag-and-drop positioning, smooth organic cubic Bezier branch links, and collapsible branches), or peek at one file as rendered markdown. When Track is on, the page shows running clocks, today's stops, and a timeline of what was written during each sit-down. The CLI stays heartbeat-and-exit; agents keep `--json`.
+- Interactive Mind Map clusters concepts by Open Knowledge Format (OKF) subject matter and frontmatter tags rather than file type, while preserving type-colored node indicators (🎯 Decision, 🚦 Attention, 📝 Note, 📓 Journal). Features high-signal cross-cluster links (markdown links, frontmatter `against` and `from` references, concept mentions, and shared tags across domains), responsive type filter chips, keyword/tag search filtering with real-time glowing matches, persistent selection highlights where connectors and related nodes remain illuminated after click, and a 1-click layout switcher between Organic Brain (dynamic force clustering with zero-overlap collision bounds where connected items gravitate together) and Structured Tree (neat columnar layout).
 - `mental backup --out <dir>` packs this machine's OKF and identities into a portable directory (no sqlite, no hours, no machine paths). `mental restore --from` merges per UUID so dest-ahead work stays; `--replace --confirm REPLACE` is disaster-only for packed slices.
 
 ### Fixes
+- Fixed "no file selected" message persisting after document selection by enforcing `[hidden] { display: none !important; }` across all components so specificity rules do not override hidden view states.
+- Fixed mind map node crowding, overlap, and cluster collisions by replacing force simulations with a deterministic, structured radial/columnar layout with 600px cluster separation, 100px column gutters, 38px row gutters, and edge-to-edge hierarchical connecting lines.
+- Fixed node dragging snapping back on mouse release by persisting drag coordinates in a pinned node store, disabling snap-back forces, and visually indicating pinned nodes with a dashed accent border.
+- Fixed dashboard mind map failing to load in environments without hardware WebGL by bundling client-side D3.js v7.9.0 for universal SVG rendering without external CDNs.
+- Fixed low-contrast "light on light" elements across Light and Dark themes, including form inputs, select dropdowns, status pills, and kind badges with WCAG AAA compliant contrast.
+- Fixed layout collapse and word-wrapping in narrow viewports by making the reader pane responsive with proper min-widths and non-overlapping header rows.
 - `mental dashboard` listens on IPv6 loopback (`::1`) as well as `127.0.0.1`, so Chrome's IPv6-first `localhost` does not get connection refused.
 - CLI update check no longer treats a failed `npm view` (timeout, Windows `ENOENT`, junk stdout) as a successful check. Failures record `lastFailedAt` and retry after 15 minutes instead of locking out discovery for 24h/7d. Windows now spawns `npm.cmd` the same way install does. Envelope refresh uses the same 5s timeout as `doctor`.
 - Personal-mode `list` / `search` no longer walk `~/.mental/projects` (project slices stay exclusive; `mental pulse` / dashboard project switcher remain the other-repos view).
@@ -25,6 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mental doctor` warns `time-unclocked` when Track is on and today has a hop with no clock row. Hooks still do not start a clock.
 
 ### Changes
+- Revamped dashboard UI/UX with professional developer-tool design system: systematic dark/light token hierarchy, responsive context hub with live status beacon, segmented view switcher with vector icons, keyboard shortcuts (`/` search, `Esc`), copy path/markdown actions with feedback, and accessible contrast.
+- The localhost dashboard opens on where you left off: resume, last outcome, git, and the in-the-air, later, and unsettled titles. Catalog, sit-downs, and the open file sit in a two-pane workspace. Clocks stay collapsed until opened.
 - Dashboard type labels are chips with the same emoji the CLI uses (📓 journal, 🚦 attention, 🎯 decision, 📝 note). Each kind has its own background and text color. The page title is Mental CLI Dashboard.
 - The project mark is the brain emoji. The README and the Cursor plugin use `assets/logo.png`. The dashboard tab uses the same image. The previous pixel character is gone.
 - Optional feature listings say what hooks and Track actually do: hooks load `mental status --json`; Track is a ledger until `mental track start`.
