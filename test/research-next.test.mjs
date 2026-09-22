@@ -74,6 +74,8 @@ test("attention --kind verify lands on Needs eyes; cap prefers verify", () => {
       "verify",
       "--body",
       "Agent produced tests. Human has not looked.",
+      "--tag",
+      "topic",
     ]),
     "verify",
   );
@@ -129,6 +131,8 @@ test("decided titles appear as Settled guardrails; open stay Unsettled; no bodie
       "decided",
       "--body",
       "Default TTY mental prints a one-shot heartbeat and exits.",
+      "--tag",
+      "topic",
     ]),
     "decided",
   );
@@ -142,6 +146,8 @@ test("decided titles appear as Settled guardrails; open stay Unsettled; no bodie
       "open",
       "--body",
       "Needs a user pick.",
+      "--tag",
+      "topic",
     ]), "open");
   const hb = parseOk(mental(home, root, ["heartbeat", "--json"]), "heartbeat guardrails");
   assert.equal(hb.guardrailCount, 1);
@@ -191,6 +197,8 @@ test("--via cursor is stored; emails and URLs are usage", () => {
       "verify",
       "--via",
       "claude-code",
+      "--tag",
+      "topic",
     ]),
     "attention via",
   );

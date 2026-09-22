@@ -31,7 +31,7 @@ test("TTY writes use type emoji; --json stays ASCII", () => {
   assert.equal(body.ok, true);
   assert.doesNotMatch(json.stdout, EMOJI);
 
-  const ascii = mental(home, root, ["note", "--title", "Ascii note"], { MENTAL_ASCII: "1" });
+  const ascii = mental(home, root, ["note", "--title", "Ascii note", "--tag", "topic"], { MENTAL_ASCII: "1" });
   assert.equal(ascii.status, 0, ascii.stderr || ascii.stdout);
   assert.match(ascii.stdout, /\[note\] wrote notes\//);
   assert.doesNotMatch(ascii.stdout, EMOJI);

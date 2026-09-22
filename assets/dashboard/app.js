@@ -1,5 +1,6 @@
 import { renderFrontmatter, renderMarkdown } from "./markdown.js";
 import { startMap } from "./map.js";
+import { tagColor } from "./map-data.js";
 
 const state = {
   id: "",
@@ -617,37 +618,83 @@ document.getElementById("next").addEventListener("click", () => {
 
 const map = startMap(document.getElementById("map"), (path) => peek(path));
 
-let mapFilterType = "";
+let mapFilterTag = "";
 const mapQ = document.getElementById("map-q");
 if (mapQ) {
   mapQ.addEventListener("input", () => {
-    map.setFilter({ type: mapFilterType, query: mapQ.value.trim() });
+    map.setFilter({ tag: mapFilterTag, query: mapQ.value.trim() });
   });
 }
 
-const mapChips = document.querySelectorAll("#map-chips button");
-mapChips.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const t = btn.dataset.type || "";
-    mapFilterType = t;
-    mapChips.forEach((b) => b.classList.toggle("active", (b.dataset.type || "") === mapFilterType));
-    map.setFilter({ type: mapFilterType, query: mapQ ? mapQ.value.trim() : "" });
+const mapChipHost = document.getElementById("map-chips");
+if (mapChipHost) {
+  mapChipHost.addEventListener("click", (event) => {
+    const btn = event.target.closest("button");
+    if (!btn || !mapChipHost.contains(btn)) return;
+    mapFilterTag = btn.dataset.tag || "";
+    mapChipHost.querySelectorAll("button").forEach((b) => {
+      b.classList.toggle("active", (b.dataset.tag || "") === mapFilterTag);
+    });
+    map.setFilter({ tag: mapFilterTag, query: mapQ ? mapQ.value.trim() : "" });
   });
-});
+}
 
+function renderMapChips(nodes) {
+  if (!mapChipHost) return;
+  const counts = new Map();
+  for (const node of nodes || []) {
+    const raw = Array.isArray(node.tags) ? node.tags : [];
+    for (const part of raw) {
+      const slug = String(part).trim().toLowerCase();
+      if (!slug) continue;
+      counts.set(slug, (counts.get(slug) || 0) + 1);
+    }
+  }
+  mapChipHost.replaceChildren();
+  const ordered = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const make = (slug, label) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `kind${slug ? "" : " kind-all"}${slug === mapFilterTag ? " active" : ""}`;
+    btn.dataset.tag = slug;
+    btn.textContent = label;
+    if (slug) {
+      btn.style.background = tagColor(slug);
+      btn.style.color = "#0f172a";
+    }
+    return btn;
+  };
+  mapChipHost.append(make("", "All"));
+  for (const [slug, count] of ordered) mapChipHost.append(make(slug, `${slug} ${count}`));
+}
+
+const btnLayoutGraph = document.getElementById("btn-layout-graph");
 const btnLayoutOrganic = document.getElementById("btn-layout-organic");
 const btnLayoutTree = document.getElementById("btn-layout-tree");
-if (btnLayoutOrganic && btnLayoutTree) {
-  btnLayoutOrganic.addEventListener("click", () => {
-    btnLayoutOrganic.classList.add("active");
-    btnLayoutTree.classList.remove("active");
-    map.setLayoutMode("organic");
-  });
-  btnLayoutTree.addEventListener("click", () => {
-    btnLayoutTree.classList.add("active");
-    btnLayoutOrganic.classList.remove("active");
-    map.setLayoutMode("tree");
-  });
+const layoutButtons = [btnLayoutGraph, btnLayoutOrganic, btnLayoutTree].filter(Boolean);
+
+function layoutHelp(cap = "") {
+  const graphOn = btnLayoutGraph?.classList.contains("active");
+  const help = document.getElementById("map-help");
+  if (!help) return;
+  help.textContent = graphOn
+    ? `Scroll to zoom. Drag empty space to pan. Drag a dot to move it. Click a file to peek.${cap}`
+    : `Scroll to zoom. Drag empty space to pan. Click a tag to fold or unfold. Click a file to peek.${cap}`;
+}
+
+if (layoutButtons.length === 3) {
+  const modes = [
+    [btnLayoutGraph, "graph"],
+    [btnLayoutOrganic, "organic"],
+    [btnLayoutTree, "tree"],
+  ];
+  for (const [btn, mode] of modes) {
+    btn.addEventListener("click", () => {
+      for (const other of layoutButtons) other.classList.toggle("active", other === btn);
+      map.setLayoutMode(mode);
+      layoutHelp();
+    });
+  }
 }
 
 function showView(view) {
@@ -753,8 +800,9 @@ async function loadGraph() {
   const { body } = await api(`/api/graph${qs()}`);
   const data = body?.ok ? body.data : { nodes: [], edges: [] };
   map.setGraph(data);
+  renderMapChips(data.nodes);
   const cap = data.truncated ? ` Showing ${data.nodes.length} of ${data.total}.` : "";
-  document.getElementById("map-help").textContent = `Scroll to zoom. Drag to pan or rearrange. Click a hub to fold/unfold. Click a node to peek.${cap}`;
+  layoutHelp(cap);
 }
 
 document.getElementById("view-list").addEventListener("click", () => showView("list"));

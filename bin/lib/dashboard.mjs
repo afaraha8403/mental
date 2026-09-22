@@ -204,21 +204,6 @@ function catalogGraph(concepts) {
     }
   }
 
-  // 5. Cross-cutting shared tags between concepts (OKF tag connections)
-  for (let i = 0; i < capped.length; i++) {
-    const a = capped[i];
-    const tagsA = (a.tags || []).filter((t) => t && t !== "journal");
-    if (tagsA.length === 0) continue;
-
-    for (let j = i + 1; j < capped.length; j++) {
-      const b = capped[j];
-      const sharedTags = tagsA.filter((t) => (b.tags || []).includes(t));
-      if (sharedTags.length > 0) {
-        addEdge(a.path, b.path, `tag:${sharedTags[0]}`);
-      }
-    }
-  }
-
   return {
     nodes,
     edges,

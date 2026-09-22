@@ -146,15 +146,12 @@
 
         <div id="map-hint" class="map-card-hint" hidden>
           <div class="map-toolbar-bar">
-            <div class="map-legend-items" id="map-chips" role="group" aria-label="Filter map by type">
-              <button type="button" class="kind kind-all active" data-type="">All</button>
-              <button type="button" class="kind kind-decision" data-type="Decision"><span class="mark" aria-hidden="true">🎯</span> Decision</button>
-              <button type="button" class="kind kind-attention" data-type="Attention"><span class="mark" aria-hidden="true">🚦</span> Attention</button>
-              <button type="button" class="kind kind-note" data-type="Note"><span class="mark" aria-hidden="true">📝</span> Note</button>
-              <button type="button" class="kind kind-journal" data-type="Journal"><span class="mark" aria-hidden="true">📓</span> Journal</button>
+            <div class="map-legend-items" id="map-chips" role="group" aria-label="Filter map by tag">
+              <button type="button" class="kind kind-all active" data-tag="">All</button>
             </div>
             <div class="map-layout-switcher" role="group" aria-label="Layout style">
-              <button type="button" class="layout-toggle-btn active" id="btn-layout-organic" title="Organic Brain: natural force clustering where connected items gravitate together">🧠 Brain</button>
+              <button type="button" class="layout-toggle-btn active" id="btn-layout-graph" title="Graph: dots sized by links, like a note graph">Graph</button>
+              <button type="button" class="layout-toggle-btn" id="btn-layout-organic" title="Organic Brain: natural force clustering where connected items gravitate together">🧠 Brain</button>
               <button type="button" class="layout-toggle-btn" id="btn-layout-tree" title="Structured Tree: organized column layout">🌲 Tree</button>
             </div>
             <div class="map-search-box">

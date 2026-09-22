@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderFrontmatter, renderMarkdown } from "../assets/dashboard/markdown.js";
-import { CLUSTER, HUB_LAYOUT, KIND_COLOR, nodeWeight, toGraphData, toMindMapGraph } from "../assets/dashboard/map-data.js";
+import { CLUSTER, HUB_LAYOUT, KIND_COLOR, nodeWeight, tagColor, toForceGraph, toGraphData, toMindMapGraph } from "../assets/dashboard/map-data.js";
 
 test("markdown preview escapes html and renders emphasis and links", () => {
   const html = renderMarkdown("**<script>alert(1)</script>** and [pad](notes/pad.md)");
@@ -111,9 +111,9 @@ test("toMindMapGraph clusters by OKF matter/tags across different document types
   assert.ok(typesInTrack.has("Attention"));
   assert.ok(typesInTrack.has("Note"));
 
-  // Node colors must still match their type
   for (const c of trackConcepts) {
-    assert.equal(c.color, KIND_COLOR[c.type]);
+    assert.equal(c.color, trackHub.color);
+    assert.equal(c.typeColor, KIND_COLOR[c.type]);
   }
 
   // Cross links must exist
@@ -141,4 +141,50 @@ test("toMindMapGraph supports organic brain layout mode", () => {
     assert.ok(Number.isFinite(h.x) && Number.isFinite(h.y));
     assert.ok(Math.hypot(h.x, h.y) > 200);
   }
+});
+
+test("toForceGraph keeps every file and payload edges when tags are missing", () => {
+  const graph = toForceGraph({
+    nodes: [
+      { path: "decisions/a.md", type: "Decision", title: "A" },
+      { path: "notes/b.md", type: "Note", title: "B", tags: [] },
+    ],
+    edges: [{ from: "decisions/a.md", to: "notes/b.md", rel: "tag:mind-map" }],
+  });
+  assert.equal(graph.nodes.length, 2);
+  assert.deepEqual(graph.nodes[0].tags, []);
+  assert.equal(graph.nodes[0].id, "decisions/a.md");
+  assert.equal(graph.links.length, 1);
+  assert.equal(graph.links[0].rel, "tag:mind-map");
+  assert.ok(graph.nodes[0].weight >= graph.nodes[1].weight);
+  const alone = toForceGraph({ nodes: [{ path: "notes/c.md", title: "C" }], edges: [] });
+  assert.equal(alone.nodes.length, 1);
+  assert.equal(alone.links.length, 0);
+  assert.deepEqual(alone.nodes[0].tags, []);
+});
+
+test("toForceGraph groups tagged files on tag hubs and drops the shared-tag clique", () => {
+  const graph = toForceGraph({
+    nodes: [
+      { path: "decisions/a.md", type: "Decision", title: "A", tags: ["linux", "overlay"] },
+      { path: "notes/b.md", type: "Note", title: "B", tags: ["linux"] },
+    ],
+    edges: [
+      { from: "decisions/a.md", to: "notes/b.md", rel: "tag:linux" },
+      { from: "decisions/a.md", to: "notes/b.md", rel: "against" },
+    ],
+  });
+  const ids = graph.nodes.map((node) => node.id).sort();
+  assert.deepEqual(ids, ["decisions/a.md", "notes/b.md", "tag:linux", "tag:overlay"]);
+  const rels = graph.links.map((link) => link.rel);
+  assert.equal(rels.filter((rel) => rel === "topic").length, 3);
+  assert.equal(rels.filter((rel) => rel === "against").length, 1);
+  assert.equal(rels.filter((rel) => String(rel).startsWith("tag:")).length, 0);
+  const linux = graph.nodes.find((node) => node.id === "tag:linux");
+  const overlay = graph.nodes.find((node) => node.id === "tag:overlay");
+  assert.equal(linux.isTag, true);
+  assert.equal(linux.color, tagColor("linux"));
+  assert.equal(overlay.color, tagColor("overlay"));
+  const file = graph.nodes.find((node) => node.id === "decisions/a.md");
+  assert.equal(file.color, tagColor("linux"));
 });

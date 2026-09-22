@@ -16,6 +16,8 @@ test("list --json returns concepts after journal + decide", () => {
     "Listable decision",
     "--body",
     "Listed so filters can find it.",
+    "--tag",
+    "topic",
   ]);
   assert.equal(d.status, 0, d.stderr || d.stdout);
 
@@ -37,7 +39,7 @@ test("list --json returns concepts after journal + decide", () => {
 test("show --json returns frontmatter and body", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const n = mental(home, root, ["note", "--json", "--title", "Durable fact", "--body", "Walk up to git root."]);
+  const n = mental(home, root, ["note", "--json", "--title", "Durable fact", "--body", "Walk up to git root.", "--tag", "topic"]);
   assert.equal(n.status, 0, n.stderr || n.stdout);
   const path = JSON.parse(n.stdout).data.path;
 

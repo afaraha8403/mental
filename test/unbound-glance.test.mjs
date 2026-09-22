@@ -39,6 +39,8 @@ test("unbound search list show do not walk sibling UUID slices or leftover", () 
     "Defer all canopy-ui CI/CD improvements",
     "--body",
     "Wait for Dan before touching canopy-ui CI.",
+    "--tag",
+    "topic",
   ]);
   assert.equal(decided.status, 0, decided.stderr || decided.stdout);
   const canopyBody = JSON.parse(decided.stdout);

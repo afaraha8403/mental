@@ -9,7 +9,9 @@ import {
   bundleName,
   ensureSkeleton,
   findAttention,
+  missingCreateTag,
   repoRelativePath,
+  tagsFromFlag,
   updateAttention,
   writeAttention,
 } from "../lib/okf.mjs";
@@ -104,6 +106,16 @@ export function cmdAttention(args, io = {}) {
     return EXIT_USAGE;
   }
 
+  const tagged = tagsFromFlag(flagString(args.flags, "tag"));
+  if (!tagged.ok) {
+    printResult(stdout, args, false, undefined, { code: "usage", message: tagged.message });
+    return EXIT_USAGE;
+  }
+  if (!existing && tagged.tags === undefined) {
+    printResult(stdout, args, false, undefined, missingCreateTag("attention"));
+    return EXIT_USAGE;
+  }
+
   try {
     const written = existing
       ? updateAttention(resolved.data.root, existing.path, {
@@ -115,6 +127,7 @@ export function cmdAttention(args, io = {}) {
           via: viaParsed.via,
           description: flagString(args.flags, "description") || undefined,
           body: flagString(args.flags, "body") || undefined,
+          tags: tagged.tags,
         })
       : writeAttention(resolved.data.root, {
           title,
@@ -126,6 +139,7 @@ export function cmdAttention(args, io = {}) {
           description: flagString(args.flags, "description") || "",
           body: flagString(args.flags, "body") || "",
           slug: flagString(args.flags, "slug") || undefined,
+          tags: tagged.tags,
         });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);

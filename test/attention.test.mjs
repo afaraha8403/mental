@@ -43,6 +43,8 @@ test("attention --json writes residue that status and heartbeat list", () => {
     "Tom",
     "--body",
     "Do not ingest the meeting dump.",
+    "--tag",
+    "topic",
   ]);
   assert.equal(a.status, 0, a.stderr || a.stdout);
   const wrote = JSON.parse(a.stdout);
@@ -83,6 +85,8 @@ test("attention create without --body does not write a placeholder", () => {
     "Tom said ship",
     "--kind",
     "direction",
+    "--tag",
+    "topic",
   ]);
   assert.equal(a.status, 0, a.stderr || a.stdout);
   const wrote = JSON.parse(a.stdout);
@@ -103,6 +107,8 @@ test("attention --status resolved updates by title and drops from heartbeat", ()
     "concern",
     "--status",
     "later",
+    "--tag",
+    "topic",
   ]);
   const closed = mental(home, root, [
     "attention",
@@ -136,6 +142,8 @@ test("attention --path updates the named file", () => {
       "Unfinished thread",
       "--kind",
       "thread",
+      "--tag",
+      "topic",
     ]).stdout,
   );
   const path = created.data.path;
@@ -255,6 +263,8 @@ test("attention --status later is Later, not a note, not In the air", () => {
     "later",
     "--via",
     "cursor",
+    "--tag",
+    "topic",
   ]);
   assert.equal(wrote.status, 0, wrote.stderr || wrote.stdout);
   const body = JSON.parse(wrote.stdout);
@@ -331,7 +341,7 @@ test("transcript-shaped extract writes residue not a journal dump", () => {
     ["MCP discussion later", "concern", ""],
   ];
   for (const [title, kind, from] of items) {
-    const args = ["attention", "--json", "--title", title, "--kind", kind, "--body", "Extracted from meeting; transcript not stored."];
+    const args = ["attention", "--json", "--title", title, "--kind", kind, "--tag", "topic", "--body", "Extracted from meeting; transcript not stored."];
     if (from) args.push("--from", from);
     if (title.includes("later")) args.push("--status", "later");
     const r = mental(home, root, args);
@@ -346,6 +356,8 @@ test("transcript-shaped extract writes residue not a journal dump", () => {
     "open",
     "--body",
     "Open until the user names MCP this turn.",
+    "--tag",
+    "topic",
   ]);
 
   const hb = JSON.parse(mental(home, root, ["heartbeat", "--json"]).stdout);

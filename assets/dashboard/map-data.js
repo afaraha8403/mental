@@ -1,3 +1,46 @@
+const TAG_PALETTE = [
+  "#38bdf8",
+  "#f59e0b",
+  "#10b981",
+  "#a855f7",
+  "#f97316",
+  "#06b6d4",
+  "#eab308",
+  "#ec4899",
+  "#6366f1",
+  "#14b8a6",
+  "#ef4444",
+  "#84cc16",
+];
+
+/**
+ * Stable color for a topic slug so the same tag looks the same on every layout.
+ * @param {string} slug
+ */
+export function tagColor(slug) {
+  let hash = 0;
+  const text = String(slug || "");
+  for (let i = 0; i < text.length; i++) hash = Math.imul(hash, 33) ^ text.charCodeAt(i);
+  return TAG_PALETTE[(hash >>> 0) % TAG_PALETTE.length];
+}
+
+/**
+ * Frontmatter topic slugs. The journal marker is a topic when it is present.
+ * @param {{ tags?: string[] | string }} node
+ */
+export function topicTags(node) {
+  const raw = Array.isArray(node?.tags) ? node.tags : node?.tags ? [node.tags] : [];
+  /** @type {string[]} */
+  const tags = [];
+  for (const part of raw) {
+    const slug = String(part).trim().toLowerCase();
+    if (!slug || tags.includes(slug)) continue;
+    tags.push(slug);
+    if (tags.length === 3) break;
+  }
+  return tags;
+}
+
 /** Sphere / badge color for a catalog type. Matches dashboard chips. */
 export const KIND_COLOR = {
   Decision: "#38bdf8", // Sky blue
@@ -70,7 +113,7 @@ export function getConceptMatter(node) {
       id: `tag-${tag}`,
       label: tag.charAt(0).toUpperCase() + tag.slice(1),
       emoji: "🏷️",
-      color: "#38bdf8",
+      color: tagColor(tag),
     };
   }
 
@@ -149,6 +192,97 @@ export function toGraphData(payload) {
       z: home.z + hashJitter(node.path, 3),
     };
   });
+  return { nodes, links };
+}
+
+/**
+ * Flat file graph for the Obsidian-style view.
+ * One node per catalog file. Links are the edges already on the payload.
+ * A missing tags field becomes an empty list. Hubs are not built.
+ * @param {{ nodes?: Array<{ path: string, type?: string, title?: string, tags?: string[] | string }>, edges?: Array<{ from: string, to: string, rel?: string }> }} payload
+ */
+export function toForceGraph(payload) {
+  const nodesIn = payload?.nodes || [];
+  const edges = payload?.edges || [];
+  const hasTopics = nodesIn.some((node) => topicTags(node).length > 0);
+  /** @type {Map<string, number>} */
+  const degree = new Map(nodesIn.map((node) => [node.path, 0]));
+  /** @type {Array<{ id: string, source: string, target: string, rel: string }>} */
+  const links = [];
+  const seen = new Set();
+
+  function addLink(source, target, rel) {
+    if (!source || !target || source === target) return;
+    const key = `${source}\0${target}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (degree.has(source)) degree.set(source, (degree.get(source) || 0) + 1);
+    if (degree.has(target)) degree.set(target, (degree.get(target) || 0) + 1);
+    links.push({ id: key, source, target, rel });
+  }
+
+  /** @type {Map<string, number>} */
+  const tagCount = new Map();
+  if (hasTopics) {
+    for (const node of nodesIn) {
+      for (const slug of topicTags(node)) {
+        tagCount.set(slug, (tagCount.get(slug) || 0) + 1);
+        addLink(node.path, `tag:${slug}`, "topic");
+      }
+    }
+  }
+
+  for (const edge of edges) {
+    if (hasTopics && String(edge.rel || "").startsWith("tag:")) continue;
+    if (!degree.has(edge.from) || !degree.has(edge.to)) continue;
+    addLink(edge.from, edge.to, edge.rel || "link");
+  }
+
+  const tagList = [...tagCount.keys()];
+  const ring = Math.max(520, tagList.length * 90);
+  /** @type {Map<string, { x: number, y: number }>} */
+  const homes = new Map();
+  tagList.forEach((slug, index) => {
+    const angle = (2 * Math.PI * index) / tagList.length - Math.PI / 2;
+    homes.set(slug, { x: Math.cos(angle) * ring, y: Math.sin(angle) * ring });
+  });
+
+  const nodes = nodesIn.map((node) => {
+    const linkCount = degree.get(node.path) || 0;
+    const tags = topicTags(node);
+    const home = homes.get(tags[0]) || { x: 0, y: 0 };
+    return {
+      id: node.path,
+      path: node.path,
+      title: node.title || node.path,
+      type: node.type || "",
+      tags,
+      isTag: false,
+      color: tags.length ? tagColor(tags[0]) : (KIND_COLOR[node.type] || "#38bdf8"),
+      links: linkCount,
+      weight: nodeWeight(linkCount),
+      homeX: home.x,
+      homeY: home.y,
+    };
+  });
+
+  for (const slug of tagList) {
+    const home = homes.get(slug);
+    const count = tagCount.get(slug) || 0;
+    nodes.push({
+      id: `tag:${slug}`,
+      path: "",
+      title: slug,
+      type: "tag",
+      tags: [slug],
+      isTag: true,
+      color: tagColor(slug),
+      links: count,
+      weight: nodeWeight(count),
+      homeX: home.x,
+      homeY: home.y,
+    });
+  }
   return { nodes, links };
 }
 
@@ -297,7 +431,7 @@ export function toMindMapGraph(payload, projectName = "Mental", collapsedHubIds 
 
   if (isOrganic) {
     const N = sortedMatters.length || 1;
-    const radiusHub = Math.max(340, 240 + N * 18);
+    const radiusHub = Math.max(520, N * 34);
     sortedMatters.forEach((m, idx) => {
       const angle = (2 * Math.PI * idx) / N - Math.PI / 2;
       m.hubX = Math.round(Math.cos(angle) * (radiusHub * 1.15));
@@ -379,12 +513,14 @@ export function toMindMapGraph(payload, projectName = "Mental", collapsedHubIds 
 
       if (isOrganic) {
         const baseAngle = m.angle != null ? m.angle : 0;
-        const fanSpan = Math.min(Math.PI * 0.95, 0.28 * totalInMatter + 0.35);
-        const stepAngle = totalInMatter > 1 ? fanSpan / (totalInMatter - 1) : 0;
-        const angle = totalInMatter === 1 ? baseAngle : (baseAngle - fanSpan / 2) + i * stepAngle;
-        const dist = 180 + (i % 3) * 60;
-        nodeX = Math.round(m.hubX + Math.cos(angle) * dist);
-        nodeY = Math.round(m.hubY + Math.sin(angle) * dist);
+        const ux = Math.cos(baseAngle);
+        const uy = Math.sin(baseAngle);
+        const itemsInThisCol = Math.min(itemsPerCol, totalInMatter - colIdx * itemsPerCol);
+        const rowOffset = rowIdx - (itemsInThisCol - 1) / 2;
+        const out = 220 + colIdx * (nodeW + 36);
+        const side = rowOffset * (nodeH + 18);
+        nodeX = Math.round(m.hubX + ux * out - uy * side);
+        nodeY = Math.round(m.hubY + uy * out + ux * side);
       } else {
         const itemsInThisCol = Math.min(itemsPerCol, totalInMatter - colIdx * itemsPerCol);
         const colTotalHeight = (itemsInThisCol - 1) * rowStepY;
@@ -423,7 +559,8 @@ export function toMindMapGraph(payload, projectName = "Mental", collapsedHubIds 
         matterEmoji: m.meta.emoji,
         links: deg,
         weight: nodeWeight(deg),
-        color: typeColor,
+        color: m.meta.color,
+        typeColor,
         hubId,
         colIdx,
         rowIdx,
@@ -465,11 +602,8 @@ export function toMindMapGraph(payload, projectName = "Mental", collapsedHubIds 
     const dstNode = conceptMap.get(edge.to);
     if (!srcNode || !dstNode || edge.from === edge.to) continue;
 
-    // Skip synthetic tag cross-links between nodes already in the same matter hub
+    if (edge.rel && String(edge.rel).startsWith("tag:")) continue;
     const isSameHub = srcNode.hubId === dstNode.hubId;
-    if (isSameHub && edge.rel && edge.rel.startsWith("tag:")) {
-      continue;
-    }
 
     const key = [edge.from, edge.to].sort().join("\0");
     if (seenEdges.has(key)) continue;

@@ -15,6 +15,73 @@ export const ATTENTION_HEARTBEAT_CAP = 7;
 export const DECISION_HEARTBEAT_CAP = 7;
 export const DECISION_STATUSES = new Set(["open", "deferred", "decided", "superseded"]);
 
+const TAG_SLUG = /^[a-z0-9_-]{2,32}$/;
+
+/**
+ * Normalize a comma-separated tag string into one to three slugs.
+ * A blank result is usage so an empty flag cannot wipe stored tags.
+ * @param {string} raw
+ * @returns {{ ok: true, tags: string[] } | { ok: false, message: string }}
+ */
+export function parseTagList(raw) {
+  /** @type {string[]} */
+  const tags = [];
+  const seen = new Set();
+  for (const part of String(raw).split(",")) {
+    const slug = part.trim().toLowerCase().replace(/\s+/g, "-");
+    if (!slug) continue;
+    if (!TAG_SLUG.test(slug)) {
+      return { ok: false, message: `tag must be 2–32 characters of [a-z0-9_-]: ${slug}` };
+    }
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    tags.push(slug);
+    if (tags.length > 3) return { ok: false, message: "at most 3 tags" };
+  }
+  if (tags.length === 0) return { ok: false, message: "tag needs 1–3 slugs" };
+  return { ok: true, tags };
+}
+
+/**
+ * Optional `--tag` flag. Omitted stays omitted so update does not rewrite tags.
+ * Create commands treat that omission as usage via `missingCreateTag`.
+ * @param {string | null | undefined} raw
+ * @returns {{ ok: true, tags: string[] | undefined } | { ok: false, message: string }}
+ */
+export function tagsFromFlag(raw) {
+  if (raw == null) return { ok: true, tags: undefined };
+  const parsed = parseTagList(raw);
+  if (!parsed.ok) return parsed;
+  return { ok: true, tags: parsed.tags };
+}
+
+/**
+ * Usage when decide, attention, or note creates a file without `--tag`.
+ * @param {"decide" | "attention" | "note"} command
+ * @returns {{ code: "usage", message: string, hint: string }}
+ */
+export function missingCreateTag(command) {
+  const message = command === "note"
+    ? "mental note requires --tag (1–3 topic slugs)"
+    : `mental ${command} create requires --tag (1–3 topic slugs)`;
+  return {
+    code: "usage",
+    message,
+    hint: "Reuse a slug from mental list --tag. Omit --tag on update so existing tags stay.",
+  };
+}
+
+/**
+ * @param {string[] | undefined} tags
+ * @returns {string[] | undefined}
+ */
+function tagsToStore(tags) {
+  if (tags === undefined) return undefined;
+  const parsed = parseTagList(tags.join(","));
+  if (!parsed.ok) throw Object.assign(new Error(parsed.message), { code: "usage" });
+  return parsed.tags;
+}
+
 /**
  * @param {Date} [d]
  */
@@ -561,9 +628,9 @@ export function findAttention(root, { path, title } = {}) {
 
 /**
  * @param {string} root
- * @param {{ title: string, status?: string, kind: string, from?: string, against?: string, via?: string, description?: string, body?: string, slug?: string, now?: Date }} opts
+ * @param {{ title: string, status?: string, kind: string, from?: string, against?: string, via?: string, description?: string, body?: string, slug?: string, tags?: string[], now?: Date }} opts
  */
-export function writeAttention(root, { title, status = "open", kind, from, against, via, description = "", body = "", slug, now = new Date() }) {
+export function writeAttention(root, { title, status = "open", kind, from, against, via, description = "", body = "", slug, tags, now = new Date() }) {
   ensureSkeleton(root);
   const day = localDate(now);
   const s = slug || slugify(title);
@@ -581,7 +648,7 @@ export function writeAttention(root, { title, status = "open", kind, from, again
         type: "Attention",
         title,
         description: description || title,
-        tags: [],
+        tags: tagsToStore(tags) ?? [],
         timestamp: ts,
         status,
         kind,
@@ -598,9 +665,9 @@ export function writeAttention(root, { title, status = "open", kind, from, again
 /**
  * @param {string} root
  * @param {string} rel
- * @param {{ title?: string, status?: string, kind?: string, from?: string, against?: string, via?: string, description?: string, body?: string, now?: Date }} opts
+ * @param {{ title?: string, status?: string, kind?: string, from?: string, against?: string, via?: string, description?: string, body?: string, tags?: string[], now?: Date }} opts
  */
-export function updateAttention(root, rel, { title, status, kind, from, against, via, description, body, now = new Date() }) {
+export function updateAttention(root, rel, { title, status, kind, from, against, via, description, body, tags, now = new Date() }) {
   const got = readBundleFile(root, rel);
   if (!got.ok) {
     throw Object.assign(new Error(got.error.message), { code: got.error.code });
@@ -613,6 +680,8 @@ export function updateAttention(root, rel, { title, status, kind, from, against,
   if (against != null && against !== "") data.against = against;
   if (via != null && via !== "") data.via = via;
   if (description) data.description = description;
+  const nextTags = tagsToStore(tags);
+  if (nextTags !== undefined) data.tags = nextTags;
   data.timestamp = now.toISOString();
   data.type = "Attention";
   let nextBody = got.data.body;
@@ -674,10 +743,10 @@ ${section}`,
 /**
  * Create a decision file. `body` is the why — required; never a scaffold of placeholders.
  * @param {string} root
- * @param {{ title: string, status?: string, description?: string, body?: string, via?: string, slug?: string, now?: Date }} opts
- * @throws {{ code: string }} `usage` when `body` is missing or whitespace.
+ * @param {{ title: string, status?: string, description?: string, body?: string, via?: string, slug?: string, tags?: string[], now?: Date }} opts
+ * @throws {{ code: string }} `usage` when `body` is missing or whitespace, or tags are not a TagList.
  */
-export function writeDecision(root, { title, status = "open", description = "", body = "", via, slug, now = new Date() }) {
+export function writeDecision(root, { title, status = "open", description = "", body = "", via, slug, tags, now = new Date() }) {
   ensureSkeleton(root);
   const text = String(body || "").trim();
   if (!text) {
@@ -697,7 +766,7 @@ export function writeDecision(root, { title, status = "open", description = "", 
         type: "Decision",
         title,
         description: description || title,
-        tags: [],
+        tags: tagsToStore(tags) ?? [],
         timestamp: ts,
         status,
         via: via || undefined,
@@ -714,9 +783,9 @@ ${text}
 /**
  * @param {string} root
  * @param {string} rel
- * @param {{ title?: string, status?: string, description?: string, body?: string, via?: string, now?: Date }} opts
+ * @param {{ title?: string, status?: string, description?: string, body?: string, via?: string, tags?: string[], now?: Date }} opts
  */
-export function updateDecision(root, rel, { title, status, description, body, via, now = new Date() }) {
+export function updateDecision(root, rel, { title, status, description, body, via, tags, now = new Date() }) {
   const got = readBundleFile(root, rel);
   if (!got.ok) {
     throw Object.assign(new Error(got.error.message), { code: got.error.code });
@@ -726,6 +795,8 @@ export function updateDecision(root, rel, { title, status, description, body, vi
   if (status) data.status = status;
   if (description) data.description = description;
   if (via != null && via !== "") data.via = via;
+  const nextTags = tagsToStore(tags);
+  if (nextTags !== undefined) data.tags = nextTags;
   data.timestamp = now.toISOString();
   data.type = "Decision";
   let nextBody = got.data.body;
@@ -741,9 +812,9 @@ export function updateDecision(root, rel, { title, status, description, body, vi
 
 /**
  * @param {string} root
- * @param {{ title: string, status?: string, description?: string, body?: string, slug?: string, now?: Date }} opts
+ * @param {{ title: string, status?: string, description?: string, body?: string, slug?: string, tags?: string[], now?: Date }} opts
  */
-export function writeNote(root, { title, status = "active", description = "", body = "", slug, now = new Date() }) {
+export function writeNote(root, { title, status = "active", description = "", body = "", slug, tags, now = new Date() }) {
   ensureSkeleton(root);
   const s = slug || slugify(title);
   const rel = `notes/${s}.md`;
@@ -758,7 +829,7 @@ export function writeNote(root, { title, status = "active", description = "", bo
         type: "Note",
         title,
         description: description || title,
-        tags: [],
+        tags: tagsToStore(tags) ?? [],
         timestamp: ts,
         status,
       },

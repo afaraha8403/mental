@@ -136,7 +136,7 @@ test("MCP heartbeat + attention round-trip (mid-chat parity)", () => {
   assert.equal(pulse.code, 0, JSON.stringify(pulse.body));
   assert.equal(pulse.body.ok, true);
 
-  const created = runTool("attention", { title: "Tom said ship the pointer", kind: "direction", from: "Tom" }, ctx);
+  const created = runTool("attention", { title: "Tom said ship the pointer", kind: "direction", from: "Tom", tag: "topic" }, ctx);
   assert.equal(created.code, 0, JSON.stringify(created.body));
   assert.equal(created.body.ok, true);
   assert.match(created.body.data.path, /^attention\//);
@@ -144,18 +144,36 @@ test("MCP heartbeat + attention round-trip (mid-chat parity)", () => {
   const resolved = runTool("attention", { title: "Tom said ship the pointer", status: "resolved" }, ctx);
   assert.equal(resolved.code, 0, JSON.stringify(resolved.body));
 
-  const decided = runTool("decide", { title: "MCP parity ships", status: "decided", body: "CLI JSON is the write path." }, ctx);
+  const decided = runTool("decide", { title: "MCP parity ships", status: "decided", body: "CLI JSON is the write path.", tag: "topic" }, ctx);
   assert.equal(decided.code, 0, JSON.stringify(decided.body));
 
   const closed = runTool("decide", { title: "MCP parity ships", status: "superseded" }, ctx);
   assert.equal(closed.code, 0, JSON.stringify(closed.body));
   assert.equal(closed.body.data.updated, true);
 
-  const noted = runTool("note", { title: "Identity is a UUID" }, ctx);
+  const noted = runTool("note", { title: "Identity is a UUID", tag: "topic" }, ctx);
   assert.equal(noted.code, 0, JSON.stringify(noted.body));
 
   const after = runTool("heartbeat", {}, ctx);
   assert.equal(after.body.data.openDecisions.length, 0);
+});
+
+test("MCP decide forwards tag", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const ctx = { cwd: root, home, env: gitEnv(home) };
+  const decided = runTool(
+    "decide",
+    { title: "Tagged via MCP", body: "The flag must survive the tool map.", tag: "mind-map,receipt" },
+    ctx,
+  );
+  assert.equal(decided.code, 0, JSON.stringify(decided.body));
+  const shown = runTool("show", { path: decided.body.data.path }, ctx);
+  assert.equal(shown.code, 0, JSON.stringify(shown.body));
+  assert.deepEqual(shown.body.data.frontmatter.tags, ["mind-map", "receipt"]);
+
+  const missing = runTool("decide", { title: "Untagged", body: "create must name a tag" }, ctx);
+  assert.equal(missing.code, 2, JSON.stringify(missing.body));
 });
 
 test("local --import copies home slice into ./.mental", () => {

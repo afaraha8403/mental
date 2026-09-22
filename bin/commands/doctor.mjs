@@ -21,7 +21,7 @@ import { doctorNextAction, formatDoctorNextLine } from "../lib/doctor-next.mjs";
 import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
 import { isOptedInLocal } from "../lib/import-legacy.mjs";
 import { findGitRoot } from "../lib/git.mjs";
-import { indexPath } from "../lib/index.mjs";
+import { indexPath, listConcepts } from "../lib/index.mjs";
 import { checkForUpdate, cmpSemver, updateHint } from "../lib/update.mjs";
 import { hostPluginChecks } from "../lib/host-plugins.mjs";
 import { DECISION_HEARTBEAT_CAP, listOpenDecisions, ensureSkeleton, latestJournalHandoff, localDate } from "../lib/okf.mjs";
@@ -302,6 +302,19 @@ export function cmdDoctor(args, io = {}) {
           "stale-decision",
           false,
           `${stale.decisions.length} open/deferred decision(s) older than ${days}d (${sample})`,
+          "warn",
+        ),
+      );
+    }
+    const untagged = listConcepts(resolved.data.root).filter((c) => c.tags.length === 0);
+    if (untagged.length) {
+      const sample = untagged.slice(0, 3).map((c) => c.path).join(", ");
+      const extra = untagged.length > 3 ? `, +${untagged.length - 3}` : "";
+      checks.push(
+        check(
+          "untagged",
+          false,
+          `${untagged.length} file(s) have no topic tag (${sample}${extra}). Pass --tag on an update of that title.`,
           "warn",
         ),
       );

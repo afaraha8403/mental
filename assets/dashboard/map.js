@@ -1,5 +1,5 @@
 import { d3 } from "./vendor/mind-map.js";
-import { KIND_META, toMindMapGraph, resolveBoxCollisions } from "./map-data.js";
+import { toMindMapGraph, toForceGraph } from "./map-data.js";
 
 /**
  * Truncate long strings with ellipsis.
@@ -99,7 +99,10 @@ export function startMap(container, onPick) {
   let rawPayload = { nodes: [], edges: [] };
   let selected = "";
   let hoveredId = "";
-  let layoutMode = "organic"; // "organic" (default) or "tree"
+  let layoutMode = "graph"; // "graph" (default), "organic", or "tree"
+  /** @type {ReturnType<typeof d3.forceSimulation> | null} */
+  let simulation = null;
+  let zoomScale = 0.85;
   const collapsedHubs = new Set();
   let initializedCollapsed = false;
   const pinnedNodes = new Map(); // id -> { x, y }
@@ -111,9 +114,11 @@ export function startMap(container, onPick) {
   // D3 Zoom configuration
   const zoom = d3
     .zoom()
-    .scaleExtent([0.1, 4.0])
+    .scaleExtent([0.04, 12])
     .on("zoom", (event) => {
+      zoomScale = event.transform.k;
       viewport.attr("transform", event.transform);
+      nodesLayer.selectAll(".graph-label").classed("visible", (d) => d.isTag || zoomScale >= 1.15);
     });
 
   svg.call(zoom).on("dblclick.zoom", null);
@@ -186,10 +191,11 @@ export function startMap(container, onPick) {
       minY = Infinity,
       maxY = -Infinity;
 
+    const graphMode = layoutMode === "graph";
     for (const d of activeNodes) {
       if (!Number.isFinite(d.x) || !Number.isFinite(d.y)) continue;
-      const hw = (d.w || 280) / 2 + 30;
-      const hh = (d.h || 34) / 2 + 20;
+      const hw = graphMode ? (d.isTag ? 56 : 18) : (d.w || 280) / 2 + 30;
+      const hh = graphMode ? (d.isTag ? 22 : 14) : (d.h || 34) / 2 + 20;
       minX = Math.min(minX, d.x - hw);
       maxX = Math.max(maxX, d.x + hw);
       minY = Math.min(minY, d.y - hh);
@@ -209,7 +215,7 @@ export function startMap(container, onPick) {
     }
 
     const padding = 60;
-    const scale = Math.min(1.1, Math.max(0.35, Math.min((w - padding * 2) / dx, (h - padding * 2) / dy)));
+    const scale = Math.min(1.4, Math.max(0.05, Math.min((w - padding * 2) / dx, (h - padding * 2) / dy)));
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
 
@@ -220,6 +226,31 @@ export function startMap(container, onPick) {
 
     if (animate) svg.transition().duration(500).call(zoom.transform, t);
     else svg.call(zoom.transform, t);
+  }
+
+  function zoomToNodes(nodes, animate = false) {
+    const prev = activeNodes;
+    activeNodes = nodes;
+    zoomToFit(animate);
+    activeNodes = prev;
+  }
+
+  function frameSelection(animate = true) {
+    if (!filterTag) {
+      zoomToFit(animate);
+      return;
+    }
+    const island = activeNodes.filter((node) => {
+      if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return false;
+      if (node.isTag) return (node.tags || []).some((tag) => String(tag).toLowerCase() === filterTag);
+      if (node.isHub) return matchesTag(node);
+      return String(node.tags?.[0] || "").toLowerCase() === filterTag;
+    });
+    const matched = island.length
+      ? island
+      : activeNodes.filter((node) => matchesTag(node) && Number.isFinite(node.x) && Number.isFinite(node.y));
+    if (matched.length) zoomToNodes(matched, animate);
+    else zoomToFit(animate);
   }
 
   // Smooth organic mind map branch curves (cubic Bezier connecting node perimeter to node perimeter)
@@ -300,17 +331,25 @@ export function startMap(container, onPick) {
     crossLinksLayer.selectAll(".link-cross").attr("d", crossLinkPath);
   }
 
-  let filterType = "";
+  let filterTag = "";
   let filterQuery = "";
 
+  function matchesTag(d) {
+    if (!filterTag) return true;
+    if (d.isHub) {
+      const id = String(d.matterId || "").toLowerCase();
+      return id === filterTag || id === `tag-${filterTag}`;
+    }
+    return (d.tags || []).some((tag) => String(tag).toLowerCase() === filterTag);
+  }
+
   function applyFilter() {
-    const fType = (filterType || "").toLowerCase().trim();
     const fQuery = (filterQuery || "").toLowerCase().trim();
-    const hasFilter = Boolean(fType || fQuery);
+    const hasFilter = Boolean(filterTag || fQuery);
 
     if (!hasFilter) {
-      nodesLayer.selectAll(".mindmap-node").classed("dimmed", false).classed("filter-matched", false);
-      linksLayer.selectAll(".link-structural").classed("dimmed", false);
+      nodesLayer.selectAll(".mindmap-node, .graph-node").classed("dimmed", false).classed("filter-matched", false);
+      linksLayer.selectAll(".link-structural, .graph-link").classed("dimmed", false);
       crossLinksLayer.selectAll(".link-cross").classed("dimmed", false);
       return;
     }
@@ -319,8 +358,6 @@ export function startMap(container, onPick) {
     const matchedHubIds = new Set();
 
     nodesLayer.selectAll(".node-concept").each(function (d) {
-      const typeKey = (d.type || "").toLowerCase();
-      const typeMatch = !fType || typeKey === fType;
       const qMatch =
         !fQuery ||
         (d.title && d.title.toLowerCase().includes(fQuery)) ||
@@ -329,7 +366,7 @@ export function startMap(container, onPick) {
         (d.matterLabel && d.matterLabel.toLowerCase().includes(fQuery)) ||
         (Array.isArray(d.tags) && d.tags.some((t) => String(t).toLowerCase().includes(fQuery)));
 
-      const isMatch = typeMatch && qMatch;
+      const isMatch = matchesTag(d) && qMatch;
       if (isMatch) {
         matchedConceptIds.add(d.id);
         if (d.hubId) matchedHubIds.add(d.hubId);
@@ -341,7 +378,7 @@ export function startMap(container, onPick) {
 
     nodesLayer.selectAll(".node-hub").each(function (d) {
       const hubMatchesQuery = fQuery && d.title && d.title.toLowerCase().includes(fQuery);
-      const isMatch = matchedHubIds.has(d.id) || Boolean(hubMatchesQuery);
+      const isMatch = matchesTag(d) && (matchedHubIds.has(d.id) || Boolean(hubMatchesQuery) || !fQuery);
       d3.select(this)
         .classed("dimmed", !isMatch)
         .classed("filter-matched", isMatch && !matchedHubIds.has(d.id));
@@ -357,13 +394,30 @@ export function startMap(container, onPick) {
       const tId = typeof l.target === "object" ? l.target.id : l.target;
       return !matchedConceptIds.has(sId) && !matchedConceptIds.has(tId);
     });
+
+    const matchedGraphIds = new Set();
+    nodesLayer.selectAll(".graph-node").each(function (d) {
+      const qMatch =
+        !fQuery ||
+        (d.title && d.title.toLowerCase().includes(fQuery)) ||
+        (d.path && d.path.toLowerCase().includes(fQuery)) ||
+        (Array.isArray(d.tags) && d.tags.some((t) => String(t).toLowerCase().includes(fQuery)));
+      const isMatch = matchesTag(d) && qMatch;
+      if (isMatch) matchedGraphIds.add(d.id);
+      d3.select(this).classed("dimmed", !isMatch).classed("filter-matched", isMatch);
+    });
+    linksLayer.selectAll(".graph-link").classed("dimmed", (l) => {
+      const sId = typeof l.source === "object" ? l.source.id : l.source;
+      const tId = typeof l.target === "object" ? l.target.id : l.target;
+      return !matchedGraphIds.has(sId) && !matchedGraphIds.has(tId);
+    });
   }
 
   function applyHighlights() {
     const activeId = hoveredId || selected;
-    const allLinks = linksLayer.selectAll(".link-structural");
+    const allLinks = linksLayer.selectAll(".link-structural, .graph-link");
     const allCrossLinks = crossLinksLayer.selectAll(".link-cross");
-    const allNodes = nodesLayer.selectAll(".mindmap-node");
+    const allNodes = nodesLayer.selectAll(".mindmap-node, .graph-node");
 
     if (!activeId) {
       allLinks.classed("highlighted", false);
@@ -407,7 +461,154 @@ export function startMap(container, onPick) {
     return "Mental";
   }
 
+  function stopForce() {
+    if (!simulation) return;
+    simulation.on("tick", null);
+    simulation.stop();
+    simulation = null;
+  }
+
+  function graphRadius(linkCount) {
+    const n = Number.isFinite(linkCount) ? Math.max(0, linkCount) : 0;
+    return 5 + Math.min(11, n);
+  }
+
+  function graphSeed(path, axis) {
+    let hash = axis + 1;
+    const text = String(path);
+    for (let i = 0; i < text.length; i++) hash = Math.imul(hash, 33) ^ text.charCodeAt(i);
+    return ((hash >>> 0) % 1000) / 1000;
+  }
+
+  function renderForce() {
+    linksLayer.selectAll(".link-structural").remove();
+    crossLinksLayer.selectAll(".link-cross").remove();
+    nodesLayer.selectAll(".mindmap-node").remove();
+    stopForce();
+
+    const graph = toForceGraph(rawPayload);
+    if (!graph.nodes.length) {
+      if (emptyOverlay) emptyOverlay.hidden = false;
+      linksLayer.selectAll(".graph-link").remove();
+      nodesLayer.selectAll(".graph-node").remove();
+      return;
+    }
+    if (emptyOverlay) emptyOverlay.hidden = true;
+
+    for (const node of graph.nodes) {
+      const spread = node.isTag ? 0 : 140;
+      node.x = (node.homeX || 0) + (graphSeed(node.id, 1) - 0.5) * spread;
+      node.y = (node.homeY || 0) + (graphSeed(node.id, 2) - 0.5) * spread;
+    }
+    activeNodes = graph.nodes;
+
+    const linkSel = linksLayer.selectAll(".graph-link").data(graph.links, (d) => d.id);
+    linkSel.exit().remove();
+    const linkEnter = linkSel.enter().append("line").attr("class", "graph-link");
+    const allLinks = linkEnter.merge(linkSel);
+
+    const nodeSel = nodesLayer.selectAll(".graph-node").data(graph.nodes, (d) => d.id);
+    nodeSel.exit().remove();
+    const nodeEnter = nodeSel.enter().append("g").attr("class", "graph-node");
+    nodeEnter.append("circle");
+    nodeEnter.append("text").attr("class", "graph-label").attr("dx", 12).attr("dy", 4);
+    const allNodes = nodeEnter.merge(nodeSel);
+
+    allNodes.classed("tag", (d) => d.isTag);
+    allNodes
+      .select("circle")
+      .attr("r", (d) => (d.isTag ? Math.max(16, Math.min(28, 12 + Math.sqrt(d.links || 0) * 2)) : graphRadius(d.links)))
+      .attr("fill", (d) => d.color || "#38bdf8");
+    allNodes.select(".graph-label").text((d) => shortText(d.title, d.isTag ? 18 : 28));
+    allNodes.classed("selected", (d) => d.path && d.path === selected);
+    nodesLayer.selectAll(".graph-label").classed("visible", (d) => d.isTag || zoomScale >= 1.15);
+
+    allNodes
+      .on("mouseenter", (event, d) => {
+        hoveredId = d.id;
+        tooltip.hidden = false;
+        const tagLine = d.isTag ? "Topic" : (d.tags || []).join(", ");
+        tooltip.innerHTML = `<div class="tt-title">${d.title || d.path}</div><div class="tt-path">${d.path || tagLine}</div>`;
+        positionTooltip(event);
+        applyHighlights();
+      })
+      .on("mousemove", (event) => positionTooltip(event))
+      .on("mouseleave", () => {
+        hoveredId = "";
+        tooltip.hidden = true;
+        applyHighlights();
+      })
+      .on("click", (event, d) => {
+        event.stopPropagation();
+        selected = d.path || "";
+        allNodes.classed("selected", (n) => n.path === selected);
+        applyHighlights();
+        if (d.path) onPick(d.path);
+      })
+      .call(
+        d3.drag()
+          .on("start", (event, d) => {
+            if (!event.active && simulation) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+          })
+          .on("drag", (event, d) => {
+            d.fx = event.x;
+            d.fy = event.y;
+          })
+          .on("end", (event, d) => {
+            if (!event.active && simulation) simulation.alphaTarget(0);
+            d.fx = null;
+            d.fy = null;
+          }),
+      );
+
+    simulation = d3
+      .forceSimulation(graph.nodes)
+      .force(
+        "link",
+        d3
+          .forceLink(graph.links)
+          .id((d) => d.id)
+          .distance((d) => (d.rel === "topic" ? 72 : 180))
+          .strength((d) => {
+            if (d.rel !== "topic") return 0.03;
+            const source = typeof d.source === "object" ? d.source : null;
+            const target = typeof d.target === "object" ? d.target : null;
+            if (!source || !target) return 0.2;
+            const file = source.isTag ? target : source;
+            const hub = source.isTag ? source : target;
+            const first = String(file.tags?.[0] || "");
+            return first && String(hub.tags?.[0] || "") === first ? 0.45 : 0.02;
+          }),
+      )
+      .force("charge", d3.forceManyBody().strength((d) => (d.isTag ? -280 : -18)).distanceMax(420))
+      .force("x", d3.forceX((d) => d.homeX || 0).strength((d) => (d.isTag ? 0.6 : 0.28)))
+      .force("y", d3.forceY((d) => d.homeY || 0).strength((d) => (d.isTag ? 0.6 : 0.28)))
+      .force("collide", d3.forceCollide((d) => (d.isTag ? 40 : graphRadius(d.links)) + 10).iterations(2))
+      .on("tick", () => {
+        allLinks
+          .attr("x1", (d) => d.source.x)
+          .attr("y1", (d) => d.source.y)
+          .attr("x2", (d) => d.target.x)
+          .attr("y2", (d) => d.target.y);
+        allNodes.attr("transform", (d) => `translate(${d.x || 0},${d.y || 0})`);
+      });
+    zoomToFit(false);
+
+    applyFilter();
+    applyHighlights();
+  }
+
   function renderGraph() {
+    if (layoutMode === "graph") {
+      renderForce();
+      return;
+    }
+    stopForce();
+    linksLayer.selectAll(".graph-link").remove();
+    nodesLayer.selectAll(".graph-node").remove();
+
     // Initialize collapsed state on first run so the map opens with a clean, uncrowded overview
     if (!initializedCollapsed) {
       const probe = toMindMapGraph(rawPayload, getProjectName(), null, layoutMode);
@@ -458,60 +659,6 @@ export function startMap(container, onPick) {
     activeCrossLinks = graph.crossLinks.filter(
       (l) => nodeMap.has(l.source) && nodeMap.has(l.target)
     );
-
-    // If organic mode is active and D3 force simulation is available, run spring relaxation
-    if (layoutMode === "organic" && d3.forceSimulation && activeNodes.length > 1) {
-      const activeNodeIds = new Set(activeNodes.map((n) => n.id));
-      const simLinks = [
-        ...activeLinks.map((l) => ({
-          source: typeof l.source === "object" ? l.source.id : l.source,
-          target: typeof l.target === "object" ? l.target.id : l.target,
-          distance: l.isRootLink ? 320 : 130,
-          strength: l.isRootLink ? 0.9 : 0.6,
-        })),
-        ...activeCrossLinks.map((l) => ({
-          source: l.source,
-          target: l.target,
-          distance: 190,
-          strength: 0.35,
-        })),
-      ].filter((l) => activeNodeIds.has(l.source) && activeNodeIds.has(l.target));
-
-      const sim = d3
-        .forceSimulation(activeNodes)
-        .force(
-          "link",
-          d3.forceLink(simLinks)
-            .id((d) => d.id)
-            .distance((l) => l.distance || 140)
-            .strength((l) => l.strength || 0.5)
-        )
-        .force("charge", d3.forceManyBody().strength(-200).distanceMax(550))
-        .force("collide", d3.forceCollide((d) => (d.isRoot ? 90 : d.isHub ? 75 : 60)).iterations(2))
-        .force(
-          "x",
-          d3.forceX((d) => (d.isRoot ? 0 : d.isHub ? d.origX : (nodeMap.get(d.hubId)?.x || d.x))).strength((d) => (d.isRoot ? 1 : d.isHub ? 0.4 : 0.08))
-        )
-        .force(
-          "y",
-          d3.forceY((d) => (d.isRoot ? 0 : d.isHub ? d.origY : (nodeMap.get(d.hubId)?.y || d.y))).strength((d) => (d.isRoot ? 1 : d.isHub ? 0.4 : 0.08))
-        )
-        .stop();
-
-      for (let i = 0; i < 90; i++) sim.tick();
-
-      // Restore user-pinned positions
-      for (const node of activeNodes) {
-        if (node.isPinned && pinnedNodes.has(node.id)) {
-          const pin = pinnedNodes.get(node.id);
-          node.x = pin.x;
-          node.y = pin.y;
-        }
-      }
-
-      // Final sweep to guarantee zero overlaps
-      resolveBoxCollisions(activeNodes, 16);
-    }
 
     // Bind structural links
     const linkSel = linksLayer
@@ -632,7 +779,6 @@ export function startMap(container, onPick) {
           .attr("height", h)
           .attr("rx", h / 2);
 
-        // Type-colored dot on left (Decision = blue, Attention = amber, Journal = purple, Note = emerald)
         g.append("circle")
           .attr("class", "concept-dot")
           .attr("cx", -w / 2 + 14)
@@ -640,23 +786,21 @@ export function startMap(container, onPick) {
           .attr("r", 4.5)
           .attr("fill", d.color || "#94a3b8");
 
-        // Type emoji and concept title
         g.append("text")
           .attr("class", "concept-title")
           .attr("x", -w / 2 + 27)
           .attr("y", 4.5)
-          .text(`${d.typeEmoji || ""} ${shortText(d.title, 26)}`);
+          .text(shortText(d.title, 28));
 
-        // Badges on right: explicit tags or links count
-        const nonJournalTags = (d.tags || []).filter((t) => t !== "journal");
-        if (nonJournalTags.length > 0) {
+        const extraTags = (d.tags || []).filter((t) => t !== "journal").slice(1);
+        if (extraTags.length > 0) {
           g.append("text")
             .attr("class", "status-badge tag-badge")
             .attr("x", w / 2 - 12)
             .attr("y", 4.5)
             .attr("text-anchor", "end")
             .attr("fill", "var(--ink-secondary, #94a3b8)")
-            .text(`🏷️${nonJournalTags[0]}`);
+            .text(extraTags[0]);
         } else if (d.links > 0) {
           g.append("text")
             .attr("class", "status-badge link-badge")
@@ -774,9 +918,6 @@ export function startMap(container, onPick) {
     updateLinkPositions();
     applyFilter();
     applyHighlights();
-
-    // Re-center on initial render with comfortable readable scale
-    setTimeout(() => resetZoom(false), 150);
   }
 
   function positionTooltip(event) {
@@ -856,40 +997,42 @@ export function startMap(container, onPick) {
     select(path) {
       selected = path || "";
       nodesLayer
-        .selectAll(".node-concept")
+        .selectAll(".node-concept, .graph-node")
         .classed("selected", (d) => d.path === selected);
       applyHighlights();
     },
 
     /**
-     * Filter or highlight nodes by type or search query
-     * @param {{ type?: string, query?: string }} filter
+     * Filter or highlight nodes by topic tag or search query.
+     * @param {{ tag?: string, query?: string }} filter
      */
     setFilter(filter = {}) {
-      filterType = (filter.type || "").toLowerCase().trim();
-      filterQuery = (filter.query || "").toLowerCase().trim();
+      const tagChanged = filter.tag !== undefined;
+      if (tagChanged) filterTag = String(filter.tag || "").toLowerCase().trim();
+      if (filter.query !== undefined) filterQuery = String(filter.query || "").toLowerCase().trim();
       applyFilter();
+      if (tagChanged) frameSelection(true);
     },
 
     /**
      * Switch layout mode: "organic" (radial force constellation) or "tree" (columnar)
-     * @param {"organic" | "tree"} mode
+     * @param {"graph" | "organic" | "tree"} mode
      */
     setLayoutMode(mode) {
       if (mode && mode !== layoutMode) {
         layoutMode = mode;
         renderGraph();
-        setTimeout(() => zoomToFit(true), 150);
+        setTimeout(() => frameSelection(true), 150);
       }
     },
 
     start() {
       renderGraph();
-      setTimeout(() => resetZoom(true), 200);
+      setTimeout(() => zoomToFit(true), 200);
     },
 
     stop() {
-      // Clean up if needed
+      stopForce();
     },
   };
 }

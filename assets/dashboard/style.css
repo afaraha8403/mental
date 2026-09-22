@@ -1205,6 +1205,55 @@ main.map-mode {
   cursor: grabbing;
 }
 
+.graph-link {
+  stroke: var(--muted, #64748b);
+  stroke-opacity: 0.45;
+  stroke-width: 1;
+}
+
+.graph-link.dimmed {
+  stroke-opacity: 0.08;
+}
+
+.graph-link.highlighted {
+  stroke: var(--accent, #38bdf8);
+  stroke-opacity: 0.9;
+  stroke-width: 1.5;
+}
+
+.graph-node circle {
+  stroke: var(--bg, #0f172a);
+  stroke-width: 1;
+}
+
+.graph-node.dimmed {
+  opacity: 0.15;
+}
+
+.graph-node.selected circle,
+.graph-node.linked-highlight circle {
+  stroke: var(--accent, #38bdf8);
+  stroke-width: 2;
+}
+
+.graph-label {
+  font-size: 11px;
+  fill: var(--text, #e2e8f0);
+  pointer-events: none;
+  opacity: 0;
+}
+
+.graph-node:hover .graph-label,
+.graph-label.visible,
+.graph-node.tag .graph-label {
+  opacity: 1;
+}
+
+.graph-node.tag .graph-label {
+  font-size: 13px;
+  font-weight: 650;
+}
+
 /* Floating Zoom & Fit Controls */
 .map-controls {
   position: absolute;

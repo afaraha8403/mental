@@ -90,10 +90,10 @@ mental show <path> --json
 mental park --resume "…" --via cursor --json
 mental handoff --title "…" --resume "…" --via cursor --json
 mental journal --title "…" --body "…" --resume "…" --against PLAN.md --via cursor --json
-mental attention --title "…" --kind direction --status open --via cursor --json
-mental attention --title "…" --kind thread --status later --via cursor --json
-mental decide --title "…" --body "…" --status open --via cursor --json
-mental note --title "…" --json
+mental attention --title "…" --kind direction --status open --tag continuity --via cursor --json
+mental attention --title "…" --kind thread --status later --tag continuity --via cursor --json
+mental decide --title "…" --body "…" --status open --tag continuity --via cursor --json
+mental note --title "…" --tag continuity --json
 mental backup --out <dir> --json
 mental restore --from <dir> --json
 ```
@@ -208,7 +208,7 @@ future work, or is explicitly deferred. A rejected or abandoned approach
 constrains the future (do not retry it): record a Decision titled with the words
 a later agent will search (`Do not retry WEBKIT_DISABLE_COMPOSITING`), with
 `--body` why it died. Do not bury that in a journal section. Create requires
-`--body`; same `--title` without `--body` updates.
+`--body` and `--tag` (1–3 short slugs). Reuse a slug a later `mental list --tag` would find. Same `--title` without `--body` updates; omit `--tag` on update so existing tags stay. If `mental doctor` warns `untagged`, pass `--tag` on an update of that title. Do not pass `--tag` on park or journal.
 
 - `open`: options require a user decision.
 - `deferred`: intentionally parked; state what it awaits.
@@ -216,8 +216,8 @@ a later agent will search (`Do not retry WEBKIT_DISABLE_COMPOSITING`), with
 - `superseded`: preserve the file and link the replacement.
 
 ```text
-mental decide --title "…" --body "…" --status open --json
-mental decide --title "…" --body "…" --status decided --json
+mental decide --title "…" --body "…" --status open --tag continuity --json
+mental decide --title "…" --status decided --json
 ```
 
 Same `--title` updates the existing file (paths are identities). `--path` targets a specific file.
@@ -243,9 +243,9 @@ On every write, pass `--via cursor` (or `claude-code`, `copilot`, `codex`,
 or machine name.
 
 ```text
-mental attention --title "…" --kind direction --status open --from "Tom" --via cursor --json
-mental attention --title "…" --kind thread --status later --via cursor --json
-mental attention --title "…" --kind verify --status open --via cursor --json
+mental attention --title "…" --kind direction --status open --from "Tom" --tag continuity --via cursor --json
+mental attention --title "…" --kind thread --status later --tag continuity --via cursor --json
+mental attention --title "…" --kind verify --status open --tag continuity --via cursor --json
 mental attention --title "…" --status resolved --json
 ```
 
@@ -254,7 +254,7 @@ to save future investigation. If deleting the note would not cost future time,
 do not write it. Never use `note` for meeting leftovers. Never use `note` for "for later".
 
 ```text
-mental note --title "…" --json
+mental note --title "…" --tag continuity --json
 ```
 
 **Transcript / meeting dump:** extract residue (and 0–2 real decisions). Never

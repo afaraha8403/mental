@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mental, initRepo, tempHome, gitEnv } from "./helpers.mjs";
 import { stringifyFrontmatter } from "../bin/lib/okf.mjs";
@@ -103,11 +103,13 @@ test("list --kind and description; search --kind", () => {
       "direction",
       "--from",
       "Tom",
+      "--tag",
+      "topic",
     ]).status,
     0,
   );
   assert.equal(
-    mental(home, root, ["attention", "--json", "--title", "YAML envelope worry", "--kind", "concern"]).status,
+    mental(home, root, ["attention", "--json", "--title", "YAML envelope worry", "--kind", "concern", "--tag", "topic"]).status,
     0,
   );
   const note = mental(home, root, [
@@ -119,6 +121,8 @@ test("list --kind and description; search --kind", () => {
     "Identity lives in bindings.json",
     "--body",
     "Do not use the folder path as id.",
+    "--tag",
+    "topic",
   ]);
   assert.equal(note.status, 0, note.stderr || note.stdout);
 
@@ -142,7 +146,7 @@ test("list --kind and description; search --kind", () => {
 test("show --json includes backlinks from other concepts", () => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const d = mental(home, root, ["decide", "--json", "--title", "Chosen approach", "--body", "We stay on CLI JSON."]);
+  const d = mental(home, root, ["decide", "--json", "--title", "Chosen approach", "--body", "We stay on CLI JSON.", "--tag", "topic"]);
   assert.equal(d.status, 0, d.stderr || d.stdout);
   const path = JSON.parse(d.stdout).data.path;
   const n = mental(home, root, [
@@ -152,6 +156,8 @@ test("show --json includes backlinks from other concepts", () => {
     "See the decision",
     "--body",
     `Follow [${path}](${path}).`,
+    "--tag",
+    "topic",
   ]);
   assert.equal(n.status, 0, n.stderr || n.stdout);
 
@@ -168,8 +174,8 @@ test("MCP list tool and search type filter; tool JSON is compact", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   mental(home, root, ["journal", "--json", "--title", "MCP retrieval seed", "--resume", "Continue"]);
-  mental(home, root, ["decide", "--json", "--title", "MCP filter decision", "--body", "Keep typed filters."]);
-  mental(home, root, ["note", "--json", "--title", "MCP filter note", "--body", "A note about filters."]);
+  mental(home, root, ["decide", "--json", "--title", "MCP filter decision", "--body", "Keep typed filters.", "--tag", "topic"]);
+  mental(home, root, ["note", "--json", "--title", "MCP filter note", "--body", "A note about filters.", "--tag", "topic"]);
 
   const listed = handle({ jsonrpc: "2.0", id: 2, method: "tools/list" }, {});
   assert.ok(listed.result.tools.some((t) => t.name === "list"));
@@ -277,11 +283,13 @@ test("search --any ORs tokens; Decision ranks above Journal", () => {
       "Keep RankBoostToken as the signal",
       "--body",
       "RankBoostToken is the decision, not a journal aside.",
+      "--tag",
+      "topic",
     ]).status,
     0,
   );
   assert.equal(
-    mental(home, root, ["note", "--json", "--title", "OverlayOnlyToken fact", "--body", "OverlayOnlyToken in a note."]).status,
+    mental(home, root, ["note", "--json", "--title", "OverlayOnlyToken fact", "--body", "OverlayOnlyToken in a note.", "--tag", "topic"]).status,
     0,
   );
 
@@ -302,8 +310,8 @@ test("MCP search q array is a union", () => {
   const home = tempHome();
   const { root } = initRepo(home);
   mental(home, root, ["journal", "--json", "--title", "MCP retrieval seed", "--resume", "Continue"]);
-  mental(home, root, ["decide", "--json", "--title", "MCP filter decision", "--body", "Keep typed filters."]);
-  mental(home, root, ["note", "--json", "--title", "UUID fact", "--body", "IdentityUuidToken lives here."]);
+  mental(home, root, ["decide", "--json", "--title", "MCP filter decision", "--body", "Keep typed filters.", "--tag", "topic"]);
+  mental(home, root, ["note", "--json", "--title", "UUID fact", "--body", "IdentityUuidToken lives here.", "--tag", "topic"]);
   const ctx = { cwd: root, home, env: gitEnv(home), dir: null };
 
   const listed = handle({ jsonrpc: "2.0", id: 2, method: "tools/list" }, {});
@@ -315,5 +323,77 @@ test("MCP search q array is a union", () => {
   assert.equal(union.body.data.op, "or");
   assert.ok(union.body.data.hits.some((h) => h.type === "Decision"));
   assert.ok(union.body.data.hits.some((h) => /IdentityUuidToken/.test(h.snippet || h.title || "")));
+});
+
+test("decide --tag round-trips, omit-on-update keeps tags, and a fourth tag is usage", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const seeded = mental(home, root, ["journal", "--json", "--title", "Seed tags", "--resume", "Continue"]);
+  assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
+  const bundle = JSON.parse(seeded.stdout).data.root;
+
+  const untouched = join(bundle, "notes/untouched.md");
+  mkdirSync(join(bundle, "notes"), { recursive: true });
+  const untouchedBody = stringifyFrontmatter(
+    { type: "Note", title: "Leave me", status: "active", tags: ["journal"] },
+    "do not rewrite\n",
+  );
+  writeFileSync(untouched, untouchedBody);
+
+  const created = mental(home, root, [
+    "decide",
+    "--json",
+    "--title",
+    "Mind map is dots",
+    "--body",
+    "Files stay the nodes.",
+    "--tag",
+    "Mind Map, Receipt",
+  ]);
+  assert.equal(created.status, 0, created.stderr || created.stdout);
+  const path = JSON.parse(created.stdout).data.path;
+  const shown = JSON.parse(mental(home, root, ["show", path, "--json"]).stdout);
+  assert.deepEqual(shown.data.frontmatter.tags, ["mind-map", "receipt"]);
+
+  const listed = JSON.parse(mental(home, root, ["list", "--json", "--tag", "mind-map"]).stdout);
+  assert.ok(listed.data.items.some((item) => item.path === path));
+
+  const schema = JSON.parse(mental(home, root, ["schema", "decide", "--json"]).stdout);
+  assert.ok(schema.data.command.flags.some((flag) => flag.name === "tag"));
+
+  const updated = mental(home, root, ["decide", "--json", "--title", "Mind map is dots", "--status", "decided"]);
+  assert.equal(updated.status, 0, updated.stderr || updated.stdout);
+  const kept = JSON.parse(mental(home, root, ["show", path, "--json"]).stdout);
+  assert.deepEqual(kept.data.frontmatter.tags, ["mind-map", "receipt"]);
+
+  const replaced = mental(home, root, ["decide", "--json", "--title", "Mind map is dots", "--tag", "receipt"]);
+  assert.equal(replaced.status, 0, replaced.stderr || replaced.stdout);
+  const next = JSON.parse(mental(home, root, ["show", path, "--json"]).stdout);
+  assert.deepEqual(next.data.frontmatter.tags, ["receipt"]);
+
+  const bad = mental(home, root, [
+    "decide",
+    "--json",
+    "--title",
+    "Too many tags",
+    "--body",
+    "no",
+    "--tag",
+    "one,two,three,four",
+  ]);
+  assert.equal(bad.status, 2);
+
+  const missing = mental(home, root, [
+    "decide",
+    "--json",
+    "--title",
+    "No topic",
+    "--body",
+    "create must name a tag",
+  ]);
+  assert.equal(missing.status, 2);
+  assert.match(missing.stdout, /create requires --tag/);
+
+  assert.equal(readFileSync(untouched, "utf8"), untouchedBody);
 });
 

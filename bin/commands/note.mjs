@@ -2,7 +2,7 @@
  * `mental note` — scaffold a durable note (only if it will save future time).
  */
 import { resolveBundle } from "../lib/resolve.mjs";
-import { bundleName, ensureSkeleton, writeNote } from "../lib/okf.mjs";
+import { bundleName, ensureSkeleton, missingCreateTag, tagsFromFlag, writeNote } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 
@@ -26,6 +26,15 @@ export function cmdNote(args, io = {}) {
     });
     return EXIT_USAGE;
   }
+  const tagged = tagsFromFlag(typeof args.flags?.tag === "string" ? args.flags.tag : null);
+  if (!tagged.ok) {
+    printResult(stdout, args, false, undefined, { code: "usage", message: tagged.message });
+    return EXIT_USAGE;
+  }
+  if (tagged.tags === undefined) {
+    printResult(stdout, args, false, undefined, missingCreateTag("note"));
+    return EXIT_USAGE;
+  }
   const resolved = resolveBundle({
     cwd: args.cwd ?? process.cwd(),
     home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
@@ -47,6 +56,7 @@ export function cmdNote(args, io = {}) {
       description: typeof args.flags?.description === "string" ? args.flags.description : "",
       body: typeof args.flags?.body === "string" ? args.flags.body : "",
       slug: typeof args.flags?.slug === "string" ? args.flags.slug : undefined,
+      tags: tagged.tags,
     });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);

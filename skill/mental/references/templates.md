@@ -159,7 +159,7 @@ it would cost a reload. No checklist.
 type: Attention
 title: <short residue>
 description: <one-line summary>
-tags: []
+tags: [<topic>]
 timestamp: <ISO-8601>
 status: open        # open | later | resolved
 kind: direction     # direction | concern | thread | verify

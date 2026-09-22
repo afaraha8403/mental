@@ -69,6 +69,8 @@ test("decide --json scaffolds an open decision that status lists", () => {
     "open",
     "--body",
     "Identity lives in bindings.json, not the folder path.",
+    "--tag",
+    "topic",
   ]);
   assert.equal(d.status, 0, d.stderr || d.stdout);
   const body = JSON.parse(d.stdout);
@@ -98,6 +100,8 @@ test("decide --status decided updates by title and drops from heartbeat", () => 
     "open",
     "--body",
     "Identity lives in bindings.json, not the folder path.",
+    "--tag",
+    "topic",
   ]);
   const closed = mental(home, root, [
     "decide",
@@ -135,6 +139,8 @@ test("decide --path updates the named file; missing path is not-found", () => {
       "open",
       "--body",
       "Open until remap UX is picked.",
+      "--tag",
+      "topic",
     ]).stdout,
   );
   const path = created.data.path;

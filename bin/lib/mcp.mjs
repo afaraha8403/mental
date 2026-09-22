@@ -125,6 +125,7 @@ function runTool(name, args, ctx) {
         via: args.via,
         body: args.body,
         against: args.against,
+        tag: args.tag,
       },
     });
   }
@@ -138,13 +139,14 @@ function runTool(name, args, ctx) {
         description: args.description,
         body: args.body,
         via: args.via,
+        tag: args.tag,
       },
     });
   }
   if (name === "note") {
     return capture(cmdNote, {
       ...base,
-      flags: { title: args.title, status: args.status, description: args.description, body: args.body },
+      flags: { title: args.title, status: args.status, description: args.description, body: args.body, tag: args.tag },
     });
   }
   if (name === "park") {

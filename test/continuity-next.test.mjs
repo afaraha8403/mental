@@ -292,11 +292,11 @@ test("heartbeat --json has counts, no notes dump", () => {
     "journal",
   );
   parseOk(
-    mental(home, root, ["attention", "--json", "--title", "A residue", "--kind", "concern"]),
+    mental(home, root, ["attention", "--json", "--title", "A residue", "--kind", "concern", "--tag", "topic"]),
     "attention",
   );
-  parseOk(mental(home, root, ["decide", "--json", "--title", "An open fork", "--body", "Needs a user pick."]), "decide");
-  parseOk(mental(home, root, ["note", "--json", "--title", "A durable fact", "--body", "NOTE_BODY_MUST_NOT_APPEAR"]), "note");
+  parseOk(mental(home, root, ["decide", "--json", "--title", "An open fork", "--body", "Needs a user pick.", "--tag", "topic"]), "decide");
+  parseOk(mental(home, root, ["note", "--json", "--title", "A durable fact", "--body", "NOTE_BODY_MUST_NOT_APPEAR", "--tag", "topic"]), "note");
 
   const hb = parseOk(mental(home, root, ["heartbeat", "--json"]), "heartbeat counts");
   assert.equal(typeof hb.attentionCount, "number");
@@ -334,7 +334,7 @@ test("pulse writes watermark; later attention increments pulse.delta.attention",
   assert.equal(typeof first.delta.since, "string");
 
   parseOk(
-    mental(home, root, ["attention", "--json", "--title", "New residue after pulse", "--kind", "thread"]),
+    mental(home, root, ["attention", "--json", "--title", "New residue after pulse", "--kind", "thread", "--tag", "topic"]),
     "attention after pulse",
   );
   const second = parseOk(mental(home, root, ["pulse", "--json"]), "pulse #2");
@@ -506,6 +506,62 @@ test("doctor warns stale decision; exit 0 if only warns", () => {
   assert.match(check.message, /Old fork|14/);
 });
 
+test("doctor warns files with no topic tag; a tagged file stays quiet", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  parseOk(mental(home, root, ["install", "--json"]), "install");
+  const where = seedBundle(home, root, "Tagged seed");
+  writeOkf(
+    where.root,
+    "decisions/2026-09-22-no-topic.md",
+    {
+      type: "Decision",
+      title: "No topic",
+      description: "No topic",
+      tags: [],
+      timestamp: "2026-09-22T12:00:00.000Z",
+      status: "decided",
+    },
+    "# No topic\n\nuntagged\n",
+  );
+  writeOkf(
+    where.root,
+    "attention/2026-09-22-missing-tags.md",
+    {
+      type: "Attention",
+      title: "Missing tags",
+      description: "Missing tags",
+      timestamp: "2026-09-22T12:00:00.000Z",
+      status: "open",
+      kind: "concern",
+    },
+    "# Missing tags\n\nuntagged\n",
+  );
+  writeOkf(
+    where.root,
+    "notes/already-tagged.md",
+    {
+      type: "Note",
+      title: "Already tagged",
+      description: "Already tagged",
+      tags: ["mind-map"],
+      timestamp: "2026-09-22T12:00:00.000Z",
+      status: "active",
+    },
+    "# Already tagged\n\nkept\n",
+  );
+  const r = mental(home, root, ["doctor", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const data = JSON.parse(r.stdout).data;
+  const check = doctorCheck(data, "untagged");
+  assert.equal(check.ok, false);
+  assert.equal(check.level, "warn");
+  assert.match(check.message, /decisions\/2026-09-22-no-topic\.md/);
+  assert.match(check.message, /attention\/2026-09-22-missing-tags\.md/);
+  assert.doesNotMatch(check.message, /already-tagged/);
+  assert.doesNotMatch(check.message, /journal\//);
+});
+
 test("doctor warns decision budget; exit 0 if only warns", () => {
   const home = tempHome();
   const { root } = initRepo(home);
@@ -565,7 +621,7 @@ test("heartbeat payload stays small (no notes array)", () => {
   const { root } = initRepo(home);
   seedBundle(home, root, "Small payload");
   for (let i = 1; i <= 5; i++) {
-    parseOk(mental(home, root, ["note", "--json", "--title", `Fact ${i}`, "--body", `long note body ${i} `.repeat(40)]), `note ${i}`);
+    parseOk(mental(home, root, ["note", "--json", "--title", `Fact ${i}`, "--body", `long note body ${i} `.repeat(40), "--tag", "topic"]), `note ${i}`);
   }
   const r = mental(home, root, ["heartbeat", "--json"]);
   const body = JSON.parse(r.stdout);

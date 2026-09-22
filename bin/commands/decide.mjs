@@ -8,6 +8,8 @@ import {
   bundleName,
   ensureSkeleton,
   findDecision,
+  missingCreateTag,
+  tagsFromFlag,
   updateDecision,
   writeDecision,
 } from "../lib/okf.mjs";
@@ -91,6 +93,16 @@ export function cmdDecide(args, io = {}) {
     return EXIT_USAGE;
   }
 
+  const tagged = tagsFromFlag(flagString(args.flags, "tag"));
+  if (!tagged.ok) {
+    printResult(stdout, args, false, undefined, { code: "usage", message: tagged.message });
+    return EXIT_USAGE;
+  }
+  if (!existing && tagged.tags === undefined) {
+    printResult(stdout, args, false, undefined, missingCreateTag("decide"));
+    return EXIT_USAGE;
+  }
+
   try {
     const written = existing
       ? updateDecision(resolved.data.root, existing.path, {
@@ -99,6 +111,7 @@ export function cmdDecide(args, io = {}) {
           description: flagString(args.flags, "description") || undefined,
           body: body || undefined,
           via: viaParsed.via,
+          tags: tagged.tags,
         })
       : writeDecision(resolved.data.root, {
           title,
@@ -107,6 +120,7 @@ export function cmdDecide(args, io = {}) {
           body,
           via: viaParsed.via,
           slug: flagString(args.flags, "slug") || undefined,
+          tags: tagged.tags,
         });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
