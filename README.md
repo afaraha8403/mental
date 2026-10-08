@@ -248,7 +248,11 @@ mental option jev off              # mute (also silences the reminder)
 mental option jev budget 200000    # optional cap on input tokens per day (budget off to clear)
 ```
 
-Status (`mental option jev`) shows today's requests and tokens. Spend is tracked locally in `jev-usage.json` (counts only, no content). Requests are split to stay under the API's token limits, and cached answers are dropped when the model version changes.
+Status (`mental option jev`) shows today's requests and tokens.
+
+**In `mental doctor`.** With a key, plain `mental doctor` also runs content checks, all warn-only (exit code unchanged): `jev-stale` (open residue that looks resolved or obsolete), `jev-decisions` (decisions that may contradict each other), `jev-handoff` (latest journal `Resume:` line missing or vague), `jev-untagged` (suggested topic per untagged file; never written), `jev-secrets` (files that may hold credentials; paths only, and values are redacted before anything is sent). Personal-slice notes are never sent. `mental doctor --offline` skips them; spend counts toward the daily budget.
+
+Spend is tracked locally in `jev-usage.json` (counts only, no content). Requests are split to stay under the API's token limits, and cached answers are dropped when the model version changes.
 
 Without a key, `heartbeat` and a zero-hit `search` occasionally (at most every 3 days) tell the agent Jev exists so it can mention it. `MENTAL_NO_HINTS=1` silences that.
 

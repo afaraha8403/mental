@@ -26,6 +26,8 @@ import { checkForUpdate, cmpSemver, updateHint } from "../lib/update.mjs";
 import { hostPluginChecks } from "../lib/host-plugins.mjs";
 import { DECISION_HEARTBEAT_CAP, listOpenDecisions, ensureSkeleton, latestJournalHandoff, localDate } from "../lib/okf.mjs";
 import { parseDays, scanStale } from "../lib/stale.mjs";
+import { getJev } from "../lib/jev.mjs";
+import { deepChecks } from "../lib/doctor-deep.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { FEATURES, listOptionals, loadConfig, markOptionalSeen, isFeatureOn } from "../lib/config.mjs";
 import { formatOptionalsTable } from "./option.mjs";
@@ -97,7 +99,7 @@ function applySafeDoctorFixes({ home, cwd, env }) {
   };
 }
 
-export function cmdDoctor(args, io = {}) {
+export async function cmdDoctor(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const cwd = args.cwd ?? process.cwd();
@@ -328,6 +330,23 @@ export function cmdDoctor(args, io = {}) {
           `${openN} open/deferred decisions (heartbeat cap ${DECISION_HEARTBEAT_CAP})`,
           "warn",
         ),
+      );
+    }
+  }
+
+  if (home && !args.flags?.offline) {
+    const jev = getJev(home, env);
+    if (jev) {
+      const bundle = resolved.ok && isBundleRoot(resolved.data) ? resolved.data : null;
+      checks.push(
+        ...(await deepChecks({
+          jev,
+          home,
+          env,
+          root: bundle?.root ?? null,
+          slice: Boolean(bundle) && bundle.mode !== "personal",
+          days: parseDays(args.flags?.days),
+        })),
       );
     }
   }

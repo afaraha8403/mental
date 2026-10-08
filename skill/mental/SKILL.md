@@ -286,7 +286,9 @@ Mental CLI is not only a start/finish ritual. Step back in cheaply whenever:
   enable it yourself; only the user does. With Jev on, writes may return
   `data.similar` (update that file instead of adding a near-duplicate) and
   `show` may return `suggestedLinks` (`mental relink <path>` dry-runs; apply
-  only if the user agrees).
+  only if the user agrees). `mental doctor` adds `jev-*` warnings (stale
+  residue, decision conflicts, vague handoff, untagged topics, secrets); they
+  are advice only, so surface them but never "fix" them silently.
 - **Approach change** — before abandoning or switching an approach, search that
   name then `mental show <path> --json` for the hit (backlinks are on `show`).
   If the switch constrains the future, record it with `mental decide` at once.
