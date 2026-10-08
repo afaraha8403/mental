@@ -60,7 +60,8 @@ export function buildVocab(concepts) {
 export async function proposeTags({ jev, root, path, limit = DEFAULT_LIMIT }) {
   const all = subjects(root);
   const vocab = buildVocab(all);
-  const names = [...vocab.existing, ...vocab.bootstrap];
+  // Clef allows at most 255 options per choice; "none" takes one.
+  const names = [...vocab.existing, ...vocab.bootstrap].slice(0, 200);
   const pool = all.filter((c) => c.tags.length === 0 && (!path || c.path === path));
   const targets = pool.slice(0, limit);
   const out = { ok: true, vocab, untagged: pool.length, proposals: [] };

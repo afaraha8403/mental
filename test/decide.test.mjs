@@ -80,6 +80,98 @@ test("provider batch caps respect documented per-request limits", () => {
   assert.equal(PROVIDER_INFO.cloudflare.batchMax, 64);
 });
 
+const res = (json) => ({ status: 200, ok: true, headers: { get: () => null }, json: async () => json });
+
+function bigQuestions(n) {
+  const qs = {};
+  for (let i = 0; i < n; i++) qs[`m${i}`] = noul(`Is item ${i} relevant?`, { true: "yes", false: "no" });
+  qs.pick = choice("Which kind?", { fix: "repair", feat: "new", none: null });
+  qs.rate = score("How urgent?", ["low", "mid", "high"]);
+  return qs;
+}
+
+test("openai end to end: every request obeys the documented limits and doc-shaped answers parse", async () => {
+  const home = tempHome();
+  setDecideConfig(home, { set: { provider: "openai", field: "key", value: KEY } });
+  const sizes = [];
+  const fetch = async (url, o) => {
+    assert.equal(url, "https://api.openai.com/v1/decisions");
+    const body = JSON.parse(o.body);
+    assert.equal(body.model, "gpt-6-luna");
+    assert.equal(typeof body.input, "string");
+    assert.ok(body.questions.length >= 1 && body.questions.length <= 10, `got ${body.questions.length} questions`);
+    assert.equal(new Set(body.questions.map((q) => q.name)).size, body.questions.length);
+    sizes.push(body.questions.length);
+    const answers = body.questions.map((q) => {
+      if (q.type === "predicate") return { type: "predicate", name: q.name, probability: 0.9 };
+      if (q.type === "choice") {
+        assert.ok(q.choices.every((c) => typeof c.value === "string"));
+        return { type: "choice", name: q.name, choice: q.choices[0].value, probabilities: q.choices.map((c) => ({ value: c.value, probability: 1 / q.choices.length })), confidence: 0.8 };
+      }
+      assert.equal(q.type, "score");
+      assert.ok(q.levels.length >= 2 && q.levels.every((l) => typeof l.label === "string"));
+      return { type: "score", name: q.name, score: 1.4, probabilities: q.levels.map((l, i) => ({ value: i, label: l.label, probability: 1 / q.levels.length })), confidence: 0.6 };
+    });
+    return res({ answers });
+  };
+  const jev = getJev(home, {}, { fetch });
+  const qs = bigQuestions(23);
+  const out = await jev.decide("some state", qs);
+  assert.equal(out.ok, true, out.reason);
+  assert.equal(Object.keys(out.answers).length, Object.keys(qs).length);
+  assert.equal(out.answers.m0.p, 0.9);
+  assert.equal(out.answers.pick.choice, "fix");
+  assert.equal(out.answers.rate.score, 1.4);
+  assert.ok(sizes.length >= 3);
+});
+
+test("cloudflare end to end: requests satisfy the Clef input schema and doc-shaped answers parse", async () => {
+  const home = tempHome();
+  setDecideConfig(home, { set: { provider: "cloudflare", field: "key", value: KEY } });
+  setDecideConfig(home, { set: { provider: "cloudflare", field: "accountId", value: "acct1" } });
+  setDecideConfig(home, { set: { provider: "cloudflare", field: "model", value: "clef-flash" } });
+  const fetch = async (url, o) => {
+    assert.equal(url, "https://api.cloudflare.com/client/v4/accounts/acct1/ai/run/@cf/cloudflare/clef-flash");
+    const body = JSON.parse(o.body);
+    assert.match(body.model, /^\s*(clef|clef-flash)\s*$/);
+    assert.ok(body.state !== undefined);
+    const ids = Object.keys(body.questions);
+    assert.ok(ids.length >= 1 && ids.length <= 64);
+    const answers = {};
+    for (const id of ids) {
+      assert.match(id, /^[A-Za-z0-9_.-]{1,100}$/);
+      const q = body.questions[id];
+      assert.ok(typeof q.instructions === "string" && q.instructions.length > 0);
+      if (q.type === "noul") {
+        assert.ok(q.criteria === undefined || (typeof q.criteria === "object" && !Array.isArray(q.criteria)));
+        answers[id] = { type: "noul", noul: 0.7 };
+      } else if (q.type === "choice") {
+        const opts = Object.keys(q.criteria);
+        assert.ok(opts.length >= 2 && opts.length <= 255 && opts.every(Boolean));
+        answers[id] = { type: "choice", choice: opts[1], probabilities: Object.fromEntries(opts.map((k) => [k, 1 / opts.length])), confidence: 0.5 };
+      } else {
+        assert.equal(q.type, "score");
+        assert.ok(Array.isArray(q.criteria) && q.criteria.length >= 2 && q.criteria.length <= 10);
+        answers[id] = {
+          type: "score",
+          score: 0.5,
+          legend: Object.fromEntries(q.criteria.map((l, i) => [String(i), l])),
+          probabilities: Object.fromEntries(q.criteria.map((_, i) => [String(i), 1 / q.criteria.length])),
+          confidence: 0.4,
+        };
+      }
+    }
+    return res({ success: true, errors: [], result: { model: "clef-flash", answers, usage: { input_tokens: 321, output_tokens: 4 } } });
+  };
+  const jev = getJev(home, {}, { fetch });
+  const qs = bigQuestions(5);
+  const out = await jev.decide({ title: "structured state", n: 1 }, qs);
+  assert.equal(out.ok, true, out.reason);
+  assert.equal(out.answers.m0.p, 0.7);
+  assert.equal(out.answers.pick.choice, "feat");
+  assert.equal(out.answers.rate.score, 0.5);
+});
+
 test("typesafe and custom send the native shape with original ids", () => {
   for (const p of ["typesafe", "custom"]) {
     const built = buildRequest(settings(p, { url: "https://example.test/x" }), "st", QS);
