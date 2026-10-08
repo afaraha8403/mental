@@ -346,7 +346,7 @@ test("heartbeat argv and stdout parsing", () => {
 });
 
 /** A fake engine: collects hooks, records `$` calls, runs timers by hand. */
-function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dashId = null } = {}) {
+function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dashId = null, submitFails = false } = {}) {
   const hooks = [];
   const calls = [];
   const timers = [];
@@ -393,7 +393,13 @@ function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dash
       close: async (args) => calls.push(["close", args]),
       toast: (text) => calls.push(["toast", text]),
     },
-    prompt: { fill: async (args) => (calls.push(["fill", args]), { isFilled: true }) },
+    prompt: {
+      fill: async (args) => (calls.push(["fill", args]), { isFilled: true }),
+      submit: async (args) => {
+        if (submitFails) throw new Error("not idle");
+        calls.push(["submit", args]);
+      },
+    },
   };
   const matches = (h, event, e) => {
     if (h.event !== event) return false;
@@ -504,7 +510,9 @@ test("Claude Desktop: footer opener, rich card pane, silent /mental, remembered 
   await eng.fire("tool.call", { tool: "Edit", file_path: "/repo/a.mjs" }, { text: "ok" });
   const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48, scroll: { bodyRows: 40 } } });
   const paneKeys = assertValidTree(pane);
-  assert.ok(paneKeys.has("park") && paneKeys.has("handoff") && paneKeys.has("refresh"));
+  assert.ok(paneKeys.has("park-btn") && paneKeys.has("handoff-btn") && paneKeys.has("refresh-btn"));
+  assert.match(textOf(pane), /save my place/, "each button says what it does");
+  assert.ok(paneKeys.has("needs-ask-btn"), "needs card comes with an ask button");
   const svgs = [];
   walk(pane, (n) => n.type === "Svg" && svgs.push(n));
   assert.ok(svgs.length >= 4, "hero, session, needs, files cards");
@@ -516,8 +524,20 @@ test("Claude Desktop: footer opener, rich card pane, silent /mental, remembered 
   for (const x of svgs) {
     assert.equal(x.props.isInteractive, undefined, "image mode keeps the logo");
     assert.equal(typeof x.props.width, "number");
-    assert.equal(typeof x.props.height, "number");
+    assert.equal(x.props.height, undefined, "height left to the slot so cards keep their ratio");
   }
+
+  // Park sends a real message; if the host refuses, it falls back to filling the prompt.
+  let park;
+  walk(pane, (n) => {
+    if (n.type === "Button" && n.props.key === "park-btn") park = n.props.onPress;
+  });
+  park();
+  await eng.flush();
+  const sent = eng.calls.find((c) => c[0] === "submit");
+  assert.equal(sent[1].asUser, true);
+  assert.match(sent[1].text, /Park this session/);
+  assert.ok(eng.calls.some((c) => c[0] === "toast" && /park/i.test(c[1])));
 
   // Start dashboard: launches the helper detached, then re-probes.
   let startDash;
@@ -570,7 +590,7 @@ test("Claude Desktop: clock buttons and an already-serving dashboard", async () 
   await eng.flush();
   const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
   const keys = assertValidTree(pane);
-  assert.ok(keys.has("track-stop") && !keys.has("track-start"), "running clock offers stop");
+  assert.ok(keys.has("track-stop-btn") && !keys.has("track-start-btn"), "running clock offers stop");
   const sources = [];
   walk(pane, (n) => n.type === "Svg" && sources.push(n.props.source));
   assert.match(sources.join(""), /Clock running/);
@@ -584,9 +604,46 @@ test("Claude Desktop: clock buttons and an already-serving dashboard", async () 
   const opened = eng.calls.find((c) => c[0] === "run" && c[1][2] === "open");
   assert.deepEqual(opened[1].slice(1), ["/plugins/mental/claude-mod/dash.mjs", "open", "http://localhost:3847/"]);
   assert.ok(!eng.calls.some((c) => c[0] === "run" && c[1][2] === "start"), "never starts a second server");
-  presses["track-stop"].onPress();
+  presses["track-stop-btn"].onPress();
   await eng.flush();
-  assert.ok(eng.calls.some((c) => c[0] === "fill" && /Stop the Mental time clock/.test(c[1].text)));
+  assert.ok(eng.calls.some((c) => c[0] === "submit" && /Stop the Mental time clock/.test(c[1].text)));
+
+  const eng2 = fakeEngine({ surfaces: ["desktop"], hb: tracked, submitFails: true });
+  await eng2.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng2.flush();
+  await eng2.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
+  await eng2.flush();
+  await eng2.flush();
+  const pane2 = await eng2.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
+  let stop2;
+  walk(pane2, (n) => n.type === "Button" && n.props.key === "track-stop-btn" && (stop2 = n.props.onPress));
+  stop2();
+  await eng2.flush();
+  await eng2.flush();
+  assert.ok(eng2.calls.some((c) => c[0] === "fill" && /Stop the Mental time clock/.test(c[1].text)), "falls back to filling the prompt");
+});
+
+test("Claude Desktop: 'needs you' opens the pane and lights the needs card", async () => {
+  const eng = fakeEngine({ surfaces: ["desktop"] });
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const band = await eng.fire("ui.render", { component: "AbovePrompt", surface: "desktop", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } });
+  let needs;
+  walk(band, (n) => n.type === "Button" && n.props.key === "band-needs" && (needs = n.props.onPress));
+  needs();
+  await eng.flush();
+  await eng.flush();
+  assert.ok(eng.calls.some((c) => c[0] === "open"), "opens the pane when closed");
+  assert.ok(eng.calls.some((c) => c[0] === "toast" && /Needs you/.test(c[1])), "toast names the items");
+  const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
+  const sources = [];
+  walk(pane, (n) => n.type === "Svg" && sources.push(n.props.source));
+  assert.match(sources.join(""), /<animate attributeName="stroke-opacity"/, "needs card pulses");
+  assert.match(sources[1], /needs you/i, "needs card sits right under the hero");
+  // Already open: pressing again flashes without closing.
+  needs();
+  await eng.flush();
+  assert.ok(!eng.calls.some((c) => c[0] === "close"));
 });
 
 test("dashStateOf tells this project's dashboard from another's", async () => {

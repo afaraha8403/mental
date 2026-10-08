@@ -134,11 +134,14 @@ export function fitChars(px, size, mono = false) {
   return Math.max(4, Math.floor(px / (size * (mono ? 0.61 : 0.55))));
 }
 
-/** Card width in CSS px from the pane's column count (the slot shrinks it further if needed). */
+/**
+ * Card width in CSS px from the pane's column count. Cards fill the pane
+ * (less the Box's side padding); the slot shrinks one that comes out wide.
+ */
 export function widthOf(columns) {
   const c = Number(columns) || 0;
   if (!c) return 440;
-  return Math.max(340, Math.min(500, Math.round(c * 7.4)));
+  return Math.max(300, Math.min(960, Math.round((c - 4) * 7.8)));
 }
 
 /** "just now" / "5m ago". */
@@ -482,7 +485,7 @@ export function needsOf(vm) {
  * The "Needs you" card.
  * @returns {{ source: string, height: number, alt: string }}
  */
-export function needsSvg({ vm, now, width: W }) {
+export function needsSvg({ vm, now, width: W, flash = false }) {
   const id = "n";
   const inner = W - PAD * 2;
   const { items, later } = needsOf(vm);
@@ -525,7 +528,18 @@ export function needsSvg({ vm, now, width: W }) {
       body.push(txt(PAD + 14, y, esc(`+ ${items.length - MAX_ITEMS} more`), { size: 12, fill: T.ink3 }));
     }
   }
-  const height = Math.round(y + PAD - 2);
+  let height = Math.round(y + PAD - 2);
+  if (items.length) {
+    body.push(txt(PAD, height + 8, "Tell Claude how to settle these. It closes them in Mental.", { size: 11.5, fill: T.ink3 }));
+    height += 24;
+    const pulse = flash
+      ? `<animate attributeName="stroke-opacity" values="1;0.25;1" dur="1.2s" repeatCount="6"/>`
+      : "";
+    body.unshift(
+      `<rect x="1" y="1" width="${W - 2}" height="${height - 2}" rx="15" fill="${T.amber}" fill-opacity="${flash ? 0.1 : 0.05}"/>`,
+      `<rect x="1" y="1" width="${W - 2}" height="${height - 2}" rx="15" fill="none" stroke="${T.amber}" stroke-width="${flash ? 2 : 1.5}" stroke-opacity="0.85">${pulse}</rect>`,
+    );
+  }
   const alt = items.length
     ? `Needs you: ${items
         .slice(0, MAX_ITEMS)
@@ -801,39 +815,50 @@ export function dashSvg({ width: W, dash = { state: "unknown" } }) {
  * @param {{ Box: Function, Text: Function, Button: Function, Svg: Function }} E
  */
 export function paneDesktop(E, ctx) {
-  const { Box, Button, Svg } = E;
-  const { vm, s, now, columns, updatedAt, cwd, log = [], error = "", dash, theme = "auto" } = ctx;
+  const { Box, Text, Button, Svg } = E;
+  const { vm, s, now, columns, updatedAt, cwd, log = [], error = "", dash, theme = "auto", flash = false } = ctx;
   const width = widthOf(columns);
   const svg = (make) => {
     const built = themed(make, theme);
-    return built ? Svg({ source: built.source, alt: built.alt, width, height: built.height }) : null;
+    return built ? Svg({ source: built.source, alt: built.alt, width }) : null;
   };
   const row = (key, buttons) =>
     buttons.length ? Box({ key, flexDirection: "row", gap: 1, children: buttons }) : null;
+  // One button with a plain-words line beside it saying what it does.
+  const action = (key, label, hint, onPress) =>
+    Box({
+      key,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 2,
+      children: [Button({ key: `${key}-btn`, label, onPress }), Text({ dimColor: true, wrap: "truncate-end", children: [hint] })],
+    });
   const linked = !!vm?.linked;
   const track = linked && vm.track ? vm.track : null;
   const running = !!track && track.runningCount > 0;
   const dashState = dash?.state || "unknown";
+  const hasNeeds = linked && needsOf(vm).items.length > 0;
+  const needs = linked ? svg(() => needsSvg({ vm, now, width, flash })) : null;
   const children = [
     svg(() => heroSvg({ vm, s, now, width, error, updatedAt })),
-    row("actions", [
-      ...(linked
-        ? [
-            Button({ key: "park", label: "◆ Park", onPress: ctx.onPark }),
-            Button({ key: "handoff", label: "⇢ Hand off", onPress: ctx.onHandoff }),
-          ]
-        : []),
-      Button({ key: "refresh", label: "↻ Refresh", onPress: ctx.onRefresh }),
-    ]),
-    linked ? svg(() => needsSvg({ vm, now, width })) : null,
+    hasNeeds ? needs : null,
+    hasNeeds && ctx.onAskNeeds
+      ? action("needs-ask", "? Ask Claude", "go through what needs me, one by one", ctx.onAskNeeds)
+      : null,
+    ...(linked
+      ? [
+          action("park", "◆ Park", "save my place so I can pick this up later", ctx.onPark),
+          action("handoff", "⇢ Hand off", "write notes for the next chat to continue", ctx.onHandoff),
+        ]
+      : []),
+    action("refresh", "↻ Refresh", "re-read Mental now", ctx.onRefresh),
+    hasNeeds ? null : needs,
     svg(() => sessionSvg({ s, now, width })),
     svg(() => trackSvg({ vm, now, width })),
     track
-      ? row("track", [
-          running
-            ? Button({ key: "track-stop", label: "■ Stop clock", onPress: ctx.onTrackStop })
-            : Button({ key: "track-start", label: "▶ Start clock", onPress: ctx.onTrackStart }),
-        ])
+      ? running
+        ? action("track-stop", "■ Stop clock", "stop timing this work", ctx.onTrackStop)
+        : action("track-start", "▶ Start clock", "begin timing this work", ctx.onTrackStart)
       : null,
     svg(() => filesSvg({ s, cwd, width })),
     svg(() => activitySvg({ log, now, width })),
@@ -849,7 +874,7 @@ export function paneDesktop(E, ctx) {
   ].filter(Boolean);
   return Box({
     flexDirection: "column",
-    alignItems: "flex-start",
+    alignItems: "stretch",
     gap: 1,
     paddingX: 2,
     paddingY: 1,

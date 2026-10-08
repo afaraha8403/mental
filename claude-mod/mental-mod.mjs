@@ -26,7 +26,7 @@ import {
   RECEIPT_MS,
 } from "./lib/model.mjs";
 import { bandView, paneView, TABS } from "./lib/views.mjs";
-import { bandDesktop, footerDesktop, paneDesktop, toolRowDesktop } from "./lib/desktop.mjs";
+import { bandDesktop, footerDesktop, needsOf, paneDesktop, toolRowDesktop } from "./lib/desktop.mjs";
 import { toolCardOf } from "./lib/toolcard.mjs";
 
 const PANE_ID = "mental";
@@ -44,10 +44,13 @@ const HEARTBEAT_TIMEOUT_MS = 20_000;
 const STORE_TAB_KEY = "tab";
 const STORE_OPEN_KEY = "open";
 const REOPEN_MS = 800;
+const NEEDS_FLASH_MS = 7000;
 const PARK_PROMPT = "Park this session in Mental";
 const HANDOFF_PROMPT = "Hand off this session in Mental";
 const TRACK_START_PROMPT = "Start the Mental time clock for this work";
 const TRACK_STOP_PROMPT = "Stop the Mental time clock";
+const NEEDS_PROMPT =
+  "In Mental, list everything that needs me right now (open threads, concerns, decisions). Walk me through them one at a time and help me settle each.";
 const DASH_PORT = 3847;
 const DASH_URL = `http://localhost:${DASH_PORT}/`;
 const DASH_TIMEOUT_MS = 8_000;
@@ -137,6 +140,7 @@ export const register = (on) => {
   let isFullscreen = false;
   let isRich = false;
   let bandSeen = false;
+  let flashUntil = 0;
   /** @type {string | null} */
   let projectId = null;
   /** @type {{ state: "running" | "starting" | "stopped" | "other" | "unknown", url: string, since: number }} */
@@ -355,6 +359,35 @@ export const register = (on) => {
     }
   }
 
+  /**
+   * Send a request to Claude as the person's own words, so the agent runs it
+   * now. Falls back to filling the prompt box when the host won't submit.
+   */
+  async function send(text, toast) {
+    try {
+      await host.submit({ text, asUser: true });
+      host.toast(toast);
+    } catch {
+      await fill(text);
+    }
+  }
+
+  /** The band's "needs you": always bring the pane up, and light the card. */
+  async function showNeeds() {
+    if (!host) return;
+    flashUntil = nowOf() + NEEDS_FLASH_MS;
+    if (!isPaneOpen) {
+      isFullscreen = true;
+      await openPane();
+    }
+    const { items } = needsOf(vm);
+    if (items.length) {
+      host.toast(`Needs you: ${items.slice(0, 2).map((x) => `${x.label} — ${x.title}`).join(" · ")}${items.length > 2 ? ` · +${items.length - 2} more` : ""}`);
+    }
+    redraw();
+    host.after(NEEDS_FLASH_MS, () => redraw());
+  }
+
   on("session.start", async ($, e, next) => {
     host = {
       run: (argv, init) => $.process.run(argv, init),
@@ -364,6 +397,7 @@ export const register = (on) => {
       open: (args) => $.ui.open(args),
       close: (args) => $.ui.close(args),
       fill: (args) => $.prompt.fill(args),
+      submit: (args) => $.prompt.submit(args),
       toast: (text) => $.ui.toast(text),
       storeSet: (key, value) => $.store.set(key, value),
     };
@@ -435,9 +469,7 @@ export const register = (on) => {
           now: nowOf(),
           columns: e.props.bodyColumns,
           maxRows: Math.min(2, e.props.maxRows || 2),
-          onNeeds: () => {
-            if (!isPaneOpen) void togglePane();
-          },
+          onNeeds: () => void showNeeds(),
         },
       );
     }
@@ -485,11 +517,16 @@ export const register = (on) => {
           log: s.log,
           error,
           dash,
-          onPark: () => void fill(PARK_PROMPT),
-          onHandoff: () => void fill(HANDOFF_PROMPT),
-          onRefresh: () => void refresh(),
-          onTrackStart: () => void fill(TRACK_START_PROMPT),
-          onTrackStop: () => void fill(TRACK_STOP_PROMPT),
+          flash: nowOf() < flashUntil,
+          onPark: () => void send(PARK_PROMPT, "Asking Claude to park this session…"),
+          onHandoff: () => void send(HANDOFF_PROMPT, "Asking Claude to write the hand-off…"),
+          onAskNeeds: () => void send(NEEDS_PROMPT, "Asking Claude what needs you…"),
+          onRefresh: () => {
+            host.toast("Refreshing…");
+            void refresh();
+          },
+          onTrackStart: () => void send(TRACK_START_PROMPT, "Asking Claude to start the clock…"),
+          onTrackStop: () => void send(TRACK_STOP_PROMPT, "Asking Claude to stop the clock…"),
           onDashboard: () => void onDashboard(),
         },
       );
