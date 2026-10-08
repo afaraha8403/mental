@@ -11,7 +11,14 @@ import { fileURLToPath } from "node:url";
 import { drift } from "../scripts/sync-project-skills.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
-const SKILLS = ["claude-desktop-mods", "claude-desktop-plugins", "claude-desktop-extensions"];
+const SKILLS = [
+  "claude-desktop-mods",
+  "claude-desktop-plugins",
+  "claude-desktop-extensions",
+  "codex-desktop-extensions",
+  "codex-desktop-plugins",
+  "codex-desktop-skills",
+];
 const NAME_RE = /^(?!-)(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 const skillDir = (name) => join(ROOT, ".agents", "skills", name);
