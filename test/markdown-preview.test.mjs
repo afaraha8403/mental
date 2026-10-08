@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderFrontmatter, renderMarkdown } from "../assets/dashboard/markdown.js";
-import { CLUSTER, HUB_LAYOUT, KIND_COLOR, nodeWeight, tagColor, toForceGraph, toGraphData, toMindMapGraph } from "../assets/dashboard/map-data.js";
+import { CLUSTER, HUB_LAYOUT, KIND_COLOR, nodeWeight, tagColor, toClusterGraph, toGraphData, toMindMapGraph } from "../assets/dashboard/map-data.js";
 
 test("markdown preview escapes html and renders emphasis and links", () => {
   const html = renderMarkdown("**<script>alert(1)</script>** and [pad](notes/pad.md)");
@@ -143,48 +143,49 @@ test("toMindMapGraph supports organic brain layout mode", () => {
   }
 });
 
-test("toForceGraph keeps every file and payload edges when tags are missing", () => {
-  const graph = toForceGraph({
+test("toClusterGraph keeps every file, drops tag-sharing edges, and falls back to type clusters", () => {
+  const graph = toClusterGraph({
     nodes: [
       { path: "decisions/a.md", type: "Decision", title: "A" },
       { path: "notes/b.md", type: "Note", title: "B", tags: [] },
     ],
-    edges: [{ from: "decisions/a.md", to: "notes/b.md", rel: "tag:mind-map" }],
-  });
-  assert.equal(graph.nodes.length, 2);
-  assert.deepEqual(graph.nodes[0].tags, []);
-  assert.equal(graph.nodes[0].id, "decisions/a.md");
-  assert.equal(graph.links.length, 1);
-  assert.equal(graph.links[0].rel, "tag:mind-map");
-  assert.ok(graph.nodes[0].weight >= graph.nodes[1].weight);
-  const alone = toForceGraph({ nodes: [{ path: "notes/c.md", title: "C" }], edges: [] });
-  assert.equal(alone.nodes.length, 1);
-  assert.equal(alone.links.length, 0);
-  assert.deepEqual(alone.nodes[0].tags, []);
-});
-
-test("toForceGraph groups tagged files on tag hubs and drops the shared-tag clique", () => {
-  const graph = toForceGraph({
-    nodes: [
-      { path: "decisions/a.md", type: "Decision", title: "A", tags: ["linux", "overlay"] },
-      { path: "notes/b.md", type: "Note", title: "B", tags: ["linux"] },
-    ],
     edges: [
-      { from: "decisions/a.md", to: "notes/b.md", rel: "tag:linux" },
+      { from: "decisions/a.md", to: "notes/b.md", rel: "tag:mind-map" },
       { from: "decisions/a.md", to: "notes/b.md", rel: "against" },
     ],
   });
-  const ids = graph.nodes.map((node) => node.id).sort();
-  assert.deepEqual(ids, ["decisions/a.md", "notes/b.md", "tag:linux", "tag:overlay"]);
-  const rels = graph.links.map((link) => link.rel);
-  assert.equal(rels.filter((rel) => rel === "topic").length, 3);
-  assert.equal(rels.filter((rel) => rel === "against").length, 1);
-  assert.equal(rels.filter((rel) => String(rel).startsWith("tag:")).length, 0);
-  const linux = graph.nodes.find((node) => node.id === "tag:linux");
-  const overlay = graph.nodes.find((node) => node.id === "tag:overlay");
-  assert.equal(linux.isTag, true);
+  assert.equal(graph.nodes.length, 2);
+  assert.deepEqual(graph.nodes[0].tags, []);
+  assert.equal(graph.links.length, 1);
+  assert.equal(graph.links[0].rel, "against");
+  assert.equal(graph.nodes[0].links, 1);
+  assert.deepEqual(graph.clusters.map((c) => c.id).sort(), ["type:Decision", "type:Note"]);
+  assert.equal(graph.nodes[0].color, KIND_COLOR.Decision);
+  const alone = toClusterGraph({ nodes: [{ path: "notes/c.md", title: "C" }], edges: [] });
+  assert.equal(alone.nodes.length, 1);
+  assert.equal(alone.links.length, 0);
+  assert.equal(alone.clusters.length, 1);
+});
+
+test("toClusterGraph puts a file in its largest topic with at least MIN_CLUSTER files", () => {
+  const mk = (n, tags, extra = {}) => ({ path: `notes/${n}.md`, type: "Note", title: n, tags, ...extra });
+  const graph = toClusterGraph({
+    nodes: [
+      mk("a", ["linux", "overlay"]),
+      mk("b", ["linux"]),
+      mk("c", ["linux", "overlay"]),
+      mk("d", ["overlay"]),
+      mk("e", ["rare"], { status: "resolved" }),
+    ],
+    edges: [],
+  });
+  const byId = new Map(graph.nodes.map((node) => [node.id, node]));
+  assert.equal(byId.get("notes/a.md").cluster, "topic:linux");
+  assert.equal(byId.get("notes/d.md").cluster, "topic:overlay");
+  assert.equal(byId.get("notes/e.md").cluster, "type:Note");
+  assert.equal(byId.get("notes/e.md").done, true);
+  const linux = graph.clusters.find((c) => c.id === "topic:linux");
+  assert.equal(linux.count, 3);
   assert.equal(linux.color, tagColor("linux"));
-  assert.equal(overlay.color, tagColor("overlay"));
-  const file = graph.nodes.find((node) => node.id === "decisions/a.md");
-  assert.equal(file.color, tagColor("linux"));
+  assert.equal(graph.clusters[0].id, "topic:linux");
 });

@@ -706,6 +706,29 @@ function renderMapChips(nodes) {
   };
   mapChipHost.append(make("", "All"));
   for (const [slug, count] of ordered) mapChipHost.append(make(slug, `${slug} ${count}`));
+  mapChipRow?.classList.remove("expanded");
+  requestAnimationFrame(syncChipToggle);
+}
+
+const mapChipRow = document.getElementById("map-chip-row");
+const mapChipToggle = document.getElementById("map-chip-toggle");
+
+function syncChipToggle() {
+  if (!mapChipToggle || !mapChipRow || !mapChipHost) return;
+  const expanded = mapChipRow.classList.contains("expanded");
+  const overflowing = mapChipHost.scrollHeight > mapChipHost.clientHeight + 2;
+  mapChipToggle.hidden = !(expanded || overflowing);
+  const total = Math.max(0, mapChipHost.children.length - 1);
+  mapChipToggle.textContent = expanded ? "Fewer tags" : `Show all ${total} tags`;
+  mapChipToggle.setAttribute("aria-expanded", String(expanded));
+}
+
+if (mapChipToggle && mapChipRow) {
+  mapChipToggle.addEventListener("click", () => {
+    mapChipRow.classList.toggle("expanded");
+    syncChipToggle();
+  });
+  window.addEventListener("resize", syncChipToggle);
 }
 
 const btnLayoutGraph = document.getElementById("btn-layout-graph");
@@ -713,12 +736,14 @@ const btnLayoutOrganic = document.getElementById("btn-layout-organic");
 const btnLayoutTree = document.getElementById("btn-layout-tree");
 const layoutButtons = [btnLayoutGraph, btnLayoutOrganic, btnLayoutTree].filter(Boolean);
 
-function layoutHelp(cap = "") {
+let lastMapCap = "";
+function layoutHelp(cap = lastMapCap) {
+  lastMapCap = cap;
   const graphOn = btnLayoutGraph?.classList.contains("active");
   const help = document.getElementById("map-help");
   if (!help) return;
   help.textContent = graphOn
-    ? `Scroll to zoom. Drag empty space to pan. Drag a dot to move it. Click a file to peek.${cap}`
+    ? `Bubbles are topics (untagged files group by type). Hover to focus, click a bubble to zoom in, click a file to peek.${cap}`
     : `Scroll to zoom. Drag empty space to pan. Click a tag to fold or unfold. Click a file to peek.${cap}`;
 }
 
@@ -746,6 +771,7 @@ function showView(view) {
   document.getElementById("catalog").hidden = view !== "list";
   document.getElementById("map-wrap").hidden = !mapMode;
   document.getElementById("map-hint").hidden = !mapMode;
+  if (mapMode) requestAnimationFrame(syncChipToggle);
   document.getElementById("sessions").hidden = !sessions;
   document.getElementById("timeline").hidden = !sessions;
   document.getElementById("timeline-heading").hidden = !sessions;

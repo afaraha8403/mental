@@ -1413,52 +1413,150 @@ main.map-mode {
 }
 
 .graph-link {
-  stroke: var(--muted, #64748b);
-  stroke-opacity: 0.45;
+  stroke: var(--ink-secondary);
+  stroke-opacity: 0.28;
   stroke-width: 1;
+  transition: stroke-opacity 0.15s;
 }
 
 .graph-link.dimmed {
-  stroke-opacity: 0.08;
+  stroke-opacity: 0.05;
+}
+
+.graph-link.faded {
+  stroke-opacity: 0.06;
 }
 
 .graph-link.highlighted {
-  stroke: var(--accent, #38bdf8);
-  stroke-opacity: 0.9;
-  stroke-width: 1.5;
+  stroke: var(--accent);
+  stroke-opacity: 0.95;
+  stroke-width: 1.6;
+}
+
+.graph-bubble {
+  cursor: zoom-in;
+  transition: opacity 0.2s;
+}
+
+.graph-bubble .bubble-fill {
+  fill-opacity: 0.07;
+  stroke-opacity: 0.35;
+  stroke-width: 1.2;
+  transition: fill-opacity 0.15s, stroke-opacity 0.15s;
+}
+
+.graph-bubble:hover .bubble-fill {
+  fill-opacity: 0.13;
+  stroke-opacity: 0.6;
+}
+
+.graph-bubble.dimmed {
+  opacity: 0.25;
+}
+
+.bubble-label {
+  font-weight: 700;
+  text-anchor: middle;
+  pointer-events: none;
+  display: none;
+  paint-order: stroke;
+  stroke: var(--bg-canvas);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+
+.bubble-label.visible {
+  display: block;
+}
+
+.bubble-label .bubble-count {
+  font-weight: 500;
+  fill: var(--ink-secondary);
+}
+
+.graph-node {
+  cursor: pointer;
+  transition: opacity 0.15s;
 }
 
 .graph-node circle {
-  stroke: var(--bg, #0f172a);
-  stroke-width: 1;
+  stroke: var(--bg-canvas);
+  stroke-width: 1.5;
+}
+
+.graph-node.done circle {
+  fill-opacity: 0.25;
+  stroke-width: 1.5;
 }
 
 .graph-node.dimmed {
-  opacity: 0.15;
+  opacity: 0.18;
+}
+
+.graph-node.faded {
+  opacity: 0.3;
 }
 
 .graph-node.selected circle,
 .graph-node.linked-highlight circle {
-  stroke: var(--accent, #38bdf8);
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.graph-node.filter-matched circle {
+  stroke: var(--ink-primary);
   stroke-width: 2;
 }
 
 .graph-label {
-  font-size: 11px;
-  fill: var(--text, #e2e8f0);
+  fill: var(--ink-primary);
   pointer-events: none;
-  opacity: 0;
+  display: none;
+  paint-order: stroke;
+  stroke: var(--bg-canvas);
+  stroke-width: 3.5px;
+  stroke-linejoin: round;
 }
 
-.graph-node:hover .graph-label,
-.graph-label.visible,
-.graph-node.tag .graph-label {
-  opacity: 1;
+.graph-label.visible {
+  display: block;
 }
 
-.graph-node.tag .graph-label {
-  font-size: 13px;
-  font-weight: 650;
+.map-legend {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.65rem;
+  z-index: 2;
+  display: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.8rem;
+  max-width: calc(100% - 6rem);
+  padding: 0.3rem 0.6rem;
+  font-size: 0.6875rem;
+  color: var(--ink-secondary);
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+#map-wrap[data-layout="graph"] .map-legend {
+  display: flex;
+}
+
+.map-legend i {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-right: 0.3rem;
+  border-radius: 50%;
+  vertical-align: baseline;
+}
+
+.map-legend .legend-sep {
+  color: var(--ink-secondary);
+  opacity: 0.8;
 }
 
 /* Floating Zoom & Fit Controls */
@@ -1700,8 +1798,41 @@ main.map-mode {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+}
+
+.map-chip-row {
+  display: flex;
+  align-items: flex-start;
   gap: 0.5rem;
+}
+
+.map-chip-row .map-legend-items {
+  flex: 1 1 auto;
+  max-height: 1.6rem;
+  overflow: hidden;
+}
+
+.map-chip-row.expanded .map-legend-items {
+  max-height: 12rem;
+  overflow-y: auto;
+}
+
+.map-chip-toggle {
+  flex: none;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.75rem;
+  font-family: inherit;
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.map-chip-toggle:hover {
+  background: var(--bg-hover);
 }
 
 .map-legend-items {
@@ -1786,6 +1917,8 @@ main.map-mode {
 }
 
 .map-help-text {
+  flex: 1 1 14rem;
+  min-width: 0;
   font-size: 0.75rem;
   color: var(--ink-secondary);
 }

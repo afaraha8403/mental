@@ -153,11 +153,8 @@
 
         <div id="map-hint" class="map-card-hint" hidden>
           <div class="map-toolbar-bar">
-            <div class="map-legend-items" id="map-chips" role="group" aria-label="Filter map by tag">
-              <button type="button" class="kind kind-all active" data-tag="">All</button>
-            </div>
             <div class="map-layout-switcher" role="group" aria-label="Layout style">
-              <button type="button" class="layout-toggle-btn active" id="btn-layout-graph" title="Graph: dots sized by links, like a note graph">Graph</button>
+              <button type="button" class="layout-toggle-btn active" id="btn-layout-graph" title="Graph: files grouped into topic bubbles (untagged files group by type); dot size = links">Graph</button>
               <button type="button" class="layout-toggle-btn" id="btn-layout-organic" title="Organic Brain: natural force clustering where connected items gravitate together">Brain</button>
               <button type="button" class="layout-toggle-btn" id="btn-layout-tree" title="Structured Tree: organized column layout">Tree</button>
             </div>
@@ -165,11 +162,24 @@
               <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               <input id="map-q" type="search" placeholder="Filter by tag or keyword..." autocomplete="off" />
             </div>
+            <span id="map-help" class="map-help-text">Scroll to zoom. Drag to pan or rearrange. Click a hub to fold/unfold. Click a node to peek.</span>
           </div>
-          <span id="map-help" class="map-help-text">Scroll to zoom. Drag to pan or rearrange. Click a hub to fold/unfold. Click a node to peek.</span>
+          <div class="map-chip-row" id="map-chip-row">
+            <div class="map-legend-items" id="map-chips" role="group" aria-label="Filter map by tag">
+              <button type="button" class="kind kind-all active" data-tag="">All</button>
+            </div>
+            <button type="button" class="map-chip-toggle" id="map-chip-toggle" hidden aria-expanded="false">Show all tags</button>
+          </div>
         </div>
 
         <div id="map-wrap" hidden>
+          <div class="map-legend" aria-hidden="true">
+            <span><i style="background:#38bdf8"></i>Decision</span>
+            <span><i style="background:#f59e0b"></i>Attention</span>
+            <span><i style="background:#10b981"></i>Note</span>
+            <span><i style="background:#a855f7"></i>Journal</span>
+            <span class="legend-sep">Bubble = topic · Dot size = links · Faded = done</span>
+          </div>
           <div id="map-empty" class="map-overlay-empty" hidden>
             <svg class="empty-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
             <p>No files in this project yet.</p>
