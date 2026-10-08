@@ -72,7 +72,8 @@ async function mock({ status = 200 } = {}) {
             const c = /TODO/.test(text) ? "action" : /DECIDED/.test(text) ? "decision" : /RISK/.test(text) ? "concern" : "noise";
             return [id, { choice: c, probabilities: { [c]: 0.95 }, confidence: 0.95 }];
           }
-          return [id, { noul: 0.1 }];
+          const cand = state.candidates?.[id];
+          return [id, { noul: cand ? (/urgent/i.test(cand.title) ? 0.9 : 0.1) : 0.1, confidence: 0.9 }];
         }),
       );
       res.writeHead(200, { "content-type": "application/json" });
@@ -230,6 +231,68 @@ test("search --rank reorders hits; without a key it is a no-op", async () => {
     assert.match(r.data.hits[0].title, /Urgent/);
     const off = parse(await mentalAsync(home, root, ["search", "gadget", "--json"]));
     assert.equal(off.data.ranked, undefined);
+  } finally {
+    m.close();
+  }
+});
+
+test("brief: --since filters hops by kind and shows against", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const add = (args) => assert.equal(mental(home, root, args).status, 0);
+  add(["handoff", "--title", "Catalog landed", "--resume", "Write the docs next", "--against", "plan-a", "--json"]);
+  add(["park", "--resume", "Pick up the cache layer", "--json"]);
+  const all = parse(mental(home, root, ["brief", "--hops", "5", "--json"])).data.hops;
+  assert.deepEqual(all.map((h) => h.kind).sort(), ["handoff", "park"]);
+  const parks = parse(mental(home, root, ["brief", "--since", "park", "--json"])).data;
+  assert.deepEqual(parks.hops.map((h) => h.kind), ["park"]);
+  assert.equal(parks.lastHop.kind, "park");
+  const hand = parse(mental(home, root, ["brief", "--since", "handoff", "--json"])).data;
+  assert.deepEqual(hand.hops.map((h) => h.kind), ["handoff"]);
+  assert.equal(hand.hops[0].against, "plan-a");
+  const bad = mental(home, root, ["brief", "--since", "later", "--json"]);
+  assert.notEqual(bad.status, 0);
+  assert.equal(JSON.parse(bad.stdout).error.code, "usage");
+});
+
+test("rerankHits: a confident intent boosts that type without dropping hits", async () => {
+  const hits = [
+    { type: "Note", title: "Plain one", path: "a" },
+    { type: "Decision", title: "Plain two", path: "b" },
+    { type: "Attention", title: "Plain three", path: "c" },
+  ];
+  const fake = (intent) => ({
+    decide: async (_s, qs) => ({
+      ok: true,
+      answers: Object.fromEntries(
+        Object.keys(qs).map((id) => [id, id === "intent" ? { choice: intent, probabilities: { [intent]: 0.9 }, confidence: 0.9 } : { score: 1, probabilities: { 1: 0.9 }, confidence: 0.9 }]),
+      ),
+    }),
+  });
+  const routed = await rerankHits({ jev: fake("decision"), queries: ["why"], hits });
+  assert.equal(routed.intent, "decision");
+  assert.equal(routed.hits.length, 3);
+  assert.equal(routed.hits[0].path, "b");
+  const any = await rerankHits({ jev: fake("any"), queries: ["why"], hits });
+  assert.equal(any.intent, undefined);
+  assert.deepEqual(any.hits.map((h) => h.path), ["a", "b", "c"]);
+});
+
+test("search: zero-hit broad fallback finds a paraphrase and respects filters", async () => {
+  const m = await mock();
+  try {
+    const home = tempHome();
+    const { root } = initRepo(home);
+    for (const [t, tag] of [["Urgent login flow", "authn"], ["Noise colours", "style"]]) {
+      assert.equal(mental(home, root, ["note", "--title", t, "--body", "details", "--tag", tag, "--json"]).status, 0);
+    }
+    withKey(home, m.url);
+    const r = parse(await mentalAsync(home, root, ["search", "credentials", "--json"]));
+    assert.equal(r.data.recovered, true);
+    assert.equal(r.data.broad, true);
+    assert.ok(r.data.hits.some((h) => /login/.test(h.title)));
+    const filtered = parse(await mentalAsync(home, root, ["search", "credentials", "--tag", "style", "--json"]));
+    assert.ok(!filtered.data.hits.some((h) => /login/.test(h.title)));
   } finally {
     m.close();
   }

@@ -14,6 +14,7 @@ const STOP = new Set([
   "has", "have", "will", "its", "our", "your", "use", "using", "new", "add", "fix", "mental",
 ]);
 const SEARCH_CANDIDATES = 12;
+const BROAD_CANDIDATES = 24;
 const SIMILAR_CANDIDATES = 8;
 const LINK_CANDIDATES = 10;
 const BODY_CHARS = 500;
@@ -112,7 +113,20 @@ export async function recoverSearch({ jev, root, id, home, env, queries, filters
   const widened = [...new Set([...base, ...variants])];
   if (widened.length === 0) return null;
   const found = searchBundle({ root, id, home, env, q: widened.join(" "), any: true, limit: SEARCH_CANDIDATES, ...filters });
-  const cand = found.hits.filter((h) => h.type !== "Journal").slice(0, SEARCH_CANDIDATES);
+  let cand = found.hits.filter((h) => h.type !== "Journal").slice(0, SEARCH_CANDIDATES);
+  let broad = false;
+  if (cand.length === 0) {
+    // No word overlap at all: let the model read the freshest files instead. This is the only way to find
+    // a paraphrase ("auth" vs "login"), so it stays small and respects the same filters.
+    const lc = (s) => String(s || "").toLowerCase();
+    cand = concepts
+      .filter((c) => (!filters.type || lc(c.type) === lc(filters.type)) && (!filters.status || lc(c.status) === lc(filters.status)))
+      .filter((c) => (!filters.tag || c.tags.map(lc).includes(lc(filters.tag))) && (!filters.kind || lc(c.kind) === lc(filters.kind)))
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, BROAD_CANDIDATES)
+      .map((c) => ({ path: c.path, type: c.type, title: c.title, snippet: "" }));
+    broad = true;
+  }
   if (cand.length === 0) return null;
 
   const byPath = new Map(concepts.map((c) => [c.path, c]));
@@ -135,9 +149,9 @@ export async function recoverSearch({ jev, root, id, home, env, queries, filters
   if (!r.ok && Object.values(r.scores).every((s) => s == null)) return { ok: false, reason: r.reason || "unavailable", hits: [], variants };
   const hits = cand
     .map((h, i) => ({ ...h, score: r.scores[`c${i}`] }))
-    .filter((h) => typeof h.score === "number" && h.score >= THRESHOLDS.relevant)
+    .filter((h) => typeof h.score === "number" && h.score >= (broad ? THRESHOLDS.similar : THRESHOLDS.relevant))
     .sort((a, b) => b.score - a.score);
-  return { ok: true, hits, variants };
+  return { ok: true, hits, variants, broad };
 }
 
 /**

@@ -1,5 +1,5 @@
 /**
- * `mental brief [--hops N] [--find WORD] [--no-rank]` — one paste-ready continue packet (#63).
+ * `mental brief [--hops N] [--find WORD] [--since park|handoff] [--no-rank]` — one paste-ready continue packet (#63).
  * Read-only. Works without a key; a configured decision model only re-orders residue by relevance.
  */
 import { resolveBundle } from "../lib/resolve.mjs";
@@ -19,6 +19,11 @@ export async function cmdBrief(args, io = {}) {
     return 1;
   }
   const find = typeof args.flags?.find === "string" ? args.flags.find : "";
+  const since = args.flags?.since == null ? "" : String(args.flags.since).toLowerCase();
+  if (since && since !== "park" && since !== "handoff") {
+    printResult(stdout, args, false, undefined, { code: "usage", message: "--since must be park or handoff" });
+    return 1;
+  }
 
   const resolved = resolveBundle({ cwd: args.cwd ?? process.cwd(), home, env, dir: args.dir ?? null, write: false });
   if (!resolved.ok) {
@@ -39,7 +44,7 @@ export async function cmdBrief(args, io = {}) {
   let jev = args.flags?.["no-rank"] === true ? null : getJev(home, env);
   if (jev && resolved.data.mode === "personal" && !jev.personal) jev = null;
 
-  const data = await buildBrief({ root, hb: hb.data, jev, hops, find });
+  const data = await buildBrief({ root, hb: hb.data, jev, hops, find, since });
   printResult(stdout, args, true, { id: resolved.data.id ?? null, ...data }, undefined, (d) => formatBrief(d, (w) => formatWhen(w)));
   return 0;
 }

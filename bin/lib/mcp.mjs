@@ -202,7 +202,7 @@ function runTool(name, args, ctx) {
   }
   if (name === "pulse") return capture(cmdPulse, base);
   if (name === "brief") {
-    return capture(cmdBrief, { ...base, flags: { hops: args.hops, find: args.find, "no-rank": args.no_rank === true } });
+    return capture(cmdBrief, { ...base, flags: { hops: args.hops, find: args.find, since: args.since, "no-rank": args.no_rank === true } });
   }
   if (name === "option") {
     const feat = String(args.feature || "").toLowerCase();

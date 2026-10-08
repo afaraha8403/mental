@@ -18,9 +18,10 @@ const LEVELS = ["unrelated", "background", "relevant", "urgent"];
 /**
  * Recent journal hops that carry a `Resume:` line, newest first.
  * @param {string} root
- * @param {{ limit?: number, find?: string }} [o]
+ * Each hop is `park` when it carries a `Hop: park` line, else `handoff`; `since` keeps only one kind.
+ * @param {{ limit?: number, find?: string, since?: "park" | "handoff" | "" }} [o]
  */
-export function recentHops(root, { limit = DEFAULT_HOPS, find = "" } = {}) {
+export function recentHops(root, { limit = DEFAULT_HOPS, find = "", since = "" } = {}) {
   const dir = join(root, "journal");
   if (!existsSync(dir)) return [];
   const needle = find.trim().toLowerCase();
@@ -28,7 +29,7 @@ export function recentHops(root, { limit = DEFAULT_HOPS, find = "" } = {}) {
     .filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
     .sort()
     .reverse();
-  /** @type {Array<{ date: string, time: string | null, title: string, resume: string, via: string | null, path: string, excerpt: string }>} */
+  /** @type {Array<{ date: string, time: string | null, title: string, resume: string, via: string | null, kind: "park" | "handoff", against: string | null, path: string, excerpt: string }>} */
   const out = [];
   for (const file of files) {
     if (out.length >= limit) break;
@@ -43,6 +44,8 @@ export function recentHops(root, { limit = DEFAULT_HOPS, find = "" } = {}) {
       if (out.length >= limit) break;
       const resume = h.body.match(/^Resume:\s*(.+)$/m)?.[1]?.trim();
       if (!resume) continue;
+      const kind = /^Hop:\s*park\b/im.test(h.body) ? "park" : "handoff";
+      if (since && kind !== since) continue;
       if (needle && !`${h.title} ${resume}`.toLowerCase().includes(needle)) continue;
       const prose = h.body
         .split(/\r?\n/)
@@ -54,6 +57,8 @@ export function recentHops(root, { limit = DEFAULT_HOPS, find = "" } = {}) {
         title: h.title,
         resume,
         via: h.body.match(/^Via:\s*(.+)$/m)?.[1]?.trim() ?? null,
+        kind,
+        against: h.body.match(/^(?:Against|Plan):\s*(.+)$/m)?.[1]?.trim() ?? null,
         path: `journal/${file}#${h.fragment}`,
         excerpt: redact(prose).slice(0, EXCERPT_CHARS),
       });
@@ -126,9 +131,9 @@ function order(items, rel) {
 const slim = (a) => ({ path: a.path, title: a.title, kind: a.kind, status: a.status, ...(a.description && a.description !== a.title ? { description: a.description } : {}) });
 
 /**
- * @param {{ root: string, hb: any, jev: { decide: Function } | null, hops?: number, find?: string }} o
+ * @param {{ root: string, hb: any, jev: { decide: Function } | null, hops?: number, find?: string, since?: string }} o
  */
-export async function buildBrief({ root, hb, jev, hops = DEFAULT_HOPS, find = "" }) {
+export async function buildBrief({ root, hb, jev, hops = DEFAULT_HOPS, find = "", since = "" }) {
   const attention = listOpenAttention(root);
   const decisions = listOpenDecisions(root);
   const guardrails = listDecidedGuardrails(root);
@@ -167,7 +172,7 @@ export async function buildBrief({ root, hb, jev, hops = DEFAULT_HOPS, find = ""
   const laterV = visible(later, CAPS.later);
   const decV = visible(dec, CAPS.decisions);
 
-  const trail = recentHops(root, { limit: Math.max(1, Math.min(MAX_HOPS, hops)), find });
+  const trail = recentHops(root, { limit: Math.max(1, Math.min(MAX_HOPS, hops)), find, since });
   return {
     branch: git.branch ?? null,
     dirty: Boolean(git.dirty),
@@ -178,7 +183,7 @@ export async function buildBrief({ root, hb, jev, hops = DEFAULT_HOPS, find = ""
     when: hb.handoff?.when ?? null,
     via: hb.handoff?.via ?? null,
     against: hb.handoff?.against ?? null,
-    lastHop: !find && trail[0] ? { title: trail[0].title, excerpt: trail[0].excerpt, path: trail[0].path } : null,
+    lastHop: !find && trail[0] ? { title: trail[0].title, excerpt: trail[0].excerpt, path: trail[0].path, kind: trail[0].kind } : null,
     needsEyes: eyesV,
     inTheAir: airV,
     later: laterV,
@@ -201,7 +206,7 @@ export function formatBrief(d, when) {
   if (d.against) L.push(`Against  ${d.against}`);
   L.push(`Git      ${d.branch || "no repo"}${d.dirty ? `, uncommitted: ${d.changed.join(", ") || "yes"}` : ", clean"}`);
   for (const c of d.recentCommits) L.push(`         ${c}`);
-  if (d.lastHop?.excerpt) L.push("", `Last hop "${d.lastHop.title}": ${d.lastHop.excerpt}`, `         (${d.lastHop.path})`);
+  if (d.lastHop?.excerpt) L.push("", `Last ${d.lastHop.kind === "park" ? "park " : ""}hop "${d.lastHop.title}": ${d.lastHop.excerpt}`, `         (${d.lastHop.path})`);
   const block = (label, v, fmt) => {
     if (!v.items.length && !v.hidden) return;
     L.push("", label);
@@ -216,7 +221,7 @@ export function formatBrief(d, when) {
   if (d.guardrailCount) L.push("", `Guardrails: ${d.guardrails.map((g) => g.title).join("; ")}${d.guardrailCount > d.guardrails.length ? ` (+${d.guardrailCount - d.guardrails.length} more)` : ""}`);
   if (d.hops.length > 1 || (d.hops.length === 1 && !d.lastHop)) {
     L.push("", "Recent hops");
-    for (const h of d.hops) L.push(`  - ${when({ date: h.date, time: h.time }) || h.date}  ${h.title}${h.via ? ` [${h.via}]` : ""}: ${h.resume}`);
+    for (const h of d.hops) L.push(`  - ${when({ date: h.date, time: h.time }) || h.date}  ${h.title}${h.via ? ` [${h.via}]` : ""}${h.kind === "park" ? " (park)" : ""}: ${h.resume}${h.against ? ` (against ${h.against})` : ""}`);
   }
   return L.join("\n");
 }

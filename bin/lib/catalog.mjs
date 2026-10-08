@@ -240,11 +240,12 @@ export const CATALOG = {
     name: "brief",
     group: "Daily",
     summary: "One paste-ready continue packet for a new agent or chat: resume, last hop, git, capped residue and unsettled decisions, recent hops. Read-only; no transcript. With a decision model, residue is ordered by relevance to the current branch and changes.",
-    usage: `${CMD} brief [--hops N] [--find WORD]`,
+    usage: `${CMD} brief [--hops N] [--find WORD] [--since park|handoff]`,
     examples: [`${CMD} brief`, `${CMD} brief --json`, `${CMD} brief --hops 6 --find catalog`],
     flags: [
       v("hops", { summary: "Recent hops to list (1-10, default 3)" }),
       v("find", { summary: "Only hops whose title or resume contains this word" }),
+      v("since", { summary: "Only hops of one kind: park (a pause) or handoff (a finished chunk)" }),
       b("no-rank", { mcpName: "no_rank", summary: "Skip decision-model relevance ordering" }),
     ],
     effects: "read_only",

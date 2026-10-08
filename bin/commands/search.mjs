@@ -80,7 +80,7 @@ export function cmdSearch(args, io = {}) {
         const line = `[${h.type}] ${h.title} (${h.path})`;
         return h.snippet ? `${line}\n  ${h.snippet}` : line;
       });
-      if (d.recovered) lines.unshift(`no exact hits; ${d.hits.length} related via jev:`);
+      if (d.recovered) lines.unshift(`no exact hits; ${d.hits.length} related via jev${d.broad ? " (broad read of recent files)" : ""}:`);
       return lines.join("\n");
     });
     return 0;
@@ -92,7 +92,7 @@ export function cmdSearch(args, io = {}) {
       if (rj && !(resolved.data.mode === "personal" && !rj.personal)) {
         return rerankHits({ jev: rj, queries, hits: found.hits })
           .catch(() => null)
-          .then((r) => (r && r.ok ? finish({ ...found, hits: r.hits }, { ranked: true, via: "jev" }) : finish(found)));
+          .then((r) => (r && r.ok ? finish({ ...found, hits: r.hits }, { ranked: true, via: "jev", ...(r.intent ? { intent: r.intent } : {}) }) : finish(found)));
       }
     }
     return finish(found);
@@ -117,6 +117,6 @@ export function cmdSearch(args, io = {}) {
     .then((r) => {
       if (!r || !r.ok || r.hits.length === 0) return finish(found);
       const hits = r.hits.map(({ score, ...h }) => ({ ...h, jevScore: Math.round(score * 100) / 100 }));
-      return finish({ ...found, hits, total: hits.length }, { recovered: true, via: "jev", variants: r.variants });
+      return finish({ ...found, hits, total: hits.length }, { recovered: true, via: "jev", variants: r.variants, ...(r.broad ? { broad: true } : {}) });
     });
 }
