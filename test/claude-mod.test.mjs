@@ -646,6 +646,31 @@ test("Claude Desktop: 'needs you' opens the pane and lights the needs card", asy
   assert.ok(!eng.calls.some((c) => c[0] === "close"));
 });
 
+test("Claude Desktop: open pane ticks live, shows the refresh dial, stops on close", async () => {
+  const eng = fakeEngine({ surfaces: ["desktop"] });
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const footer = await eng.fire("ui.render", { component: "SessionMode", surface: "desktop", props: { modes: [] } }, "PASSED");
+  let press;
+  walk(footer, (n) => n.type === "Button" && n.props.key === "mental-toggle" && (press = n.props.onPress));
+  press();
+  await eng.flush();
+  const live = eng.timers.find((t) => !t.once && t.ms === 5000);
+  assert.ok(live && !live.cancelled, "5s live tick starts with the pane");
+  const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
+  const src = [];
+  walk(pane, (n) => n.type === "Svg" && src.push(n.props.source));
+  assert.match(src.join(""), /<animate/, "cards animate");
+  assert.match(src[0], /Updated|Refreshing/, "hero foot shows the refresh state");
+  live.fn();
+  await eng.flush();
+  assert.ok(eng.calls.some((c) => c[0] === "invalidate"), "tick redraws the pane");
+  const close = eng.calls.length;
+  await eng.fire("ui.close", { id: "mental" }, {});
+  assert.ok(live.cancelled, "tick stops when the pane closes");
+  assert.ok(eng.calls.length >= close);
+});
+
 test("dashStateOf tells this project's dashboard from another's", async () => {
   const { dashStateOf } = await import("../claude-mod/mental-mod.mjs");
   const ok = (body) => ({ exitCode: 0, stdout: JSON.stringify(body) });

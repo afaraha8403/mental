@@ -40,6 +40,11 @@ const RICH_SURFACES = ["desktop", "vscode", "mobile"];
 const DEBOUNCE_MS = 15_000;
 const POLL_MS = 60_000;
 const FRAME_MS = 600;
+// While the pane is open: redraw this often (clocks, "ago"), re-read Mental this often.
+const LIVE_MS = 5_000;
+const REFRESH_MS = 20_000;
+// Cards animate in for this long after the pane opens, then hold still between redraws.
+const INTRO_MS = 1_600;
 const HEARTBEAT_TIMEOUT_MS = 20_000;
 const STORE_TAB_KEY = "tab";
 const STORE_OPEN_KEY = "open";
@@ -156,6 +161,10 @@ export const register = (on) => {
   let breath = null;
   /** @type {{ cancel: () => void } | null} */
   let receiptTimer = null;
+  /** @type {{ cancel: () => void } | null} */
+  let live = null;
+  let openedAt = 0;
+  let lastTryAt = 0;
 
   const nowOf = () => Date.now();
 
@@ -204,6 +213,7 @@ export const register = (on) => {
       if (isRich) await probeDash();
     } finally {
       inFlight = false;
+      lastTryAt = nowOf();
       redraw();
     }
     if (queued) {
@@ -306,14 +316,32 @@ export const register = (on) => {
     }
     isPaneOpen = true;
     rememberOpen(true);
+    startLive();
     void refresh();
     redraw();
     return true;
   }
 
+  /** While the pane is open, keep it breathing: redraw often, re-read Mental on a steady beat. */
+  function startLive() {
+    openedAt = nowOf();
+    if (!isRich || live || !host) return;
+    live = host.every(LIVE_MS, () => {
+      if (!isPaneOpen) return;
+      if (!inFlight && nowOf() - Math.max(lastTryAt, openedAt) >= REFRESH_MS) void refresh();
+      else redraw();
+    });
+  }
+
+  function stopLive() {
+    live?.cancel();
+    live = null;
+  }
+
   async function closePane() {
     await host.close({ id: PANE_ID }).catch(() => undefined);
     isPaneOpen = false;
+    stopLive();
     rememberOpen(false);
     redraw();
   }
@@ -513,6 +541,9 @@ export const register = (on) => {
           now: nowOf(),
           columns: e.props.bodyColumns,
           updatedAt,
+          refreshing: inFlight,
+          nextAt: Math.max(lastTryAt, openedAt) + REFRESH_MS,
+          intro: nowOf() - openedAt < INTRO_MS,
           cwd,
           log: s.log,
           error,
@@ -594,6 +625,7 @@ export const register = (on) => {
     const r = await next(e);
     if (!r || r.deny === undefined) {
       isPaneOpen = false;
+      stopLive();
       rememberOpen(false);
       redraw();
     }
@@ -671,7 +703,8 @@ export const register = (on) => {
   });
 
   on("session.end", ($, e, next) => {
-    for (const t of [debounce, poll, breath, receiptTimer]) t?.cancel();
+    for (const t of [debounce, poll, breath, receiptTimer, live]) t?.cancel();
+    live = null;
     debounce = poll = breath = receiptTimer = null;
     return next(e);
   });

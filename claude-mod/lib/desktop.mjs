@@ -179,6 +179,23 @@ function eyebrow(x, y, label, fill = T.ink3) {
   return txt(x, y, esc(label.toUpperCase()), { size: 10, weight: 650, fill, spacing: 1.3 });
 }
 
+/** Entry animation state for the card being built (set by `paneDesktop`). */
+const FX = { intro: false, delay: 0 };
+
+/** A small dial that fills as the next refresh nears, and spins while one runs. */
+function refreshDial(cx, cy, { refreshing, now, nextAt }) {
+  const r = 5.5;
+  const c = r1(2 * Math.PI * r);
+  const track = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${T.border}" stroke-width="2"/>`;
+  if (refreshing) {
+    return `${track}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${T.violet2}" stroke-width="2" stroke-linecap="round" stroke-dasharray="${r1(c * 0.3)} ${c}"><animateTransform attributeName="transform" type="rotate" from="0 ${cx} ${cy}" to="360 ${cx} ${cy}" dur="0.8s" repeatCount="indefinite"/></circle>`;
+  }
+  const left = Math.max(0.5, (nextAt - now) / 1000);
+  const total = 20;
+  const start = r1(c * Math.max(0, Math.min(1, 1 - left / total)));
+  return `${track}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${T.violet2}" stroke-opacity="0.8" stroke-width="2" stroke-linecap="round" stroke-dasharray="${start} ${c}" transform="rotate(-90 ${cx} ${cy})"><animate attributeName="stroke-dasharray" from="${start} ${c}" to="${c} ${c}" dur="${r1(left)}s" fill="freeze"/></circle>`;
+}
+
 /**
  * Wrap the parts in an `<svg>` document with the card chrome.
  * @param {{ id: string, width: number, height: number, body: string[], defs?: string[], hero?: boolean }} o
@@ -203,13 +220,18 @@ function card({ id, width: W, height: H, body, defs = [], hero = false }) {
       ]
     : [];
   const stroke = hero ? `stroke="${T.violet}" stroke-opacity="0.3"` : `stroke="${T.border}"`;
+  const d = r1(FX.delay);
+  const enter = FX.intro
+    ? `<g opacity="0"><animate attributeName="opacity" from="0" to="1" begin="${d}s" dur="0.55s" fill="freeze"/><animateTransform attributeName="transform" type="translate" from="0 10" to="0 0" begin="${d}s" dur="0.55s" fill="freeze"/>`
+    : "<g>";
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${SANS}">`,
     `<defs><clipPath id="${id}clip"><rect width="${W}" height="${H}" rx="${radius}"/></clipPath>${heroDefs.join("")}${defs.join("")}</defs>`,
+    enter,
     `<g clip-path="url(#${id}clip)">${chrome.join("")}</g>`,
     `<rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="${radius - 0.5}" fill="none" ${stroke}/>`,
     ...body,
-    "</svg>",
+    "</g></svg>",
   ].join("");
 }
 
@@ -264,7 +286,7 @@ function branchGlyph(x, y, color) {
  * Hero: logo, live status, the resume point, last outcome, git.
  * @returns {{ source: string, height: number, alt: string }}
  */
-export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null }) {
+export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null, refreshing = false, nextAt = null }) {
   const id = "h";
   const inner = W - PAD * 2;
   const st = statusOf(vm, s, now);
@@ -341,8 +363,9 @@ export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null }) 
     body.push(`<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="${T.wash}" stroke-opacity="0.07"/>`);
     y += 24;
     // Git foot: branch · changed files · when Mental last read the thread.
-    const right = updatedAt ? `↻ ${agoOf(now - updatedAt)}` : "";
-    const rightW = right ? right.length * 6.4 + 8 : 0;
+    const live = nextAt != null;
+    const right = refreshing ? "Refreshing" : updatedAt ? (live ? `Updated ${agoOf(now - updatedAt)}` : `↻ ${agoOf(now - updatedAt)}`) : "";
+    const rightW = right ? right.length * 6.4 + 8 + (live ? 20 : 0) : 0;
     const dirtyText = vm.dirty ? `${vm.changed || ""} changed`.trim() : "clean";
     const dirtyW = dirtyText.length * 6.6 + 18;
     const branchChars = fitChars(inner - 18 - dirtyW - rightW - 12, 11.5, true);
@@ -359,6 +382,7 @@ export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null }) 
           anchor: "end",
         }),
       );
+      if (live) body.push(refreshDial(W - PAD - right.length * 6.4 - 14, y - 4, { refreshing, now, nextAt }));
     }
     y += 4;
     alt += ` Branch ${vm.branch || "none"}, ${dirtyText}.`;
@@ -375,7 +399,7 @@ function ring(cx, cy, r, pct) {
   const arc =
     p == null
       ? ""
-      : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${r1((c * p) / 100)} ${r1(c)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+      : `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${r1((c * p) / 100)} ${r1(c)}" transform="rotate(-90 ${cx} ${cy})">${FX.intro ? `<animate attributeName="stroke-dasharray" from="0 ${r1(c)}" to="${r1((c * p) / 100)} ${r1(c)}" begin="${r1(FX.delay + 0.2)}s" dur="0.9s" fill="freeze"/>` : ""}</circle>`;
   return [
     `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${T.border}" stroke-width="6"/>`,
     arc,
@@ -585,7 +609,9 @@ export function filesSvg({ s, cwd, width: W }) {
     );
     const bx = W - PAD - barW - 24;
     body.push(`<rect x="${r1(bx)}" y="${y - 7}" width="${r1(barW)}" height="5" rx="2.5" fill="${T.border}"/>`);
-    body.push(`<rect x="${r1(bx)}" y="${y - 7}" width="${r1(Math.max(5, (barW * f.count) / max))}" height="5" rx="2.5" fill="${T.violet2}"/>`);
+    body.push(
+      `<rect x="${r1(bx)}" y="${y - 7}" width="${r1(Math.max(5, (barW * f.count) / max))}" height="5" rx="2.5" fill="${T.violet2}">${FX.intro ? `<animate attributeName="width" from="0" to="${r1(Math.max(5, (barW * f.count) / max))}" begin="${r1(FX.delay + 0.25)}s" dur="0.7s" fill="freeze"/>` : ""}</rect>`,
+    );
     body.push(txt(W - PAD, y, String(f.count), { size: 11.5, weight: 600, fill: T.ink2, anchor: "end", mono: true }));
     body.push("</g>");
     y += 24;
@@ -818,12 +844,19 @@ export function paneDesktop(E, ctx) {
   const { Box, Text, Button, Svg } = E;
   const { vm, s, now, columns, updatedAt, cwd, log = [], error = "", dash, theme = "auto", flash = false } = ctx;
   const width = widthOf(columns);
+  let stagger = 0;
   const svg = (make) => {
-    const built = themed(make, theme);
-    return built ? Svg({ source: built.source, alt: built.alt, width }) : null;
+    FX.intro = !!ctx.intro;
+    FX.delay = stagger * 0.09;
+    try {
+      const built = themed(make, theme);
+      if (!built) return null;
+      stagger += 1;
+      return Svg({ source: built.source, alt: built.alt, width });
+    } finally {
+      FX.intro = false;
+    }
   };
-  const row = (key, buttons) =>
-    buttons.length ? Box({ key, flexDirection: "row", gap: 1, children: buttons }) : null;
   // One button with a plain-words line beside it saying what it does.
   const action = (key, label, hint, onPress) =>
     Box({
@@ -838,40 +871,61 @@ export function paneDesktop(E, ctx) {
   const running = !!track && track.runningCount > 0;
   const dashState = dash?.state || "unknown";
   const hasNeeds = linked && needsOf(vm).items.length > 0;
+  const state = statusOf(vm, s, now).state;
+  // What this person needs next depends on where the session is: near the
+  // context limit the way out goes first; mid-work the live numbers do.
+  const nothingYet = s.turns === 0 && s.files.size === 0 && !s.working;
+  const hero = svg(() => heroSvg({ vm, s, now, width, error, updatedAt, refreshing: !!ctx.refreshing, nextAt: ctx.nextAt ?? null }));
   const needs = linked ? svg(() => needsSvg({ vm, now, width, flash })) : null;
-  const children = [
-    svg(() => heroSvg({ vm, s, now, width, error, updatedAt })),
-    hasNeeds ? needs : null,
+  const askNeeds =
     hasNeeds && ctx.onAskNeeds
       ? action("needs-ask", "? Ask Claude", "go through what needs me, one by one", ctx.onAskNeeds)
-      : null,
-    ...(linked
-      ? [
-          action("park", "◆ Park", "save my place so I can pick this up later", ctx.onPark),
-          action("handoff", "⇢ Hand off", "write notes for the next chat to continue", ctx.onHandoff),
-        ]
-      : []),
-    action("refresh", "↻ Refresh", "re-read Mental now", ctx.onRefresh),
-    hasNeeds ? null : needs,
-    svg(() => sessionSvg({ s, now, width })),
-    svg(() => trackSvg({ vm, now, width })),
-    track
-      ? running
-        ? action("track-stop", "■ Stop clock", "stop timing this work", ctx.onTrackStop)
-        : action("track-start", "▶ Start clock", "begin timing this work", ctx.onTrackStart)
-      : null,
-    svg(() => filesSvg({ s, cwd, width })),
-    svg(() => activitySvg({ log, now, width })),
-    svg(() => guardrailsSvg({ vm, width })),
-    svg(() => dashSvg({ width, dash })),
-    row("dash", [
-      Button({
-        key: "dashboard",
-        label: dashState === "running" ? "↗ Open dashboard" : dashState === "starting" ? "… Starting" : "▶ Start dashboard",
-        onPress: ctx.onDashboard,
-      }),
-    ]),
-  ].filter(Boolean);
+      : null;
+  const wrap = linked
+    ? [
+        action("park", "◆ Park", "save my place so I can pick this up later", ctx.onPark),
+        action("handoff", "⇢ Hand off", "write notes for the next chat to continue", ctx.onHandoff),
+      ]
+    : [];
+  const sessionCard = nothingYet ? null : svg(() => sessionSvg({ s, now, width }));
+  const clock = svg(() => trackSvg({ vm, now, width }));
+  const clockAction = track
+    ? running
+      ? action("track-stop", "■ Stop clock", "stop timing this work", ctx.onTrackStop)
+      : action("track-start", "▶ Start clock", "begin timing this work", ctx.onTrackStart)
+    : null;
+  const files = svg(() => filesSvg({ s, cwd, width }));
+  const activity = svg(() => activitySvg({ log, now, width }));
+  const guards = svg(() => guardrailsSvg({ vm, width }));
+  const dashCard = svg(() => dashSvg({ width, dash }));
+  const dashLabel =
+    dashState === "running" ? "↗ Open dashboard" : dashState === "starting" ? "… Starting" : "▶ Start dashboard";
+  const dashHint =
+    dashState === "running"
+      ? "full history, decisions and time in your browser"
+      : dashState === "starting"
+        ? "warming up — it opens by itself"
+        : "start it and open it in your browser";
+  const dashAction = Box({
+    key: "dash",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    children: [
+      Button({ key: "dashboard", label: dashLabel, onPress: ctx.onDashboard }),
+      Text({ dimColor: true, wrap: "truncate-end", children: [dashHint] }),
+    ],
+  });
+  const refreshAction = action("refresh", "↻ Refresh", "re-read Mental now (it also updates itself)", ctx.onRefresh);
+  const bandsByState =
+    state === "pressure"
+      ? [...wrap, sessionCard, files, clock, clockAction, activity, guards]
+      : state === "working"
+        ? [sessionCard, files, activity, clock, clockAction, ...wrap, guards]
+        : [...wrap, sessionCard, clock, clockAction, files, activity, guards];
+  const children = [hero, hasNeeds ? needs : null, askNeeds, hasNeeds ? null : needs, ...bandsByState, dashCard, dashAction, refreshAction].filter(
+    Boolean,
+  );
   return Box({
     flexDirection: "column",
     alignItems: "stretch",
