@@ -5,9 +5,11 @@
  * residue counts, context dial, receipts when Mental writes) and a `/mental`
  * pane with Now / Residue / Decisions / Session / Time tabs. On Claude Desktop
  * (and other surfaces that draw `Svg`) the pane is a column of rich cards and a
- * persistent Mental button sits in the prompt footer. It reads the
- * thread through `mental heartbeat --json --passive` and never writes: Park
- * and Handoff fill the prompt so the agent records them through the skill.
+ * persistent Mental button sits in the prompt footer, and cards can be opened
+ * to read journals, decisions and notes (read-only `mental list` / `mental show`).
+ * It reads the thread through `mental heartbeat --json --passive` and never
+ * writes itself: Park and Hand off send a prompt (Desktop) or fill it (terminal)
+ * so the agent records them through the skill. Hide only silences the footer.
  *
  * Runs in the mods sandbox: web globals only, no Node, no timers but `$.clock`.
  */
