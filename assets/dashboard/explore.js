@@ -1,5 +1,5 @@
 import { startMap } from "./map.js";
-import { tagColor, topicTags } from "./map-data.js";
+import { KIND_COLOR, tagColor, topicTags } from "./map-data.js";
 import { $, clockTime, dayLabel, debounce, emptyState, h, icon, KIND, relTime, skeleton, fill } from "./ui.js";
 
 // ─── Map ────────────────────────────────────────────────────────────────────
@@ -20,6 +20,14 @@ export async function renderMapView(_el, ctx, search0, alive) {
   const help = $("#map-help");
   if (!map) {
     map = startMap($("#map"), (path) => ctx.open(path));
+    $("#map-wrap").append(
+      h(
+        "div.map-legend",
+        { "aria-hidden": "true" },
+        Object.entries(KIND_COLOR).map(([type, color]) => h("span", null, h("i", { style: { "--dot": color } }), type)),
+        h("span.legend-sep", null, "Bubble = topic \u00b7 Dot size = links \u00b7 Faded = done"),
+      ),
+    );
     document.addEventListener("mental:select", (e) => map?.select(e.detail?.path || ""));
   }
   const data = await ctx.get("/api/graph");
@@ -67,6 +75,7 @@ export async function renderMapView(_el, ctx, search0, alive) {
           onclick: (e) => {
             for (const b of layoutSeg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b === e.currentTarget));
             map?.setLayoutMode(value);
+            setHelp(value);
             ctx.setParams({ layout: value === "graph" ? null : value });
           },
         },
@@ -99,10 +108,15 @@ export async function renderMapView(_el, ctx, search0, alive) {
     ),
   );
   fill(toolbar, h("div.field.map-search", null, icon("search", 15), query), layoutSeg, tagRow);
-  fill(help, 
-    "Scroll to zoom. Drag empty space to pan. Drag a dot to move it. Click a file to peek.",
-    ...(data?.truncated ? [h("span.muted", null, ` Showing the ${nodes.length} most recent files.`)] : []),
-  );
+  const setHelp = (mode) =>
+    fill(
+      help,
+      mode === "graph"
+        ? "Bubbles are topics (untagged files group by type). Hover to focus, click a bubble to zoom in, click a file to peek."
+        : "Scroll to zoom. Drag empty space to pan. Click a tag to fold or unfold. Click a file to peek.",
+      ...(data?.truncated ? [h("span.muted", null, ` Showing the ${nodes.length} most recent files.`)] : []),
+    );
+  setHelp(layout);
 
   if (layout !== "graph") map.setLayoutMode(layout);
   if (activeTag || params.q) map.setFilter({ tag: activeTag, query: params.q || "" });
