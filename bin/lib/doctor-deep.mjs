@@ -9,7 +9,7 @@ import { listConcepts } from "./index.mjs";
 import { latestJournalHandoff } from "./okf.mjs";
 import { scanStale } from "./stale.mjs";
 import { THRESHOLDS, choice, noul, pick, usageToday } from "./jev.mjs";
-import { sigTokens, oneLine, redact } from "./jev-assist.mjs";
+import { sigTokens, oneLine, redact, SECRETISH } from "./jev-assist.mjs";
 
 const MAX_ITEMS = 8;
 const MAX_PAIRS = 8;
@@ -17,9 +17,6 @@ const MAX_TAGS = 25;
 const MIN_TAG_FILES = 3;
 const BODY_CHARS = 400;
 const TITLES_IN_CONTEXT = 12;
-
-/** Loose pre-filter only. A hit means "worth asking", never "is a secret". */
-const SECRETISH = /(api[_ -]?key|secret|token|passw(or)?d|bearer|credential|private key|BEGIN [A-Z ]*KEY|\bsk-[A-Za-z0-9]|\bgh[pousr]_|AKIA[0-9A-Z]{8})/i;
 
 /** @param {{ title: string, description?: string, body: string }} c */
 function brief(c) {

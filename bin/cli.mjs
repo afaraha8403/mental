@@ -17,7 +17,7 @@ import {
 } from "./lib/catalog.mjs";
 import { cmdWhere } from "./commands/where.mjs";
 import { cmdStatus } from "./commands/status.mjs";
-import { cmdJournalS, cmdDecideS, cmdNoteS, cmdAttentionS, cmdParkS } from "./lib/similar.mjs";
+import { cmdJournalS, cmdDecideS, cmdNoteS, cmdAttentionS, cmdParkS, cmdHandoffS } from "./lib/similar.mjs";
 import { cmdRelink } from "./commands/relink.mjs";
 import { cmdRetag } from "./commands/retag.mjs";
 import { cmdInstall } from "./commands/install.mjs";
@@ -37,7 +37,6 @@ import { cmdUninstall } from "./commands/uninstall.mjs";
 import { cmdHooks } from "./commands/hooks.mjs";
 import { cmdServe } from "./commands/serve.mjs";
 import { cmdDashboard } from "./commands/dashboard.mjs";
-import { cmdHandoff } from "./commands/handoff.mjs";
 import { cmdPulse } from "./commands/pulse.mjs";
 import { cmdOption } from "./commands/option.mjs";
 import { cmdTrack } from "./commands/track.mjs";
@@ -80,7 +79,7 @@ export const COMMANDS = {
   serve: cmdServe,
   dashboard: cmdDashboard,
   park: cmdParkS,
-  handoff: cmdHandoff,
+  handoff: cmdHandoffS,
   pulse: cmdPulse,
   option: cmdOption,
   track: cmdTrack,

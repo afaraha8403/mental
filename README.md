@@ -246,7 +246,7 @@ Mental can use a fast, cheap decision model as a typed judge: yes/no (probabilit
 | Cloudflare Clef | `cloudflare` | needs your account id; model `clef` or `clef-flash` |
 | Your own endpoint | `custom` | TypeSafe-shaped API, needs a URL |
 
-With a key it can recover a zero-hit `mental search`, hint "similar to existing" before a write, suggest links on `mental show`, and propose them with `mental relink` (typed: supports, supersedes, contradicts, depends_on). `mental retag` proposes topics for untagged files. It fails open and only `relink --apply` and `retag --apply` write, high-confidence results only.
+With a key it can recover a zero-hit `mental search`, hint "similar to existing" before a write, suggest links on `mental show`, and propose them with `mental relink` (typed: supports, supersedes, contradicts, depends_on). `mental retag` proposes topics for untagged files. Writes also get advisory guards (`data.guard`: credential-looking text, a vague resume line, a decision that belongs in `decide`), and `show` flags text that instructs an agent. It fails open and only `relink --apply` and `retag --apply` write, high-confidence results only.
 
 Keys are read **only** from `~/.mental/config.json` (mode 0600), never from environment variables, and are never printed or sent over MCP:
 

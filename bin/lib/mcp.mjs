@@ -21,7 +21,7 @@ import {
   cmdNoteS as cmdNote,
   cmdParkS as cmdPark,
 } from "./similar.mjs";
-import { cmdHandoff } from "../commands/handoff.mjs";
+import { cmdHandoffS as cmdHandoff } from "../lib/similar.mjs";
 import { cmdPulse } from "../commands/pulse.mjs";
 import { VERSION, CMD } from "./pkg.mjs";
 import { mcpToolsFromCatalog } from "./catalog.mjs";

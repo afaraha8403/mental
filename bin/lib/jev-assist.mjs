@@ -31,6 +31,9 @@ export function redact(s) {
     .replace(/[A-Za-z0-9+/_=-]{24,}/g, "[REDACTED]");
 }
 
+/** Loose pre-filter only. A hit means "worth asking", never "is a secret". */
+export const SECRETISH = /(api[_ -]?key|secret|token|passw(or)?d|bearer|credential|private key|BEGIN [A-Z ]*KEY|\bsk-[A-Za-z0-9]|\bgh[pousr]_|AKIA[0-9A-Z]{8})/i;
+
 /** @param {string} s */
 export function sigTokens(s) {
   return [
