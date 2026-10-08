@@ -416,7 +416,7 @@ export async function cmdDoctor(args, io = {}) {
     }
     const gitRoot = resolved.ok ? resolved.data.gitRoot : findGitRoot(cwd, { env });
     if (gitRoot) {
-      const ls = spawnSync("git", ["-C", gitRoot, "ls-files", "-z"], { encoding: "utf8", env });
+      const ls = spawnSync("git", ["-C", gitRoot, "ls-files", "-z"], { encoding: "utf8", env, windowsHide: true });
       if (ls.status === 0) {
         const tracked = (ls.stdout || "").split("\0").filter((f) => /(^|\/)time\.sqlite(-wal|-shm)?$/.test(f));
         if (tracked.length) {

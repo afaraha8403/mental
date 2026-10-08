@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-10-08
+
+### Fixed
+- The Claude Desktop panel no longer fights your scrolling. A render without an `isWorking` prop was treated as a change, which repainted the panel and re-rendered it in a loop, snapping the scroll back. The "starting" dashboard check also repaints only when its state changes.
+- Starting the dashboard from the panel no longer opens and closes terminal windows in a loop on Windows. The dashboard runs detached with no console, so each `git` call it made per request (`git --version`, `rev-parse`, `remote get-url`, `check-ignore`, `ls-files`) flashed a console window. All child processes are now spawned with `windowsHide`, and a test enforces it.
+
 ## [0.12.0] - 2026-10-08
 
 ### Features
