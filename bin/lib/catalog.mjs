@@ -491,12 +491,14 @@ export const CATALOG = {
   doctor: {
     name: "doctor",
     group: "Setup",
-    summary: "PATH, bindings, ignore, skill, index, update. With a decision-model key it also checks stale residue, decisions, handoff, topics and secrets. Exit 3 when error-level problems; JSON ok follows that.",
-    usage: `${CMD} doctor`,
-    examples: [`${CMD} doctor`, `${CMD} doctor --json`, `${CMD} doctor --fix`, `${CMD} doctor --fix-ignore`],
+    summary: "PATH, bindings, ignore, skill, index, update. With a decision-model key it also checks stale residue, decisions, handoff and secrets, and previews tags and links for historical files (`--apply` writes them; `--limit N` files per run; `--offline` skips). Exit 3 when error-level problems; JSON ok follows that.",
+    usage: `${CMD} doctor [--apply] [--limit N]`,
+    examples: [`${CMD} doctor`, `${CMD} doctor --json`, `${CMD} doctor --fix`, `${CMD} doctor --fix-ignore`, `${CMD} doctor --apply`],
     flags: [
       b("fix", { summary: "Safe repairs only: home install + git excludes. Never --project or optionals" }),
       b("fix-ignore"),
+      b("apply", { summary: "With a decision model: write the tags and links doctor proposed for historical files (previewed by default)" }),
+      v("limit", { summary: "Files to check for links per run (default 10, max 200). Progress carries over between runs" }),
       v("days", { summary: "Stale-residue threshold in days (warn only)" }),
       b("offline", { summary: "Skip the optional decision-model content checks (no network, deterministic)" }),
     ],

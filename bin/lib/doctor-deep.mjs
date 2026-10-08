@@ -235,7 +235,7 @@ function failure(reason) {
  *   `slice` false means a slice that must not be sent (personal slice with `personal` off, or no bundle).
  * @returns {Promise<Array<{ id: string, ok: boolean, level: string, message: string }>>}
  */
-export async function deepChecks({ jev, home, env = process.env, root, slice, days }) {
+export async function deepChecks({ jev, home, env = process.env, root, slice, days, skipTags = false }) {
   if (!jev) return [];
   const checks = [];
   const via = jev.provider ?? jev.source;
@@ -261,7 +261,7 @@ export async function deepChecks({ jev, home, env = process.env, root, slice, da
     staleTriage(jev, root, days, recent),
     decisionConflicts(jev, root),
     handoffQuality(jev, root),
-    untaggedTopics(jev, root),
+    skipTags ? { ran: false, checks: [] } : untaggedTopics(jev, root),
     secretGuard(jev, root),
   ]);
   const failed = runs.map((x) => x.r).find((r) => r && !r.ok);

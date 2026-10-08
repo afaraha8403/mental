@@ -51,6 +51,9 @@ export function doctorNextAction({ checks, alreadyFixed = false, platform = proc
   if (failed.some((c) => c.id === "rule-cursor-project")) {
     return { action: "ask", command: `${CMD} install --project` };
   }
+  if (failed.some((c) => c.id === "jev-repair" && c.level === "warn" && /proposed/.test(c.message || ""))) {
+    return { action: "repair", command: `${CMD} doctor --apply` };
+  }
   return null;
 }
 
@@ -61,6 +64,7 @@ export function doctorNextAction({ checks, alreadyFixed = false, platform = proc
 export function formatDoctorNextLine(next) {
   if (!next?.command) return "";
   if (next.action === "ask") return `\nnext: ${next.command} (optional Cloud/CLI)`;
+  if (next.action === "repair") return `\nnext: ${next.command} (writes the proposed tags and links)`;
   if (next.action === "tell" && next.command.startsWith("npm ")) {
     return `\nnext: ${next.command} then ${CMD} install then ${CMD} doctor`;
   }
