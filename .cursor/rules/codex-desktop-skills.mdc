@@ -1,0 +1,22 @@
+---
+description: Build ChatGPT/Codex desktop app UI extensions, plugins, or skills in this repo. Load the matching project skill first.
+alwaysApply: false
+---
+
+# ChatGPT / Codex desktop build skills (repo-local)
+
+When the task is to create or debug something for the ChatGPT desktop app (formerly Codex), read the matching skill before writing code:
+
+| Build a... | Skill |
+| --- | --- |
+| MCP-backed UI (not a mod): sidebar/thread/file/settings apps, MCP Apps, mentions, forms | `.agents/skills/codex-desktop-extensions/SKILL.md` |
+| Plugin (manifest, marketplace, hooks, workspace publish, submission) | `.agents/skills/codex-desktop-plugins/SKILL.md` |
+| Skill (SKILL.md, `agents/openai.yaml`, activation tests) | `.agents/skills/codex-desktop-skills/SKILL.md` |
+
+Codex has no mod mechanism: there is no JS-injection mod system, and the official UI path needs MCP, so it is not a mod. The official UI path is Plugin Extensions (MCP Apps). Explodex injection is unofficial and macOS-only.
+
+## Maintaining them
+
+- `.agents/skills/` is canonical. `.claude/skills/` is a mirror. After editing, run `node scripts/sync-project-skills.mjs`; tests fail on drift.
+- Repo-only. Never add `.agents` or `.claude` to `package.json` `files`, and never move them into `skills/` (that autoloads with the Mental plugin).
+- Re-verify against `https://developers.openai.com/llms.txt` and `https://github.com/openai/mcp-extensions` before changing facts.

@@ -1,0 +1,22 @@
+---
+description: Build Claude Desktop mods, plugins, or .mcpb extensions in this repo. Load the matching project skill first.
+alwaysApply: false
+---
+
+# Claude Desktop build skills (repo-local)
+
+When the task is to create or debug something for Claude Desktop, read the matching skill before writing code:
+
+| Build a... | Skill |
+| --- | --- |
+| Mod (JS module in Claude Code: hooks, panes, UI) | `.agents/skills/claude-desktop-mods/SKILL.md` |
+| Plugin (skills, commands, agents, hooks, MCP/LSP; requirements, publishing) | `.agents/skills/claude-desktop-plugins/SKILL.md` |
+| Extension (`.mcpb` local MCP server bundle) | `.agents/skills/claude-desktop-extensions/SKILL.md` |
+
+A mod is a plugin plus a module; start with the plugins skill when unsure.
+
+## Maintaining them
+
+- `.agents/skills/` is canonical. `.claude/skills/` is a mirror for Claude Code. After editing, run `node scripts/sync-project-skills.mjs`; `npm test` fails on drift.
+- These skills are repo-only. Never add `.agents` or `.claude` to `package.json` `files`, and never move them into `skills/` (that autoloads with the Mental plugin).
+- Re-verify against the live docs before changing facts (`https://code.claude.com/docs/llms.txt`); Claude Desktop surfaces change quickly.
