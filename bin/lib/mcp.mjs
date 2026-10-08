@@ -200,8 +200,9 @@ function runTool(name, args, ctx) {
   }
   if (name === "pulse") return capture(cmdPulse, base);
   if (name === "option") {
-    if (String(args.feature || "").toLowerCase() === "jev") {
-      return { code: 2, body: { ok: false, error: { code: "usage", message: "Jev keys are set by the user in a terminal (mental option jev key <KEY>), never over MCP." } } };
+    const feat = String(args.feature || "").toLowerCase();
+    if (feat === "jev" || feat === "decide") {
+      return { code: 2, body: { ok: false, error: { code: "usage", message: "Decision-model keys are set by the user in a terminal (mental option decide key <KEY>), never over MCP." } } };
     }
     const rest = [];
     if (args.feature) rest.push(String(args.feature));

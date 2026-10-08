@@ -219,7 +219,7 @@ async function secretGuard(jev, root) {
 function failure(reason) {
   switch (reason) {
     case "auth":
-      return "key rejected (check `mental option jev status`)";
+      return "key rejected (check `mental option decide status`)";
     case "budget":
       return "daily token budget reached; content checks skipped";
     case "timeout":
@@ -233,16 +233,17 @@ function failure(reason) {
 }
 
 /**
- * @param {{ jev: { source: string, decide: Function } | null, home: string | null, env?: NodeJS.ProcessEnv,
+ * @param {{ jev: { source: string, provider?: string, decide: Function } | null, home: string | null, env?: NodeJS.ProcessEnv,
  *   root: string | null, slice: boolean, days: number }} o
- *   `slice` false means the personal slice, which is never sent to a model.
+ *   `slice` false means a slice that must not be sent (personal slice with `personal` off, or no bundle).
  * @returns {Promise<Array<{ id: string, ok: boolean, level: string, message: string }>>}
  */
 export async function deepChecks({ jev, home, env = process.env, root, slice, days }) {
   if (!jev) return [];
   const checks = [];
+  const via = jev.provider ?? jev.source;
   if (!root || !slice) {
-    checks.push(mk("jev", true, `on (${jev.source}); personal notes are never sent to a model`, "info"));
+    checks.push(mk("jev", true, `on (${via}); personal notes are not sent to a model (mental option decide personal on to allow)`, "info"));
     return checks;
   }
   const recent = {
@@ -272,6 +273,6 @@ export async function deepChecks({ jev, home, env = process.env, root, slice, da
   const spent = home ? usageToday(home, env).input : 0;
   const spentNote = spent > 0 ? `, ${spent} tokens today` : "";
   if (failed) checks.unshift(mk("jev", false, failure(failed.reason)));
-  else checks.unshift(mk("jev", true, `on (${jev.source}); ${asked} content check(s) ran${spentNote}`, "info"));
+  else checks.unshift(mk("jev", true, `on (${via}); ${asked} content check(s) ran${spentNote}`, "info"));
   return checks;
 }

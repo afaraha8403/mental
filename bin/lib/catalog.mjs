@@ -228,7 +228,7 @@ export const CATALOG = {
   relink: {
     name: "relink",
     group: "Lookup",
-    summary: "Jev-suggested links between files (optional; needs a Jev key). Dry run by default; --apply writes only high-confidence links.",
+    summary: "Link suggestions between files from a decision model (optional; needs a key). Dry run by default; --apply writes only high-confidence links.",
     usage: `${CMD} relink [path] [--apply]`,
     examples: [`${CMD} relink notes/some-fact.md`, `${CMD} relink --apply --json`],
     flags: [b("apply", { summary: "Append high-confidence links to the file as markdown (default: dry run)" })],
@@ -238,7 +238,7 @@ export const CATALOG = {
   retag: {
     name: "retag",
     group: "Lookup",
-    summary: "Jev-suggested topic tags for untagged files (optional; needs a Jev key). Dry run by default; --apply adds one tag to files that have none.",
+    summary: "Suggested topic tags for untagged files from a decision model (optional; needs a key). Dry run by default; --apply adds one tag to files that have none.",
     usage: `${CMD} retag [path] [--apply] [--limit N]`,
     examples: [`${CMD} retag`, `${CMD} retag --apply --limit 20 --json`],
     flags: [
@@ -380,12 +380,17 @@ export const CATALOG = {
   option: {
     name: "option",
     group: "Setup",
-    summary: "List or set optional features (track per-UUID; mcp/hooks user-global). Consent required. `option jev` manages the optional Jev API key (never printed).",
-    usage: `${CMD} option [track|mcp|hooks] on|off  |  ${CMD} option jev [key <KEY>|key -|key clear|on|off]`,
-    examples: [`${CMD} option`, `${CMD} option track on --json`, `${CMD} option jev key - < key.txt`],
-    flags: [b("all"), b("this")],
+    summary: "List or set optional features (track per-UUID; mcp/hooks user-global). Consent required. `option decide` manages the optional decision model (TypeSafe Jev, OpenAI Decisions, Cloudflare Clef); keys are stored in config and never printed. `option jev` is an alias.",
+    usage: `${CMD} option [track|mcp|hooks] on|off  |  ${CMD} option decide [key <KEY> [--provider P]|key -|key clear|provider <P>|url <U>|model <M>|account <ID>|on|off|budget <tokens/day>|personal on|off|fallback <P|off>]`,
+    examples: [
+      `${CMD} option`,
+      `${CMD} option track on --json`,
+      `${CMD} option decide key - --provider openai < key.txt`,
+      `${CMD} option decide provider cloudflare`,
+    ],
+    flags: [b("all"), b("this"), v("provider", { summary: "decide: provider the key/url/model/account applies to (typesafe | openai | cloudflare | custom)" })],
     effects: "non_idempotent",
-    rest: { name: "feature", summary: "track | mcp | hooks | jev, then on|off (jev: key <KEY>)" },
+    rest: { name: "feature", summary: "track | mcp | hooks | decide (alias jev), then on|off (decide: key <KEY>, provider <P>, ...)" },
     mcp: true,
   },
   track: {
@@ -457,14 +462,14 @@ export const CATALOG = {
   doctor: {
     name: "doctor",
     group: "Setup",
-    summary: "PATH, bindings, ignore, skill, index, update. With a Jev key it also checks stale residue, decisions, handoff, topics and secrets. Exit 3 when error-level problems; JSON ok follows that.",
+    summary: "PATH, bindings, ignore, skill, index, update. With a decision-model key it also checks stale residue, decisions, handoff, topics and secrets. Exit 3 when error-level problems; JSON ok follows that.",
     usage: `${CMD} doctor`,
     examples: [`${CMD} doctor`, `${CMD} doctor --json`, `${CMD} doctor --fix`, `${CMD} doctor --fix-ignore`],
     flags: [
       b("fix", { summary: "Safe repairs only: home install + git excludes. Never --project or optionals" }),
       b("fix-ignore"),
       v("days", { summary: "Stale-residue threshold in days (warn only)" }),
-      b("offline", { summary: "Skip the optional Jev content checks (no network, deterministic)" }),
+      b("offline", { summary: "Skip the optional decision-model content checks (no network, deterministic)" }),
     ],
     effects: "idempotent",
   },

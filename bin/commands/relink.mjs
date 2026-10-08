@@ -22,8 +22,8 @@ export async function cmdRelink(args, io = {}) {
   if (!jev) {
     printResult(stdout, args, false, undefined, {
       code: "jev-off",
-      message: "relink needs Jev, which is optional and not configured.",
-      hint: `Set a key with: ${CMD} option jev key <KEY> (or env MENTAL_JEV_KEY), then retry. Key: https://typesafe.ai`,
+      message: "relink needs a decision model, which is optional and not configured.",
+      hint: `Set a key with: ${CMD} option decide key <KEY> --provider typesafe|openai|cloudflare, then retry. Free tier: Cloudflare; keys: typesafe.ai`,
     });
     return 1;
   }

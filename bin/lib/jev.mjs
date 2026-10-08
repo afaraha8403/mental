@@ -1,23 +1,24 @@
 /**
- * Jev (TypeSafe System One) — OPTIONAL typed-judgment gate.
+ * Decision model (TypeSafe Jev, OpenAI Decisions, Cloudflare Clef) — OPTIONAL typed-judgment gate.
  *
  * Mental works fully without it. With a key it can gate fuzzy-search candidates,
- * flag near-duplicates, and score link suggestions. Jev answers yes/no probabilities;
- * it never generates text, and nothing here writes on its answer.
+ * flag near-duplicates, retag, and score link suggestions. The model answers typed questions
+ * (yes/no probabilities, choices, scores); it never generates text, and nothing here writes on its answer.
  *
  * Rules: fail open, short timeout, never print the key, never block a write.
- * Key: config first (`mental option jev key`), env fallback (MENTAL_JEV_KEY, TYPESAFE_API_KEY).
+ * Keys live in config only (`mental option decide key <KEY>`); they are never read from env.
+ * The file keeps its original name; `getDecider` is the preferred alias for `getJev`.
  */
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, resolveJev } from "./config.mjs";
+import { loadConfig, resolveDecide } from "./config.mjs";
+import { PROVIDER_INFO, buildRequest, missingSetting, parseResponse, providerSettings } from "./decide-providers.mjs";
 import { cacheMentalDir } from "./watermark.mjs";
 
-export const JEV_URL = "https://api.typesafe.ai/v1/systemone";
-/** Pinned so scores stay comparable. Override with MENTAL_JEV_MODEL. */
-export const JEV_MODEL = "jev-latest";
-export const JEV_SIGNUP_URL = "https://typesafe.ai";
+export const JEV_URL = PROVIDER_INFO.typesafe.url;
+export const JEV_MODEL = PROVIDER_INFO.typesafe.model;
+export const JEV_SIGNUP_URL = PROVIDER_INFO.typesafe.signup;
 
 /** Probability cut-offs. One place so they can be tuned without touching call sites. */
 export const THRESHOLDS = {
@@ -35,48 +36,49 @@ export const THRESHOLDS = {
   pick: 0.5,
 };
 
-/** Request budget, in estimated tokens. Docs: 64K per request, 32K for state + longest question. */
-const TOTAL_TOKENS_MAX = 48_000;
-const STATE_TOKENS_MAX = 24_000;
+/** Request budget, in estimated tokens, comes from the provider profile (docs: 64K per request, 32K state + longest question). */
 const RETRY_WAIT_MAX_MS = 1500;
 const USAGE_DAYS = 30;
 
-/** Reminder cadence for an unconfigured Jev. */
+/** Reminder cadence for an unconfigured decision model. */
 export const HINT_EVERY_MS = 3 * 24 * 60 * 60 * 1000;
 
 const CACHE_FILE = "jev-cache.json";
 const HINT_FILE = "jev-hint.json";
 const USAGE_FILE = "jev-usage.json";
 const CACHE_MAX = 500;
-const BATCH_MAX = 25;
-
-let authScheme = /** @type {"bearer" | "raw"} */ ("bearer");
 
 /**
  * @param {string | null} home
- * @param {NodeJS.ProcessEnv} [env]
- * @param {{ fetch?: typeof fetch, url?: string, timeoutMs?: number, backoffMs?: number }} [opts]
- * @returns {{ ask: Function, gate: Function, source: string } | null} null when Jev is off or unkeyed
+ * @param {NodeJS.ProcessEnv} [env] only used for cache/ledger location; never for keys
+ * @param {{ fetch?: typeof fetch, timeoutMs?: number, backoffMs?: number, provider?: string }} [opts]
+ * @returns {{ ask: Function, decide: Function, gate: Function, source: string, provider: string, personal: boolean } | null}
+ *   null when the decision model is off or unkeyed
  */
 export function getJev(home, env = process.env, opts = {}) {
-  const r = resolveJev(home, env);
+  const r = resolveDecide(home, opts.provider);
   if (!r.key) return null;
-  const key = r.key;
-  const url = opts.url || env.MENTAL_JEV_URL || JEV_URL;
-  const model = env.MENTAL_JEV_MODEL || JEV_MODEL;
   const doFetch = opts.fetch || globalThis.fetch;
   const timeoutMs = opts.timeoutMs ?? 4000;
   const backoffMs = opts.backoffMs ?? 250;
   const cfg = home ? loadConfig(home) : null;
-  const dailyTokens = cfg && !cfg.corrupt ? cfg.jev.dailyTokens : null;
-  const ctx = { key, url, model, doFetch, timeoutMs, backoffMs, home, env, dailyTokens };
+  const dailyTokens = cfg && !cfg.corrupt ? cfg.decide.dailyTokens : null;
+  const main = providerSettings(r.provider, r);
+  if (missingSetting(main)) return null;
+  const fb = r.fallback && !opts.provider ? resolveDecide(home, r.fallback) : null;
+  const fallback = fb?.key && !missingSetting(providerSettings(fb.provider, fb)) ? providerSettings(fb.provider, fb) : null;
+  const ctx = { ...main, fallback, doFetch, timeoutMs, backoffMs, home, env, dailyTokens };
   return {
     source: r.source || "config",
+    provider: r.provider,
+    personal: r.personal,
     ask: (state, questions) => askJev(ctx, state, questions),
     decide: (state, questions) => decide(ctx, state, questions),
     gate: (state, questions) => gateNoul(ctx, state, questions),
   };
 }
+
+export { getJev as getDecider };
 
 /** @param {string} instructions @param {{ true?: string, false?: string }} [criteria] */
 export function noul(instructions, criteria) {
@@ -187,61 +189,50 @@ function recordUsage(ctx, usage, model) {
 }
 
 /**
- * One System One request. Never throws.
- * @returns {Promise<{ ok: true, answers: Record<string, any>, model: string | null } | { ok: false, reason: string }>}
+ * One decision request. Never throws; fails open with a reason.
+ * Retries 429/5xx once, honoring retry-after up to a short cap.
+ * @param {any} ctx
+ * @param {unknown} state
+ * @param {Record<string, any>} questions
+ * @returns {Promise<{ ok: boolean, reason?: string, answers?: Record<string, any>, model?: string | null }>}
  */
 async function askJev(ctx, state, questions) {
-  if (typeof ctx.doFetch !== "function") return { ok: false, reason: "no-fetch" };
   if (ctx.dailyTokens && usageToday(ctx.home, ctx.env).input >= ctx.dailyTokens) return { ok: false, reason: "budget" };
-  const body = JSON.stringify({ state, model: ctx.model, questions });
-  let scheme = authScheme;
-  let triedOther = false;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const ac = new AbortController();
-    const timer = setTimeout(() => ac.abort(), ctx.timeoutMs);
+  const first = await askOne(ctx, ctx, state, questions);
+  if (first.ok || !ctx.fallback || first.reason === "budget") return first;
+  const second = await askOne(ctx, ctx.fallback, state, questions);
+  return second.ok ? second : first;
+}
+
+async function askOne(ctx, s, state, questions) {
+  const built = buildRequest(s, state, questions);
+  const inputEstimate = estTokens(state) + estTokens(questions);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), ctx.timeoutMs);
     try {
-      const res = await ctx.doFetch(ctx.url, {
-        method: "POST",
-        headers: {
-          Authorization: scheme === "bearer" ? `Bearer ${ctx.key}` : ctx.key,
-          "Content-Type": "application/json",
-        },
-        body,
-        signal: ac.signal,
-      });
-      if (res.status === 401 && !triedOther) {
-        // Docs mask the header value; accept either scheme and remember the winner.
-        triedOther = true;
-        scheme = scheme === "bearer" ? "raw" : "bearer";
-        attempt--;
-        continue;
-      }
-      if (res.status === 401) return { ok: false, reason: "auth" };
-      if (res.status === 429 || res.status === 529 || res.status >= 500) {
-        if (attempt < 2) {
-          await sleep(Math.min(retryAfterMs(res) ?? ctx.backoffMs * 2 ** attempt, RETRY_WAIT_MAX_MS));
+      const res = await ctx.doFetch(built.url, { method: "POST", headers: built.headers, body: built.body, signal: controller.signal });
+      clearTimeout(timer);
+      if (res.status === 401 || res.status === 403) return { ok: false, reason: "auth" };
+      if (res.status === 429 || res.status >= 500) {
+        if (attempt === 0) {
+          await sleep(Math.min(retryAfterMs(res) ?? ctx.backoffMs, RETRY_WAIT_MAX_MS));
           continue;
         }
-        return { ok: false, reason: `http-${res.status}` };
+        return { ok: false, reason: res.status === 429 ? "rate-limited" : "error" };
       }
-      if (!res.ok) return { ok: false, reason: `http-${res.status}` };
-      const json = await res.json();
-      authScheme = scheme;
-      if (!json || typeof json.answers !== "object") return { ok: false, reason: "bad-response" };
-      recordUsage(ctx, json.usage, json.model);
-      return { ok: true, answers: json.answers, model: typeof json.model === "string" ? json.model : null };
-    } catch (err) {
-      const aborted = err && typeof err === "object" && /** @type {{ name?: string }} */ (err).name === "AbortError";
-      if (attempt < 2 && !aborted) {
-        await sleep(ctx.backoffMs * 2 ** attempt);
-        continue;
-      }
-      return { ok: false, reason: aborted ? "timeout" : "network" };
-    } finally {
+      if (!res.ok) return { ok: false, reason: "error" };
+      const parsed = parseResponse(s.provider, await res.json(), built.idMap, questions);
+      if (!parsed) return { ok: false, reason: "error" };
+      recordUsage(ctx, parsed.usage || { input_tokens: inputEstimate }, parsed.model);
+      return { ok: true, answers: parsed.answers, model: parsed.model || s.model, provider: s.provider };
+    } catch (e) {
       clearTimeout(timer);
+      if (e && e.name === "AbortError") return { ok: false, reason: "timeout" };
+      return { ok: false, reason: "error" };
     }
   }
-  return { ok: false, reason: "network" };
+  return { ok: false, reason: "error" };
 }
 
 /**
@@ -257,13 +248,18 @@ async function decide(ctx, state, questions) {
   const answers = Object.fromEntries(ids.map((id) => [id, null]));
   if (ids.length === 0) return { ok: true, answers };
 
+  const info = ctx.info;
+  const batchMax = Math.min(info.batchMax, ctx.fallback ? ctx.fallback.info.batchMax : Infinity);
+  const totalMax = Math.min(info.totalTokens, ctx.fallback ? ctx.fallback.info.totalTokens : Infinity);
+  const stateMax = Math.min(info.stateTokens, ctx.fallback ? ctx.fallback.info.stateTokens : Infinity);
   const stateTokens = estTokens(state);
   const longest = Math.max(...ids.map((id) => estTokens(questions[id])));
-  if (stateTokens + longest > STATE_TOKENS_MAX) return { ok: false, reason: "too-large", answers };
+  if (stateTokens + longest > stateMax) return { ok: false, reason: "too-large", answers };
 
   const cache = readCache(ctx.home, ctx.env);
   const stateHash = hash(JSON.stringify(state));
-  const keyOf = (id) => hash(`${stateHash}|${JSON.stringify(questions[id])}`);
+  const scope = `${ctx.provider}|${ctx.model}`;
+  const keyOf = (id) => hash(`${scope}|${stateHash}|${JSON.stringify(questions[id])}`);
   /** @type {string[]} */
   const missing = [];
   for (const id of ids) {
@@ -278,9 +274,9 @@ async function decide(ctx, state, questions) {
   while (i < missing.length) {
     const slice = [];
     let tokens = stateTokens;
-    while (i < missing.length && slice.length < BATCH_MAX) {
+    while (i < missing.length && slice.length < batchMax) {
       const t = estTokens(questions[missing[i]]);
-      if (slice.length > 0 && tokens + t > TOTAL_TOKENS_MAX) break;
+      if (slice.length > 0 && tokens + t > totalMax) break;
       slice.push(missing[i]);
       tokens += t;
       i++;
@@ -290,8 +286,11 @@ async function decide(ctx, state, questions) {
       failed = r.reason;
       break;
     }
-    if (r.model && cache.model && r.model !== cache.model) cache.items = {};
-    if (r.model) cache.model = r.model;
+    if (r.model) {
+      const prev = cache.models[ctx.provider];
+      if (prev && prev !== r.model) cache.items = {};
+      cache.models[ctx.provider] = r.model;
+    }
     for (const id of slice) {
       const a = normalize(r.answers?.[id], questions[id].type);
       if (a) {
@@ -335,11 +334,14 @@ function cacheFile(home, env, name) {
 function readCache(home, env) {
   try {
     const parsed = JSON.parse(readFileSync(cacheFile(home, env, CACHE_FILE), "utf8"));
-    if (parsed && typeof parsed.items === "object") return { model: parsed.model || null, items: parsed.items };
+    if (parsed && typeof parsed.items === "object") {
+      const models = parsed.models && typeof parsed.models === "object" ? parsed.models : {};
+      return { models, items: parsed.items };
+    }
   } catch {
     // missing or corrupt → empty
   }
-  return { model: null, items: {} };
+  return { models: {}, items: {} };
 }
 
 function writeCache(home, env, cache) {
@@ -379,8 +381,8 @@ export function jevHint({ home, env = process.env, surface, now = Date.now(), co
   if (!home) return null;
   if (env.MENTAL_NO_HINTS === "1") return null;
   const cfg = loadConfig(home);
-  if (cfg.corrupt || cfg.jev.enabled === false) return null;
-  if (resolveJev(home, env).configured) return null;
+  if (cfg.corrupt || cfg.decide.enabled === false) return null;
+  if (resolveDecide(home).configured) return null;
 
   const file = cacheFile(home, env, HINT_FILE);
   /** @type {Record<string, number>} */
@@ -407,9 +409,9 @@ export function jevHint({ home, env = process.env, surface, now = Date.now(), co
     optional: true,
     configured: false,
     text:
-      "Optional: Jev (TypeSafe) is not set up. With a key, search recovers mis-worded queries, writes flag near-duplicates, and show suggests links. Mental works fully without it.",
-    enable: "mental option jev key <KEY>",
-    mute: "mental option jev off",
+      "Optional: no decision model is set up. With a key (TypeSafe Jev, OpenAI Decisions, or Cloudflare Clef), search recovers mis-worded queries, writes flag near-duplicates, retag fills missing tags, and doctor checks content. Cloudflare has a free tier. Mental works fully without it.",
+    enable: "mental option decide key <KEY> --provider typesafe|openai|cloudflare",
+    mute: "mental option decide off",
     url: JEV_SIGNUP_URL,
     agent:
       "Tell the user this exists and where to get a key. Do not sign up, set a key, or enable it yourself.",
@@ -418,5 +420,5 @@ export function jevHint({ home, env = process.env, surface, now = Date.now(), co
 
 /** @param {JevHint} h */
 export function formatJevHint(h) {
-  return `${h.text} Key: ${h.url} → ${h.enable} (or env MENTAL_JEV_KEY). Mute: ${h.mute}. Agents: relay this to the user; do not enable it yourself.`;
+  return `${h.text} Setup: ${h.enable} (keys: typesafe.ai, platform.openai.com, dash.cloudflare.com). Mute: ${h.mute}. Agents: relay this to the user; do not enable it yourself.`;
 }

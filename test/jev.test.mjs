@@ -6,11 +6,19 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tempHome, initRepo, mental, gitEnv, CLI } from "./helpers.mjs";
 import { getJev, jevHint, THRESHOLDS, choice, score, noul, pick, normalize, usageToday } from "../bin/lib/jev.mjs";
-import { resolveJev, maskKey, setJevConfig } from "../bin/lib/config.mjs";
+import { resolveJev, resolveDecide, maskKey, setJevConfig, setDecideConfig, loadConfig } from "../bin/lib/config.mjs";
+import { buildRequest, parseResponse, providerSettings, missingSetting } from "../bin/lib/decide-providers.mjs";
 import { applyLinks, queryVariants, sigTokens } from "../bin/lib/jev-assist.mjs";
 import { runTool } from "../bin/lib/mcp.mjs";
 
 const KEY = "tsk_test_SECRET_1234567890";
+
+/** Keys and URLs live only in config; this stores them for a temp home and returns it. */
+function withKey(home, url, provider = "typesafe") {
+  setDecideConfig(home, { set: { provider, field: "key", value: KEY } });
+  if (url) setDecideConfig(home, { set: { provider, field: "url", value: url } });
+  return home;
+}
 
 function parse(r) {
   assert.equal(r.status, 0, r.stderr || r.stdout);
@@ -78,11 +86,12 @@ test("no key: no network, no similar, heartbeat hint is rate limited", () => {
   assert.equal(w.data.similar, undefined);
 });
 
-test("config beats env; key is masked and never printed", () => {
+test("keys come only from config: env is ignored; key is masked and never printed", () => {
   const home = tempHome();
   const { root } = initRepo(home);
+  assert.equal(getJev(home, { MENTAL_JEV_KEY: "env-key-value-1234", TYPESAFE_API_KEY: "x" }), null, "env keys are ignored");
   parse(mental(home, root, ["option", "jev", "key", KEY, "--json"]));
-  const r = resolveJev(home, { MENTAL_JEV_KEY: "env-key-value-1234" });
+  const r = resolveJev(home);
   assert.equal(r.key, KEY);
   assert.equal(r.source, "config");
   const out = mental(home, root, ["option", "jev", "--json"]);
@@ -105,7 +114,7 @@ test("option jev off mutes; MCP cannot toggle jev", () => {
 
 test("gate fails open on HTTP error, network error and timeout", async () => {
   const home = tempHome();
-  const env = { MENTAL_JEV_KEY: KEY };
+  const env = (withKey(home), {});
   const mk = (fetch, extra = {}) => getJev(home, env, { fetch, backoffMs: 1, timeoutMs: 50, ...extra });
   const httpErr = await mk(async () => ({ status: 500, ok: false, json: async () => ({}) })).gate({ a: 1 }, { q: "x" });
   assert.equal(httpErr.ok, false);
@@ -118,15 +127,22 @@ test("gate fails open on HTTP error, network error and timeout", async () => {
   assert.equal(slow.reason, "timeout");
 });
 
-test("gate falls back raw auth on 401 and caches answers", async () => {
+test("gate does not retry with another auth scheme on 401, and caches answers", async () => {
   const home = tempHome();
   const seen = [];
+  const bad = async (_u, o) => {
+    seen.push(o.headers.Authorization);
+    return { status: 401, ok: false, headers: { get: () => null }, json: async () => ({}) };
+  };
+  const denied = await getJev(withKey(home), {}, { fetch: bad, backoffMs: 1 }).gate({ s: 0 }, { q: "is it?" });
+  assert.equal(denied.reason, "auth");
+  assert.equal(seen.length, 1);
+  assert.ok(seen[0].startsWith("Bearer "));
   const fetch = async (_u, o) => {
     seen.push(o.headers.Authorization);
-    if (o.headers.Authorization.startsWith("Bearer")) return { status: 401, ok: false, json: async () => ({}) };
-    return { status: 200, ok: true, json: async () => ({ answers: { q: { noul: 0.8 } } }) };
+    return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({ answers: { q: { noul: 0.8 } } }) };
   };
-  const jev = getJev(home, { MENTAL_JEV_KEY: KEY }, { fetch, backoffMs: 1 });
+  const jev = getJev(withKey(home), {}, { fetch, backoffMs: 1 });
   const a = await jev.gate({ s: 1 }, { q: "is it?" });
   assert.equal(a.scores.q, 0.8);
   const before = seen.length;
@@ -150,7 +166,7 @@ test("decide: Choice and Score normalise with confidence; pick() gates on it", a
       bad: { type: "choice" },
     },
   });
-  const jev = getJev(home, { MENTAL_JEV_KEY: KEY }, { fetch });
+  const jev = getJev(withKey(home), {}, { fetch });
   const r = await jev.decide(
     { s: 1 },
     { c: choice("kind?", { bug: null, idea: null }), lo: choice("kind?", { bug: null, idea: null }), s: score("urgent?", ["low", "high"]), n: noul("x?"), bad: choice("y", { a: null, b: null }) },
@@ -173,7 +189,7 @@ test("decide: chunks by token budget and refuses an oversized state", async () =
     calls.push(Object.keys(body.questions).length);
     return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({ answers: Object.fromEntries(Object.keys(body.questions).map((k) => [k, { noul: 0.5 }])) }) };
   };
-  const jev = getJev(home, { MENTAL_JEV_KEY: KEY }, { fetch });
+  const jev = getJev(withKey(home), {}, { fetch });
   const qs = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`q${i}`, `question ${i}`]));
   const r = await jev.gate({ s: "small" }, qs);
   assert.equal(r.ok, true);
@@ -193,7 +209,7 @@ test("retry honours retry-after-ms and the ledger plus budget stop spending", as
     if (n === 1) return { status: 429, ok: false, headers: { get: (h) => (h === "retry-after-ms" ? "5" : null) }, json: async () => ({}) };
     return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({ model: "m1", usage: { input_tokens: 100, output_tokens: 1 }, answers: { q: { noul: 0.7 } } }) };
   };
-  const env = { MENTAL_JEV_KEY: KEY };
+  const env = (withKey(home), {});
   const jev = getJev(home, env, { fetch, backoffMs: 5000 });
   const t0 = Date.now();
   const a = await jev.gate({ s: 1 }, { q: "one?" });
@@ -217,7 +233,7 @@ test("a new model version invalidates cached answers", async () => {
     calls++;
     return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({ model, answers: { q: { noul: model === "m1" ? 0.2 : 0.9 }, r: { noul: 0.4 } } }) };
   };
-  const jev = getJev(home, { MENTAL_JEV_KEY: KEY }, { fetch });
+  const jev = getJev(withKey(home), {}, { fetch });
   assert.equal((await jev.gate({ s: 1 }, { q: "a?" })).scores.q, 0.2);
   assert.equal((await jev.gate({ s: 1 }, { q: "a?" })).scores.q, 0.2);
   assert.equal(calls, 1, "cached");
@@ -260,7 +276,7 @@ test("search recovery, similar-to, show and relink with a mock Jev", async () =>
   const { root } = initRepo(home);
   seedBundle(home, root);
   const mock = await mockServer(0.95);
-  const env = { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: mock.url };
+  const env = (withKey(home, mock.url), {});
   try {
     const miss = parse(await mentalAsync(home, root, ["search", "--json", "poolng"], env));
     assert.equal(miss.data.recovered, true);
@@ -301,7 +317,7 @@ test("retag: dry run writes nothing, --apply adds one tag, idempotent, jev-off a
   }
   parse(mental(home, root, ["reindex", "--json"]));
   const mock = await mockServer(0.95, { choose: (id, q) => (q.criteria.cache !== undefined ? "cache" : null) });
-  const env = { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: mock.url };
+  const env = (withKey(home, mock.url), {});
   try {
     const dry = parse(await mentalAsync(home, root, ["retag", "--json"], env));
     assert.equal(dry.data.applied, 0);
@@ -320,9 +336,13 @@ test("retag: dry run writes nothing, --apply adds one tag, idempotent, jev-off a
   } finally {
     mock.close();
   }
+  setDecideConfig(home, { set: { provider: "typesafe", field: "key", value: null } });
   assert.notEqual(mental(home, root, ["retag", "--json"]).status, 0, "no key refuses");
-  const personal = await mentalAsync(home, join(home, ".mental"), ["retag", "--json"], { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: "http://127.0.0.1:9/x" });
+  withKey(home, "http://127.0.0.1:9/x");
+  setDecideConfig(home, { personal: false });
+  const personal = await mentalAsync(home, join(home, ".mental"), ["retag", "--json"]);
   assert.notEqual(personal.status, 0);
+  assert.match(personal.stdout, /personal-slice/);
 });
 
 test("typed links: relation label written as a prefix and parsed as a normal link", async () => {
@@ -330,7 +350,7 @@ test("typed links: relation label written as a prefix and parsed as a normal lin
   const { root } = initRepo(home);
   seedBundle(home, root);
   const mock = await mockServer(0.95, { choose: (id, q) => (q.criteria.supersedes !== undefined ? "supersedes" : null) });
-  const env = { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: mock.url };
+  const env = (withKey(home, mock.url), {});
   try {
     const dry = parse(await mentalAsync(home, root, ["relink", "--json", "notes/postgres-connection-pool-sizing.md"], env));
     const rows = dry.data.results[0].proposed;
@@ -376,7 +396,7 @@ test("below threshold writes nothing; dead server fails open", async () => {
   seedBundle(home, root);
   const low = await mockServer(0.2);
   try {
-    const env = { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: low.url };
+    const env = (withKey(home, low.url), {});
     const dry = parse(await mentalAsync(home, root, ["relink", "--apply", "--json", "notes/postgres-connection-pool-sizing.md"], env));
     assert.equal(dry.data.applied, 0);
     const miss = parse(await mentalAsync(home, root, ["search", "--json", "poolng"], env));
@@ -384,7 +404,7 @@ test("below threshold writes nothing; dead server fails open", async () => {
   } finally {
     low.close();
   }
-  const env = { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: "http://127.0.0.1:9/v1/systemone" };
+  const env = (withKey(home, "http://127.0.0.1:9/v1/systemone"), {});
   const w = parse(await mentalAsync(home, root, ["note", "--json", "--title", "Offline note", "--tag", "database"], env));
   assert.equal(w.ok, true);
   assert.equal(w.data.similar, undefined);

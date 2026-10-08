@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { tempHome, initRepo, mental, gitEnv, CLI } from "./helpers.mjs";
 import { deepChecks } from "../bin/lib/doctor-deep.mjs";
+import { setDecideConfig } from "../bin/lib/config.mjs";
 
 const KEY = "tsk_test_SECRET_1234567890";
 
@@ -63,7 +64,7 @@ test("deepChecks: no jev means no checks; personal slice is never sent", async (
   const jev = fakeJev(() => nl(1));
   const out = await deepChecks({ jev, home: null, root: fixture(), slice: false, days: 0 });
   assert.equal(jev.calls.length, 0);
-  assert.match(out[0].message, /never sent/);
+  assert.match(out[0].message, /personal notes are not sent/);
 });
 
 test("deepChecks: confident answers become warn findings; weak ones stay silent", async () => {
@@ -162,7 +163,9 @@ test("mental doctor: runs Jev checks when keyed, skips with --offline, exit code
     });
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  const env = { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: `http://127.0.0.1:${server.address().port}/v1/systemone`, MENTAL_NO_UPDATE_CHECK: "1" };
+  const env = { MENTAL_NO_UPDATE_CHECK: "1" };
+  setDecideConfig(home, { set: { provider: "typesafe", field: "key", value: KEY } });
+  setDecideConfig(home, { set: { provider: "typesafe", field: "url", value: `http://127.0.0.1:${server.address().port}/v1/systemone` } });
   try {
     mental(home, root, ["note", "--json", "--title", "A note", "--tag", "topic", "--body", "hello"]);
     mental(home, root, ["note", "--json", "--title", "Another", "--tag", "topic", "--body", "more"]);
@@ -184,6 +187,7 @@ test("mental doctor: runs Jev checks when keyed, skips with --offline, exit code
     assert.ok(!JSON.parse(off.stdout).data.checks.some((c) => c.id === "jev"));
     assert.equal(calls.length, asked, "--offline makes no requests");
 
+    setDecideConfig(home, { set: { provider: "typesafe", field: "key", value: null } });
     const none = await mentalAsync(home, root, ["doctor", "--json"], { MENTAL_NO_UPDATE_CHECK: "1" });
     assert.ok(!JSON.parse(none.stdout).data.checks.some((c) => c.id === "jev"));
   } finally {

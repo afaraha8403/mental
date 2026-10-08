@@ -233,28 +233,42 @@ Only if you turn it on (`mental option track on`). Agents automatically record p
 - Never store secrets, tokens, or private keys
 - `mental uninstall` does not delete OKF unless you type `DELETE`
 
-Optional: `mental install --mcp` · `mental hooks on` · `mental option track on` · `mental option jev key <KEY>` — default **off**. Skill + rule are the contract. Hours never go in git. [Track](docs/track.md).
+Optional: `mental install --mcp` · `mental hooks on` · `mental option track on` · `mental option decide key <KEY>` — default **off**. Skill + rule are the contract. Hours never go in git. [Track](docs/track.md).
 
-### Jev (optional)
+### Decision models (optional)
 
-[Jev](https://typesafe.ai) (TypeSafe AI System One) is a fast, cheap yes/no relevance judge. Mental never needs it. With a key it can recover a zero-hit `mental search`, hint "similar to existing" before a write, suggest links on `mental show`, and propose them with `mental relink` (typed: supports, supersedes, contradicts, depends_on). `mental retag` proposes topics for untagged files. It fails open and only `relink --apply` and `retag --apply` write, high-confidence results only.
+Mental can use a fast, cheap decision model as a typed judge: yes/no (probability), choice and score, each with confidence. It never needs one. Pick a provider:
 
-Add a key either way (config wins when both are set):
+| Provider | Id | Notes |
+|---|---|---|
+| [TypeSafe Jev](https://typesafe.ai) | `typesafe` (default) | System One API |
+| OpenAI Decisions | `openai` | `POST /v1/decisions`, model `gpt-6-luna` (beta) |
+| Cloudflare Clef | `cloudflare` | needs your account id; model `clef` or `clef-flash` |
+| Your own endpoint | `custom` | TypeSafe-shaped API, needs a URL |
+
+With a key it can recover a zero-hit `mental search`, hint "similar to existing" before a write, suggest links on `mental show`, and propose them with `mental relink` (typed: supports, supersedes, contradicts, depends_on). `mental retag` proposes topics for untagged files. It fails open and only `relink --apply` and `retag --apply` write, high-confidence results only.
+
+Keys are read **only** from `~/.mental/config.json` (mode 0600), never from environment variables, and are never printed or sent over MCP:
 
 ```bash
-mental option jev key <KEY>        # stored in ~/.mental config (mode 0600)
-export MENTAL_JEV_KEY=<KEY>        # or TYPESAFE_API_KEY
-mental option jev off              # mute (also silences the reminder)
-mental option jev budget 200000    # optional cap on input tokens per day (budget off to clear)
+mental option decide key <KEY>                         # key for the active provider
+mental option decide key <KEY> --provider openai       # store another provider's key
+mental option decide provider openai                   # choose the active provider
+mental option decide account <ID> --provider cloudflare
+mental option decide model clef-flash --provider cloudflare
+mental option decide fallback cloudflare               # used when the active one fails (off to clear)
+mental option decide personal off                      # never send personal-slice notes (default: allowed, secrets redacted)
+mental option decide off                               # mute (also silences the reminder)
+mental option decide budget 200000                     # optional cap on input tokens per day (budget off to clear)
 ```
 
-Status (`mental option jev`) shows today's requests and tokens.
+`mental option jev …` still works as an alias, and an older `jev` config key migrates to the TypeSafe provider automatically. Status (`mental option decide`) shows the provider, which providers are configured, and today's requests and tokens.
 
-**In `mental doctor`.** With a key, plain `mental doctor` also runs content checks, all warn-only (exit code unchanged): `jev-stale` (open residue that looks resolved or obsolete), `jev-decisions` (decisions that may contradict each other), `jev-handoff` (latest journal `Resume:` line missing or vague), `jev-untagged` (suggested topic per untagged file; never written), `jev-secrets` (files that may hold credentials; paths only, and values are redacted before anything is sent). Personal-slice notes are never sent. `mental doctor --offline` skips them; spend counts toward the daily budget.
+**In `mental doctor`.** With a key, plain `mental doctor` also runs content checks, all warn-only (exit code unchanged): `jev-stale` (open residue that looks resolved or obsolete), `jev-decisions` (decisions that may contradict each other), `jev-handoff` (latest journal `Resume:` line missing or vague), `jev-untagged` (suggested topic per untagged file; never written), `jev-secrets` (files that may hold credentials; paths only, and values are redacted before anything is sent). Personal-slice notes are included unless you turn them off with `option decide personal off`. `mental doctor --offline` skips them; spend counts toward the daily budget.
 
-Spend is tracked locally in `jev-usage.json` (counts only, no content). Requests are split to stay under the API's token limits, and cached answers are dropped when the model version changes.
+Spend is tracked locally in `jev-usage.json` (counts only, no content) and is shared across providers. Requests are split to stay under each provider's limits, and cached answers are dropped when the model version changes.
 
-Without a key, `heartbeat` and a zero-hit `search` occasionally (at most every 3 days) tell the agent Jev exists so it can mention it. `MENTAL_NO_HINTS=1` silences that.
+Without a key, `heartbeat` and a zero-hit `search` occasionally (at most every 3 days) tell the agent a decision model is available so it can mention it. `MENTAL_NO_HINTS=1` silences that.
 
 ---
 

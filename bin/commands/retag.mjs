@@ -1,5 +1,5 @@
 /**
- * `mental retag [path] [--apply] [--limit N]` — Jev-suggested topic tags for untagged files.
+ * `mental retag [path] [--apply] [--limit N]` — decision-model topic tags for untagged files.
  * Dry run by default. `--apply` adds one tag to each file that has none; it never edits existing tags.
  */
 import { resolveBundle } from "../lib/resolve.mjs";
@@ -26,8 +26,8 @@ export async function cmdRetag(args, io = {}) {
   if (!jev) {
     printResult(stdout, args, false, undefined, {
       code: "jev-off",
-      message: "retag needs Jev, which is optional and not configured.",
-      hint: `Set a key with: ${CMD} option jev key <KEY> (or env MENTAL_JEV_KEY), then retry. Key: https://typesafe.ai`,
+      message: "retag needs a decision model, which is optional and not configured.",
+      hint: `Set a key with: ${CMD} option decide key <KEY> --provider typesafe|openai|cloudflare, then retry. Free tier: Cloudflare; keys: typesafe.ai`,
     });
     return 1;
   }
@@ -36,11 +36,11 @@ export async function cmdRetag(args, io = {}) {
     printResult(stdout, args, false, undefined, resolved.error);
     return 1;
   }
-  if (resolved.data.mode === "personal") {
+  if (resolved.data.mode === "personal" && !jev.personal) {
     printResult(stdout, args, false, undefined, {
       code: "personal-slice",
-      message: "retag does not send personal-slice content to a model.",
-      hint: "Run it from a project bundle.",
+      message: "retag does not send personal-slice content to a model (personal is off).",
+      hint: `Run it from a project bundle, or allow it with: ${CMD} option decide personal on`,
     });
     return 1;
   }

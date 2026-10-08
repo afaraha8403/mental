@@ -344,7 +344,7 @@ export async function cmdDoctor(args, io = {}) {
           home,
           env,
           root: bundle?.root ?? null,
-          slice: Boolean(bundle) && bundle.mode !== "personal",
+          slice: Boolean(bundle) && (bundle.mode !== "personal" || jev.personal),
           days: parseDays(args.flags?.days),
         })),
       );

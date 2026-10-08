@@ -4,8 +4,9 @@
  */
 import { resolveBundle } from "../lib/resolve.mjs";
 import { readFileSync } from "node:fs";
-import { FEATURES, JEV_ENV_KEYS, listOptionals, loadConfig, maskKey, resolveJev, setFeature, setJevConfig } from "../lib/config.mjs";
-import { JEV_SIGNUP_URL, usageToday } from "../lib/jev.mjs";
+import { DECIDE_PROVIDERS, FEATURES, listOptionals, loadConfig, maskKey, resolveDecide, setDecideConfig, setFeature } from "../lib/config.mjs";
+import { usageToday } from "../lib/jev.mjs";
+import { PROVIDER_INFO } from "../lib/decide-providers.mjs";
 import { enableHooks, disableHooks } from "../lib/hooks.mjs";
 import { enableMcp, disableMcp } from "../lib/mcp-hosts.mjs";
 import { copyTrackSkills } from "../lib/install-skills.mjs";
@@ -41,7 +42,8 @@ function uuidForThis(args) {
   return { uuid: where.id, where };
 }
 
-const JEV_USAGE = "mental option jev [key <KEY>|key -|key clear|on|off|budget <tokens/day>|budget off]";
+const DECIDE_USAGE =
+  "mental option decide [key <KEY>|key -|key clear|provider <P>|url <U>|model <M>|account <ID>|on|off|budget <tokens/day>|budget off|personal on|off|fallback <P>|off] [--provider P]";
 
 function readStdinSync() {
   try {
@@ -52,102 +54,179 @@ function readStdinSync() {
 }
 
 /**
- * Jev is an optional API key, not a feature flag. Never echo the key.
+ * The decision model is an optional API key, not a feature flag. Never echo a key.
  * `key -` reads it from stdin so it stays out of shell history.
  */
-function cmdOptionJev(args, io, home) {
+function cmdOptionDecide(args, io, home) {
   const stdout = io.stdout ?? process.stdout;
   const env = args.env ?? process.env;
   const sub = (args.rest[1] || "").toLowerCase();
+  const usage = (message = DECIDE_USAGE) => {
+    printResult(stdout, args, false, undefined, { code: "usage", message });
+    return EXIT_USAGE;
+  };
+  const fail = (r) => {
+    printResult(stdout, args, false, undefined, r.error);
+    return 1;
+  };
 
   const status = () => {
-    const r = resolveJev(home, env);
-    const stored = r.source === "config" ? loadConfig(home).jev.key : r.source === "env" ? envKey(env) : null;
+    const r = resolveDecide(home);
+    const cfg = loadConfig(home);
     const today = usageToday(home, env);
+    const providers = DECIDE_PROVIDERS.map((id) => {
+      const p = cfg.decide.providers[id] || {};
+      return {
+        provider: id,
+        label: PROVIDER_INFO[id].label,
+        configured: Boolean(p.key),
+        key: maskKey(p.key || null),
+        url: p.url || PROVIDER_INFO[id].url || null,
+        model: p.model || PROVIDER_INFO[id].model,
+        accountId: p.accountId || null,
+        active: id === r.provider,
+      };
+    });
     return {
-      feature: "jev",
+      feature: "decide",
       configured: r.configured,
       enabled: r.enabled,
+      provider: r.provider,
       source: r.source,
-      key: maskKey(stored),
-      dailyTokens: loadConfig(home).jev?.dailyTokens ?? null,
+      key: providers.find((p) => p.active)?.key ?? null,
+      providers,
+      fallback: r.fallback,
+      personal: r.personal,
+      dailyTokens: cfg.decide.dailyTokens ?? null,
       today: { requests: today.requests, inputTokens: today.input, outputTokens: today.output },
     };
   };
 
+  const target = () => {
+    const p = String(args.flags?.provider || "").toLowerCase();
+    return p || resolveDecide(home).provider;
+  };
+  const validTarget = (p) => (DECIDE_PROVIDERS.includes(p) ? null : `unknown provider "${p}"; use ${DECIDE_PROVIDERS.join(", ")}`);
+
   if (!sub) {
-    printResult(stdout, args, true, status(), undefined, (d) =>
-      d.configured
-        ? `jev ${d.enabled ? "on" : "off"} (key ${d.key}, from ${d.source}); today ${d.today.requests} requests, ${d.today.inputTokens} input tokens${d.dailyTokens ? ` of ${d.dailyTokens} budget` : ""}`
-        : `jev not configured. Optional: get a key at ${JEV_SIGNUP_URL}, then mental option jev key <KEY> (or set MENTAL_JEV_KEY).`,
-    );
+    printResult(stdout, args, true, status(), undefined, (d) => {
+      if (!d.configured) {
+        const others = d.providers.filter((p) => p.configured).map((p) => p.provider);
+        return others.length
+          ? `decide: active provider ${d.provider} has no key (configured: ${others.join(", ")}). Switch with: mental option decide provider <name>`
+          : `decide not configured (optional). Keys: typesafe.ai, platform.openai.com, dash.cloudflare.com (free tier). Then: mental option decide key <KEY> --provider typesafe|openai|cloudflare`;
+      }
+      const lines = [
+        `decide ${d.enabled ? "on" : "off"}: ${d.provider} (key ${d.key}); today ${d.today.requests} requests, ${d.today.inputTokens} input tokens${d.dailyTokens ? ` of ${d.dailyTokens} budget` : ""}`,
+        `  personal notes: ${d.personal ? "allowed (secrets are redacted)" : "never sent"}${d.fallback ? `; fallback: ${d.fallback}` : ""}`,
+      ];
+      for (const p of d.providers.filter((x) => x.configured)) {
+        lines.push(`  ${p.active ? "*" : " "} ${p.provider.padEnd(10)} key ${p.key}  model ${p.model}${p.accountId ? `  account ${p.accountId}` : ""}`);
+      }
+      return lines.join("\n");
+    });
     return 0;
   }
 
   if (sub === "budget") {
     const raw = (args.rest[2] || "").toLowerCase();
     const n = Number(raw);
-    if (raw !== "off" && !(Number.isFinite(n) && n > 0)) {
-      printResult(stdout, args, false, undefined, { code: "usage", message: JEV_USAGE });
-      return EXIT_USAGE;
-    }
-    const r = setJevConfig(home, { dailyTokens: raw === "off" ? null : n });
-    if (!r.ok) {
-      printResult(stdout, args, false, undefined, r.error);
-      return 1;
-    }
+    if (raw !== "off" && !(Number.isFinite(n) && n > 0)) return usage();
+    const r = setDecideConfig(home, { dailyTokens: raw === "off" ? null : n });
+    if (!r.ok) return fail(r);
     printResult(stdout, args, true, status(), undefined, (d) =>
-      d.dailyTokens ? `option jev budget ${d.dailyTokens} input tokens/day` : "option jev budget off",
+      d.dailyTokens ? `option decide budget ${d.dailyTokens} input tokens/day` : "option decide budget off",
     );
     return 0;
   }
 
   if (sub === "on" || sub === "off") {
-    const r = setJevConfig(home, { enabled: sub === "on" });
-    if (!r.ok) {
-      printResult(stdout, args, false, undefined, r.error);
-      return 1;
+    const r = setDecideConfig(home, { enabled: sub === "on" });
+    if (!r.ok) return fail(r);
+    printResult(stdout, args, true, status(), undefined, (d) => `option decide ${sub}${d.configured ? "" : " (no key set; reminders muted)"}`);
+    return 0;
+  }
+
+  if (sub === "personal") {
+    const v = (args.rest[2] || "").toLowerCase();
+    if (v !== "on" && v !== "off") return usage("mental option decide personal on|off");
+    const r = setDecideConfig(home, { personal: v === "on" });
+    if (!r.ok) return fail(r);
+    printResult(stdout, args, true, status(), undefined, (d) =>
+      d.personal ? "option decide personal on (personal notes may be sent; secrets are redacted)" : "option decide personal off (personal notes are never sent)",
+    );
+    return 0;
+  }
+
+  if (sub === "provider") {
+    const p = (args.rest[2] || "").toLowerCase();
+    if (!p) return usage("mental option decide provider <typesafe|openai|cloudflare|custom>");
+    const bad = validTarget(p);
+    if (bad) return usage(bad);
+    const r = setDecideConfig(home, { provider: p });
+    if (!r.ok) return fail(r);
+    printResult(stdout, args, true, status(), undefined, (d) =>
+      `option decide provider ${p}${d.providers.find((x) => x.provider === p)?.configured ? "" : " (no key yet: mental option decide key <KEY> --provider " + p + ")"}`,
+    );
+    return 0;
+  }
+
+  if (sub === "fallback") {
+    const p = (args.rest[2] || "").toLowerCase();
+    if (!p) return usage("mental option decide fallback <provider|off>");
+    if (p !== "off") {
+      const bad = validTarget(p);
+      if (bad) return usage(bad);
     }
-    printResult(stdout, args, true, status(), undefined, (d) => `option jev ${sub}${d.configured ? "" : " (no key set; reminders muted)"}`);
+    const r = setDecideConfig(home, { fallback: p === "off" ? null : p });
+    if (!r.ok) return fail(r);
+    printResult(stdout, args, true, status(), undefined, (d) => (d.fallback ? `option decide fallback ${d.fallback}` : "option decide fallback off"));
+    return 0;
+  }
+
+  if (sub === "url" || sub === "model" || sub === "account") {
+    const p = target();
+    const bad = validTarget(p);
+    if (bad) return usage(bad);
+    const raw = args.rest[2];
+    if (!raw) return usage(`mental option decide ${sub} <value|clear> [--provider P]`);
+    if (sub === "url" && raw !== "clear" && !/^https?:\/\//i.test(raw)) return usage("url must start with http:// or https://");
+    const value = raw === "clear" ? null : raw.trim();
+    const field = sub === "account" ? "accountId" : sub;
+    const r = setDecideConfig(home, { set: { provider: p, field, value } });
+    if (!r.ok) return fail(r);
+    printResult(stdout, args, true, status(), undefined, () => `option decide ${p} ${sub} ${value ? "saved" : "cleared"}`);
     return 0;
   }
 
   if (sub === "key") {
-    const raw = args.rest[2];
-    if (!raw) {
-      printResult(stdout, args, false, undefined, { code: "usage", message: JEV_USAGE });
-      return EXIT_USAGE;
+    let raw = args.rest[2];
+    let p = target();
+    if (raw && DECIDE_PROVIDERS.includes(raw.toLowerCase()) && args.rest[3]) {
+      p = raw.toLowerCase();
+      raw = args.rest[3];
     }
+    const bad = validTarget(p);
+    if (bad) return usage(bad);
+    if (!raw) return usage();
     if (raw === "clear") {
-      const r = setJevConfig(home, { key: null });
-      if (!r.ok) {
-        printResult(stdout, args, false, undefined, r.error);
-        return 1;
-      }
-      printResult(stdout, args, true, status(), undefined, () => "option jev key cleared");
+      const r = setDecideConfig(home, { set: { provider: p, field: "key", value: null } });
+      if (!r.ok) return fail(r);
+      printResult(stdout, args, true, status(), undefined, () => `option decide ${p} key cleared`);
       return 0;
     }
     const key = raw === "-" ? readStdinSync() : raw.trim();
-    if (!key || /\s/.test(key)) {
-      printResult(stdout, args, false, undefined, { code: "usage", message: "Jev key is empty or contains whitespace." });
-      return EXIT_USAGE;
-    }
-    const r = setJevConfig(home, { key, enabled: true });
-    if (!r.ok) {
-      printResult(stdout, args, false, undefined, r.error);
-      return 1;
-    }
-    printResult(stdout, args, true, status(), undefined, (d) => `option jev key saved (${d.key}). Jev is on.`);
+    if (!key || /\s/.test(key)) return usage("decide key is empty or contains whitespace.");
+    const r = setDecideConfig(home, { set: { provider: p, field: "key", value: key }, enabled: true });
+    if (!r.ok) return fail(r);
+    printResult(stdout, args, true, status(), undefined, (d) => {
+      const need = p === "cloudflare" && !d.providers.find((x) => x.provider === p)?.accountId ? " Next: mental option decide account <ACCOUNT_ID> --provider cloudflare" : "";
+      return `option decide ${p} key saved (${maskKey(key)}). Active provider: ${d.provider}.${need}`;
+    });
     return 0;
   }
 
-  printResult(stdout, args, false, undefined, { code: "usage", message: JEV_USAGE });
-  return EXIT_USAGE;
-}
-
-function envKey(env) {
-  for (const n of JEV_ENV_KEYS) if (env[n] && String(env[n]).trim()) return String(env[n]).trim();
-  return null;
+  return usage();
 }
 
 /**
@@ -176,12 +255,12 @@ export function cmdOption(args, io = {}) {
     return 0;
   }
 
-  if (feature === "jev") return cmdOptionJev(args, io, home);
+  if (feature === "decide" || feature === "jev") return cmdOptionDecide(args, io, home);
 
   if (!FEATURES.includes(feature)) {
     printResult(stdout, args, false, undefined, {
       code: "usage",
-      message: `mental option [${FEATURES.join("|")}|jev] on|off`,
+      message: `mental option [${FEATURES.join("|")}|decide] on|off`,
     });
     return EXIT_USAGE;
   }
