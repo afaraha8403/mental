@@ -13,7 +13,7 @@ export const ATTENTION_KINDS = new Set(["direction", "concern", "thread", "verif
 export const ATTENTION_HEARTBEAT_CAP = 7;
 /** Mirror attention: heartbeat TTY + JSON lists cap here; extras via `list`. */
 export const DECISION_HEARTBEAT_CAP = 7;
-export const DECISION_STATUSES = new Set(["open", "deferred", "decided", "superseded"]);
+export const DECISION_STATUSES = new Set(["open", "deferred", "decided", "superseded", "obsolete"]);
 
 const TAG_SLUG = /^[a-z0-9_-]{2,32}$/;
 
@@ -524,7 +524,7 @@ function noteBlurb(data, body) {
 }
 
 /**
- * Active/draft notes in the bundle. Superseded files stay on disk but are omitted.
+ * Active/draft notes in the bundle. Superseded and obsolete files stay on disk but are omitted.
  * Missing `status` (Balakit-era notes) counts as `active`.
  * @param {string} root
  */
@@ -536,7 +536,7 @@ export function listNotes(root) {
     const text = readFileSync(join(dir, file), "utf8");
     const { data, body } = parseFrontmatter(text);
     const status = String(data.status || "active");
-    if (status === "superseded") continue;
+    if (status === "superseded" || status === "obsolete") continue;
     out.push({
       path: `notes/${file}`,
       file,

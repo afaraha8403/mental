@@ -20,6 +20,7 @@ import { cmdStatus } from "./commands/status.mjs";
 import { cmdJournalS, cmdDecideS, cmdNoteS, cmdAttentionS, cmdParkS, cmdHandoffS } from "./lib/similar.mjs";
 import { cmdRelink } from "./commands/relink.mjs";
 import { cmdRetag } from "./commands/retag.mjs";
+import { cmdSupersede, cmdObsolete } from "./commands/supersede.mjs";
 import { cmdBrief } from "./commands/brief.mjs";
 import { cmdExtract } from "./commands/extract.mjs";
 import { cmdInstall } from "./commands/install.mjs";
@@ -68,6 +69,8 @@ export const COMMANDS = {
   show: cmdShow,
   relink: cmdRelink,
   retag: cmdRetag,
+  supersede: cmdSupersede,
+  obsolete: cmdObsolete,
   brief: cmdBrief,
   extract: cmdExtract,
   heartbeat: cmdHeartbeat,

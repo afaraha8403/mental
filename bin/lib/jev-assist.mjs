@@ -168,6 +168,7 @@ export async function findSimilar({ jev, root, title, body = "" }) {
   const scored = [];
   for (const c of subjects(root)) {
     if (c.title.trim().toLowerCase() === norm) continue;
+    if (c.status === "superseded" || c.status === "obsolete") continue;
     const have = new Set(sigTokens(`${c.title} ${c.description}`));
     const shared = want.filter((t) => have.has(t)).length;
     if (shared === 0) continue;
@@ -295,7 +296,7 @@ export async function suggestLinks({ jev, root, path }) {
 /**
  * Append accepted links as ordinary markdown. Caller reindexes.
  * @param {string} abs file to edit
- * @param {Array<{ path: string, title: string, relation?: string }>} links
+ * @param {Array<{ path: string, title: string, relation?: string, label?: string }>} links `label` overrides the relation word (e.g. "superseded by").
  */
 export function applyLinks(abs, links) {
   let text = readFileSync(abs, "utf8");
@@ -303,7 +304,11 @@ export function applyLinks(abs, links) {
   if (fresh.length === 0) return 0;
   const bullets = fresh
     .map((l) => {
-      const rel = l.relation && l.relation !== "related" && Object.hasOwn(RELATIONS, l.relation) ? `${l.relation}: ` : "";
+      const rel = l.label
+        ? `${l.label}: `
+        : l.relation && l.relation !== "related" && Object.hasOwn(RELATIONS, l.relation)
+          ? `${l.relation}: `
+          : "";
       return `- ${rel}[${l.title.replace(/[[\]]/g, "")}](${l.path})`;
     })
     .join("\n");

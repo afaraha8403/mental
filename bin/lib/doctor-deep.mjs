@@ -8,6 +8,7 @@
 import { listConcepts } from "./index.mjs";
 import { latestJournalHandoff } from "./okf.mjs";
 import { scanStale } from "./stale.mjs";
+import { isStale } from "./supersede.mjs";
 import { THRESHOLDS, choice, noul, pick, usageToday } from "./jev.mjs";
 import { sigTokens, oneLine, redact, SECRETISH } from "./jev-assist.mjs";
 
@@ -80,14 +81,14 @@ async function staleTriage(jev, root, days, context) {
     if (verdict === "resolved" || verdict === "obsolete") done.push({ ...s, verdict });
   });
   const checks = done.length
-    ? [mk("jev-stale", false, `${done.length} of ${all.length} stale item(s) look resolved or obsolete (${sample(done)}). Close or supersede them.`)]
+    ? [mk("jev-stale", false, `${done.length} of ${all.length} stale item(s) look resolved or obsolete (${sample(done)}). Close them, or mark notes and decisions with mental obsolete or mental supersede.`)]
     : [];
   return { ran: true, r, checks };
 }
 
 /** Decision log: pairs that share vocabulary and may contradict or supersede each other. */
 async function decisionConflicts(jev, root) {
-  const decisions = listConcepts(root).filter((c) => c.type === "Decision" && c.status !== "superseded");
+  const decisions = listConcepts(root).filter((c) => c.type === "Decision" && !isStale(c.status));
   if (decisions.length < 2) return { ran: false, checks: [] };
   const toks = decisions.map((d) => new Set(sigTokens(`${d.title} ${d.description}`)));
   const scored = [];

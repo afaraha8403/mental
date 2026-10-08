@@ -121,9 +121,9 @@ async function runRepair({ args, jev, home, env, cwd, bundle }) {
   }
   try {
     const r = await repairHistory({ jev, home, env, root: target.root, apply, files });
-    if (apply && r.tags.applied + r.links.applied > 0) refreshIndex(target, home, env);
+    if (apply && r.tags.applied + r.links.applied + r.stale.applied > 0) refreshIndex(target, home, env);
     if (!r.ok) return { repair: r, check: check("jev-repair", true, `skipped (model unavailable: ${r.reason})`, "info") };
-    const pending = !apply && r.tags.proposals.length + r.links.results.length > 0;
+    const pending = !apply && r.tags.proposals.length + r.links.results.length + r.stale.proposals.length > 0;
     return { repair: r, check: check("jev-repair", !pending, summarizeRepair(r), pending ? "warn" : "info") };
   } catch {
     return { repair: null, check: check("jev-repair", true, "skipped (error)", "info") };

@@ -120,7 +120,7 @@ export const CATALOG = {
     flags: [
       TITLE,
       PATH,
-      v("status", { enum: ["open", "deferred", "decided", "superseded"] }),
+      v("status", { enum: ["open", "deferred", "decided", "superseded", "obsolete"] }),
       v("description"),
       v("body", { summary: "Why this choice (required when creating)" }),
       v("slug"),
@@ -277,6 +277,29 @@ export const CATALOG = {
     effects: "non_idempotent",
     rest: { name: "path", summary: "Bundle-relative path (default: all untagged non-journal files, up to --limit)" },
   },
+  supersede: {
+    name: "supersede",
+    group: "Write",
+    summary: "Mark a note or decision as superseded by a newer one. Model-free. The file stays on disk, drops out of heartbeat and brief, and ranks last in search. --restore undoes it.",
+    usage: `${CMD} supersede <old> --by <new> [--restore]`,
+    examples: [`${CMD} supersede decisions/2026-01-05-use-sqlite.md --by decisions/2026-09-01-use-postgres.md`, `${CMD} supersede notes/old-rule.md --restore --json`],
+    flags: [
+      v("by", { summary: "The newer note or decision that replaces it (required unless --restore)" }),
+      b("restore", { summary: "Make it current again (decided for decisions, active for notes)" }),
+    ],
+    effects: "non_idempotent",
+    rest: { name: "old", summary: "Bundle-relative path of the stale note or decision", mcpName: "old", required: true },
+  },
+  obsolete: {
+    name: "obsolete",
+    group: "Write",
+    summary: "Mark a note or decision as obsolete: it no longer applies and nothing replaces it. Model-free. The file stays on disk. --restore undoes it.",
+    usage: `${CMD} obsolete <file> [--restore]`,
+    examples: [`${CMD} obsolete notes/old-workaround.md`, `${CMD} obsolete notes/old-workaround.md --restore`],
+    flags: [b("restore", { summary: "Make it current again (decided for decisions, active for notes)" })],
+    effects: "non_idempotent",
+    rest: { name: "file", summary: "Bundle-relative path of the stale note or decision", mcpName: "file", required: true },
+  },
   schema: {
     name: "schema",
     group: "Lookup",
@@ -308,7 +331,7 @@ export const CATALOG = {
     examples: [`${CMD} note --title "Identity is a UUID in bindings.json"`, `${CMD} note --title "…" --json`],
     flags: [
       v("title", { required: true }),
-      v("status", { enum: ["draft", "active", "superseded"] }),
+      v("status", { enum: ["draft", "active", "superseded", "obsolete"] }),
       v("description"),
       BODY,
       v("slug"),
