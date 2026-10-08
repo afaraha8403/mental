@@ -51,7 +51,19 @@ export function newSession(now) {
     compacting: false,
     working: false,
     receipt: null,
+    log: [],
   };
+}
+
+/**
+ * Remember a receipt for the session's activity list.
+ * @param {SessionStats} s
+ * @param {Receipt} receipt
+ */
+export function noteReceipt(s, receipt) {
+  s.receipt = receipt;
+  s.log.push(receipt);
+  if (s.log.length > 8) s.log.splice(0, s.log.length - 8);
 }
 
 /**
@@ -66,6 +78,7 @@ export function newSession(now) {
  *   compacting: boolean,
  *   working: boolean,
  *   receipt: Receipt | null,
+ *   log: Receipt[],
  * }} SessionStats
  * @typedef {{ kind: string, label: string, tone: string, glyph: string, title: string, at: number }} Receipt
  */

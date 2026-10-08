@@ -35,12 +35,15 @@ const el = {
   Box: (props) => ({ type: "Box", props }),
   Text: (props) => ({ type: "Text", props }),
   Button: (props) => ({ type: "Button", props }),
+  Svg: (props) => ({ type: "Svg", props }),
 };
 
+// Mirrors BoxProps / TextProps / ButtonProps / SvgProps in the Mods types: Text and Svg take no `key`.
 const ALLOWED = {
-  Box: new Set(["flexDirection", "justifyContent", "width", "gap", "flexGrow", "children"]),
-  Text: new Set(["color", "bold", "italic", "wrap", "children"]),
+  Box: new Set(["key", "flexDirection", "justifyContent", "alignItems", "width", "gap", "flexGrow", "flexShrink", "children"]),
+  Text: new Set(["color", "bold", "italic", "dimColor", "wrap", "children"]),
   Button: new Set(["key", "label", "hotkey", "plain", "dimColor", "onPress"]),
+  Svg: new Set(["source", "alt", "width", "height", "isInteractive"]),
 };
 
 /** Walk a tree, asserting every prop is allowlisted and typed as the Mods API wants. */
@@ -63,6 +66,13 @@ function assertValidTree(tree) {
       if (k === "plain") assert.equal(v, true, "Button plain must be `true` or absent");
       if (k === "wrap") assert.equal(v, "truncate-end");
       if (k === "hotkey") assert.match(v, /^[a-z0-9]$/);
+      if (k === "isInteractive") assert.equal(v, true, "Svg isInteractive must be `true` or absent");
+    }
+    if (node.type === "Svg") {
+      assert.ok(node.props.alt, "Svg needs alt");
+      assert.match(node.props.source, /^<svg[\s\S]*<\/svg>$/);
+      assert.ok(node.props.source.length <= 131072, "Svg source within the 131072-char cap");
+      assert.doesNotMatch(node.props.source, /<script|\son[a-z]+=/i, "no script or handlers");
     }
     if (node.type === "Button") {
       assert.equal(typeof node.props.key, "string");
@@ -78,6 +88,8 @@ function textOf(node) {
   if (node == null || node === false) return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(textOf).join("");
+  if (node.type === "Svg") return node.props.alt;
+  if (node.type === "Button") return node.props.label;
   if (node.type === "Box" && node.props.flexDirection === "column") {
     return [node.props.children].flat(Infinity).map(textOf).filter(Boolean).join("\n");
   }
@@ -334,7 +346,7 @@ test("heartbeat argv and stdout parsing", () => {
 });
 
 /** A fake engine: collects hooks, records `$` calls, runs timers by hand. */
-function fakeEngine({ hb = heartbeat(), fail = false, surfaces } = {}) {
+function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {} } = {}) {
   const hooks = [];
   const calls = [];
   const timers = [];
@@ -362,7 +374,10 @@ function fakeEngine({ hb = heartbeat(), fail = false, surfaces } = {}) {
         return { exitCode: 0, stdout: JSON.stringify(hb), stderr: "" };
       },
     },
-    store: { get: async () => "decisions", set: async (k, v) => calls.push(["store.set", k, v]) },
+    store: {
+      get: async (k) => (k in store ? store[k] : "decisions"),
+      set: async (k, v) => calls.push(["store.set", k, v]),
+    },
     command: { register: async (spec) => calls.push(["register", spec]) },
     ui: {
       invalidate: () => calls.push(["invalidate"]),
@@ -438,29 +453,91 @@ test("register wires session.start, band, pane, receipts and cleanup", async () 
   assert.ok(eng.timers.filter((t) => !t.once).every((t) => t.cancelled), "intervals cancelled at session end");
 });
 
-test("Claude Desktop: band draws and /mental docks a side pane", async () => {
+test("Claude Desktop: footer opener, rich card pane, silent /mental, remembered open", async () => {
   const eng = fakeEngine({ surfaces: ["desktop"] });
   await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
   await eng.flush();
+  assert.ok(!eng.timers.some((t) => t.ms === 800), "no reopen when the pane was not left open");
+
+  const footer = await eng.fire("ui.render", { component: "SessionMode", surface: "desktop", props: { modes: ["Auto-accept"] } }, "PASSED");
+  assert.notEqual(footer, "PASSED", "footer opener replaces the mode row on Desktop");
+  const keys = assertValidTree(footer);
+  assert.ok(keys.has("mental-toggle"));
+  assert.match(textOf(footer), /Mental/);
+  assert.match(textOf(footer), /Auto-accept/, "keeps the host's own mode labels");
+  const termFooter = await eng.fire("ui.render", { component: "SessionMode", surface: "terminal", props: { modes: [] } }, "PASSED");
+  assert.equal(termFooter, "PASSED", "terminal footer untouched");
+
   const band = await eng.fire("ui.render", { component: "AbovePrompt", surface: "desktop", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } }, "PASSED");
-  assert.notEqual(band, "PASSED", "band renders on the desktop surface");
   assertValidTree(band);
   const mobile = await eng.fire("ui.render", { component: "AbovePrompt", surface: "mobile", props: { hasSurvey: false, maxRows: 4, bodyColumns: 60 } }, "PASSED");
   assert.equal(mobile, "PASSED");
 
-  // Desktop sends a terminal-shaped presentation; the mod must still dock.
-  const cmd = await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
-  assert.equal(cmd.text, "Mental panel shown");
+  // Pressing the footer button opens the docked pane and remembers it.
+  let press;
+  walk(footer, (n) => {
+    if (n.type === "Button" && n.props.key === "mental-toggle") press = n.props.onPress;
+  });
+  assert.ok(press);
+  press();
+  await eng.flush();
   const open = eng.calls.find((c) => c[0] === "open");
   assert.equal(open[1].id, "mental");
   assert.equal(open[1].rows, undefined, "docked, not a dialog");
-  assert.equal(open[1].closeOnEscape, undefined);
+  assert.ok(eng.calls.some((c) => c[0] === "store.set" && c[1] === "open" && c[2] === true));
 
-  await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48, scroll: { bodyRows: 40 } } });
   await eng.fire("tool.call", { tool: "Edit", file_path: "/repo/a.mjs" }, { text: "ok" });
+  const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48, scroll: { bodyRows: 40 } } });
+  const paneKeys = assertValidTree(pane);
+  assert.ok(paneKeys.has("park") && paneKeys.has("handoff") && paneKeys.has("refresh"));
+  const svgs = [];
+  walk(pane, (n) => n.type === "Svg" && svgs.push(n));
+  assert.ok(svgs.length >= 4, "hero, session, needs, files cards");
+  assert.match(textOf(pane), /Wire the band/, "resume point in the hero");
+  assert.match(svgs.map((x) => x.props.source).join(""), /a\.mjs/, "touched file shows up");
+
+  // /mental on Desktop toggles silently (no chat text).
   const hidden = await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
-  assert.equal(hidden.text, "Mental panel hidden");
+  assert.deepEqual(hidden, {});
+  assert.ok(eng.calls.some((c) => c[0] === "store.set" && c[1] === "open" && c[2] === false));
+  const shown = await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
+  assert.deepEqual(shown, {});
   assert.doesNotMatch(JSON.stringify(eng.calls), /Widen the terminal/);
+});
+
+test("Claude Desktop: reopens the pane when it was left open", async () => {
+  const eng = fakeEngine({ surfaces: ["desktop"], store: { open: true } });
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const reopen = eng.timers.find((t) => t.once && t.ms === 800);
+  assert.ok(reopen, "schedules a reopen");
+  reopen.fn();
+  await eng.flush();
+  assert.ok(eng.calls.some((c) => c[0] === "open"));
+});
+
+test("desktop cards escape text and stay under the Svg cap", async () => {
+  const { esc, heroSvg, sessionSvg, filesSvg, activitySvg, guardrailsSvg, needsSvg, SVG_MAX } = await import("../claude-mod/lib/desktop.mjs");
+  const { noteReceipt, newSession } = await import("../claude-mod/lib/model.mjs");
+  assert.equal(esc(`<a href="x">&'`), "&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
+  const s = newSession(0);
+  for (let i = 0; i < 12; i++) noteReceipt(s, { glyph: "◆", label: "Parked", title: `t${i}`, at: i });
+  assert.equal(s.log.length, 8, "activity log keeps the last 8");
+  for (let i = 0; i < 400; i++) s.files.set(`/repo/src/${"x".repeat(60)}${i}.mjs`, 1);
+  const vm = { linked: true, resume: "<script>alert(1)</script>".repeat(40), attention: [], decisions: [], needsEyes: [], guardrails: [] };
+  const width = 420;
+  const cards = [
+    heroSvg({ vm, s, now: 10, width }),
+    sessionSvg({ s, now: 10, width }),
+    filesSvg({ s, cwd: "/repo", width }),
+    activitySvg({ log: s.log, now: 10, width }),
+    guardrailsSvg({ vm, width }),
+    needsSvg({ vm, now: 10, width }),
+  ].filter(Boolean);
+  for (const c of cards) {
+    assert.ok(c.source.length <= SVG_MAX);
+    assert.doesNotMatch(c.source, /<script/);
+  }
 });
 
 test("register degrades when heartbeat cannot run", async () => {

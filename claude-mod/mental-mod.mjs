@@ -3,7 +3,9 @@
  *
  * Draws a two-row band above the prompt (resume point, live session pulse,
  * residue counts, context dial, receipts when Mental writes) and a `/mental`
- * pane with Now / Residue / Decisions / Session / Time tabs. It reads the
+ * pane with Now / Residue / Decisions / Session / Time tabs. On Claude Desktop
+ * (and other surfaces that draw `Svg`) the pane is a column of rich cards and a
+ * persistent Mental button sits in the prompt footer. It reads the
  * thread through `mental heartbeat --json --passive` and never writes: Park
  * and Handoff fill the prompt so the agent records them through the skill.
  *
@@ -16,6 +18,7 @@ import {
   newSession,
   noteContext,
   noteEdit,
+  noteReceipt,
   noteTurnComplete,
   receiptOf,
   viewModelOf,
@@ -23,17 +26,23 @@ import {
   RECEIPT_MS,
 } from "./lib/model.mjs";
 import { bandView, paneView, TABS } from "./lib/views.mjs";
+import { bandDesktop, footerDesktop, paneDesktop } from "./lib/desktop.mjs";
 
 const PANE_ID = "mental";
 const PANE_TITLE = "Mental";
 const DOCK_MIN_COLUMNS = 110;
-// Sites where the AbovePrompt band draws; the Desktop app's Code tab renders it too.
+// Sites where the AbovePrompt band draws (the engine raises it on the terminal;
+// a Desktop build that raises it too gets the rich band).
 const BAND_SURFACES = ["terminal", "desktop"];
+// Surfaces that draw `Svg`, so they get the rich cards instead of text rows.
+const RICH_SURFACES = ["desktop", "vscode", "mobile"];
 const DEBOUNCE_MS = 15_000;
 const POLL_MS = 60_000;
 const FRAME_MS = 600;
 const HEARTBEAT_TIMEOUT_MS = 20_000;
 const STORE_TAB_KEY = "tab";
+const STORE_OPEN_KEY = "open";
+const REOPEN_MS = 800;
 const PARK_PROMPT = "Park this session in Mental";
 const HANDOFF_PROMPT = "Hand off this session in Mental";
 
@@ -94,6 +103,7 @@ export const register = (on) => {
   let tab = "now";
   let isPaneOpen = false;
   let isFullscreen = false;
+  let isRich = false;
   let frame = 0;
   let inFlight = false;
   let queued = false;
@@ -170,7 +180,8 @@ export const register = (on) => {
 
   function setWorking(isWorking) {
     s.working = isWorking;
-    if (isWorking && !breath && host) {
+    // Rich surfaces animate in SVG; rebuilding their frames each tick would flicker.
+    if (isWorking && !breath && host && !isRich) {
       breath = host.every(FRAME_MS, () => {
         frame += 1;
         redraw();
@@ -201,13 +212,44 @@ export const register = (on) => {
       return false;
     }
     isPaneOpen = true;
+    rememberOpen(true);
     void refresh();
+    redraw();
     return true;
   }
 
   async function closePane() {
     await host.close({ id: PANE_ID }).catch(() => undefined);
     isPaneOpen = false;
+    rememberOpen(false);
+    redraw();
+  }
+
+  function rememberOpen(isOpen) {
+    if (!isRich) return;
+    void host?.storeSet(STORE_OPEN_KEY, isOpen).catch(() => undefined);
+  }
+
+  /** The footer button and the band button: open the docked pane, or hide it. */
+  async function togglePane() {
+    if (!host) return;
+    if (isPaneOpen) {
+      await closePane();
+      return;
+    }
+    isFullscreen = true;
+    const ok = await openPane();
+    if (!ok) host.toast("Claude couldn't place the Mental panel — widen the window and try again");
+  }
+
+  /** Read once per draw: the surface tells us whether Svg cards are available. */
+  function noteSurface(surface) {
+    if (!isRich && RICH_SURFACES.includes(surface)) {
+      isRich = true;
+      isFullscreen = true;
+      breath?.cancel();
+      breath = null;
+    }
   }
 
   async function fill(text) {
@@ -253,12 +295,60 @@ export const register = (on) => {
     poll?.cancel();
     poll = $.clock.every(POLL_MS, () => void refresh());
     void refresh();
+    try {
+      const got = await $.session.surfaces();
+      if (Array.isArray(got)) for (const surface of got) noteSurface(surface);
+    } catch {
+      /* older build */
+    }
+    if (isRich) {
+      try {
+        if ((await $.store.get(STORE_OPEN_KEY)) === true) {
+          $.clock.after(REOPEN_MS, () => void openPane().catch(() => undefined));
+        }
+      } catch {
+        /* no store */
+      }
+    }
     return next(e);
+  });
+
+  on("ui.render", { component: "SessionMode" }, async ($, e, next) => {
+    if (!host || !RICH_SURFACES.includes(e.surface)) return next(e);
+    noteSurface(e.surface);
+    const { Box, Text, Button, Svg } = await $.ui.resolve(e);
+    return footerDesktop(
+      { Box, Text, Button, Svg },
+      {
+        vm,
+        s,
+        now: nowOf(),
+        isOpen: isPaneOpen,
+        modes: Array.isArray(e.props.modes) ? e.props.modes : [],
+        onToggle: () => void togglePane(),
+      },
+    );
   });
 
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
     if (!host || !BAND_SURFACES.includes(e.surface) || e.props.hasSurvey) return next(e);
+    noteSurface(e.surface);
     if (e.props.isWorking !== s.working) setWorking(!!e.props.isWorking);
+    if (isRich) {
+      const { Box, Text, Button, Svg } = await $.ui.resolve(e);
+      return bandDesktop(
+        { Box, Text, Button, Svg },
+        {
+          vm,
+          s,
+          now: nowOf(),
+          columns: e.props.bodyColumns,
+          maxRows: Math.min(2, e.props.maxRows || 2),
+          isOpen: isPaneOpen,
+          onToggle: () => void togglePane(),
+        },
+      );
+    }
     const { Box, Text, Button } = await $.ui.resolve(e);
     return bandView(
       { Box, Text, Button },
@@ -275,6 +365,26 @@ export const register = (on) => {
 
   on("ui.render", { component: "Pane" }, async ($, e, next) => {
     if (e.requestId !== PANE_ID || !host) return next(e);
+    noteSurface(e.surface);
+    if (isRich) {
+      const { Box, Text, Button, Svg } = await $.ui.resolve(e);
+      return paneDesktop(
+        { Box, Text, Button, Svg },
+        {
+          vm,
+          s,
+          now: nowOf(),
+          columns: e.props.bodyColumns,
+          updatedAt,
+          cwd,
+          log: s.log,
+          error,
+          onPark: () => void fill(PARK_PROMPT),
+          onHandoff: () => void fill(HANDOFF_PROMPT),
+          onRefresh: () => void refresh(),
+        },
+      );
+    }
     const { Box, Text, Button } = await $.ui.resolve(e);
     return paneView(
       { Box, Text, Button },
@@ -313,11 +423,12 @@ export const register = (on) => {
     // The Desktop app always docks a pane beside the transcript; `presentation`
     // describes a terminal there, so its width is not the app's.
     const inDesktop = surfaces.includes("desktop");
+    for (const surface of surfaces) noteSurface(surface);
     isFullscreen = inDesktop || !!e.presentation?.isFullscreen;
     const columns = inDesktop ? 0 : Number(e.presentation?.columns) || 0;
     if (isPaneOpen) {
       await closePane();
-      return isFullscreen ? { text: "Mental panel hidden" } : {};
+      return isFullscreen && !inDesktop ? { text: "Mental panel hidden" } : {};
     }
     if (isFullscreen && columns && columns < DOCK_MIN_COLUMNS) {
       return { text: `Widen the terminal to ${DOCK_MIN_COLUMNS}+ columns to dock the Mental panel` };
@@ -330,12 +441,16 @@ export const register = (on) => {
           : `Widen the terminal to ${DOCK_MIN_COLUMNS}+ columns to dock the Mental panel`,
       };
     }
-    return isFullscreen ? { text: "Mental panel shown" } : {};
+    return isFullscreen && !inDesktop ? { text: "Mental panel shown" } : {};
   });
 
   on("ui.close", { id: PANE_ID }, async ($, e, next) => {
     const r = await next(e);
-    if (!r || r.deny === undefined) isPaneOpen = false;
+    if (!r || r.deny === undefined) {
+      isPaneOpen = false;
+      rememberOpen(false);
+      redraw();
+    }
     return r;
   });
 
@@ -389,7 +504,7 @@ export const register = (on) => {
       if (command && isWriteCommand(command) && !r?.deny) {
         const receipt = receiptOf(command, r, nowOf());
         if (receipt) {
-          s.receipt = receipt;
+          noteReceipt(s, receipt);
           if (command === "park" || command === "handoff" || command === "journal") {
             s.edits = 0;
             s.files = new Map();
