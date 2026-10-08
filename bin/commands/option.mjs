@@ -3,7 +3,9 @@
  * track is per-UUID; hooks/mcp are user-global (--this is usage).
  */
 import { resolveBundle } from "../lib/resolve.mjs";
-import { FEATURES, listOptionals, setFeature } from "../lib/config.mjs";
+import { readFileSync } from "node:fs";
+import { FEATURES, JEV_ENV_KEYS, listOptionals, loadConfig, maskKey, resolveJev, setFeature, setJevConfig } from "../lib/config.mjs";
+import { JEV_SIGNUP_URL } from "../lib/jev.mjs";
 import { enableHooks, disableHooks } from "../lib/hooks.mjs";
 import { enableMcp, disableMcp } from "../lib/mcp-hosts.mjs";
 import { copyTrackSkills } from "../lib/install-skills.mjs";
@@ -39,6 +41,94 @@ function uuidForThis(args) {
   return { uuid: where.id, where };
 }
 
+const JEV_USAGE = "mental option jev [key <KEY>|key -|key clear|on|off]";
+
+function readStdinSync() {
+  try {
+    return readFileSync(0, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Jev is an optional API key, not a feature flag. Never echo the key.
+ * `key -` reads it from stdin so it stays out of shell history.
+ */
+function cmdOptionJev(args, io, home) {
+  const stdout = io.stdout ?? process.stdout;
+  const env = args.env ?? process.env;
+  const sub = (args.rest[1] || "").toLowerCase();
+
+  const status = () => {
+    const r = resolveJev(home, env);
+    const stored = r.source === "config" ? loadConfig(home).jev.key : r.source === "env" ? envKey(env) : null;
+    return {
+      feature: "jev",
+      configured: r.configured,
+      enabled: r.enabled,
+      source: r.source,
+      key: maskKey(stored),
+    };
+  };
+
+  if (!sub) {
+    printResult(stdout, args, true, status(), undefined, (d) =>
+      d.configured
+        ? `jev ${d.enabled ? "on" : "off"} (key ${d.key}, from ${d.source})`
+        : `jev not configured. Optional: get a key at ${JEV_SIGNUP_URL}, then mental option jev key <KEY> (or set MENTAL_JEV_KEY).`,
+    );
+    return 0;
+  }
+
+  if (sub === "on" || sub === "off") {
+    const r = setJevConfig(home, { enabled: sub === "on" });
+    if (!r.ok) {
+      printResult(stdout, args, false, undefined, r.error);
+      return 1;
+    }
+    printResult(stdout, args, true, status(), undefined, (d) => `option jev ${sub}${d.configured ? "" : " (no key set; reminders muted)"}`);
+    return 0;
+  }
+
+  if (sub === "key") {
+    const raw = args.rest[2];
+    if (!raw) {
+      printResult(stdout, args, false, undefined, { code: "usage", message: JEV_USAGE });
+      return EXIT_USAGE;
+    }
+    if (raw === "clear") {
+      const r = setJevConfig(home, { key: null });
+      if (!r.ok) {
+        printResult(stdout, args, false, undefined, r.error);
+        return 1;
+      }
+      printResult(stdout, args, true, status(), undefined, () => "option jev key cleared");
+      return 0;
+    }
+    const key = raw === "-" ? readStdinSync() : raw.trim();
+    if (!key || /\s/.test(key)) {
+      printResult(stdout, args, false, undefined, { code: "usage", message: "Jev key is empty or contains whitespace." });
+      return EXIT_USAGE;
+    }
+    const r = setJevConfig(home, { key, enabled: true });
+    if (!r.ok) {
+      printResult(stdout, args, false, undefined, r.error);
+      return 1;
+    }
+    printResult(stdout, args, true, status(), undefined, (d) => `option jev key saved (${d.key}). Jev is on.`);
+    return 0;
+  }
+
+  printResult(stdout, args, false, undefined, { code: "usage", message: JEV_USAGE });
+  return EXIT_USAGE;
+}
+
+function envKey(env) {
+  for (const n of JEV_ENV_KEYS) if (env[n] && String(env[n]).trim()) return String(env[n]).trim();
+  return null;
+}
+
 /**
  * @param {{ json: boolean, rest: string[], flags?: Record<string, string | boolean>, cwd?: string, home?: string, env?: NodeJS.ProcessEnv, dir?: string }} args
  */
@@ -65,10 +155,12 @@ export function cmdOption(args, io = {}) {
     return 0;
   }
 
+  if (feature === "jev") return cmdOptionJev(args, io, home);
+
   if (!FEATURES.includes(feature)) {
     printResult(stdout, args, false, undefined, {
       code: "usage",
-      message: `mental option [${FEATURES.join("|")}] on|off`,
+      message: `mental option [${FEATURES.join("|")}|jev] on|off`,
     });
     return EXIT_USAGE;
   }

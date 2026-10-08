@@ -281,6 +281,12 @@ Mental CLI is not only a start/finish ritual. Step back in cheaply whenever:
   (unbound, not “no decisions”); `pulse` is the other-repos view. `mental show`
   any plausible hit (journal hits may be `journal/YYYY-MM-DD.md#HH:MM`); follow
   `backlinks`. Orient-search on the user's topic is not enough.
+- **Jev (optional)** — if heartbeat or a zero-hit search returns `data.jev`,
+  relay its one line to the user once. Never set a key, run `option jev`, or
+  enable it yourself; only the user does. With Jev on, writes may return
+  `data.similar` (update that file instead of adding a near-duplicate) and
+  `show` may return `suggestedLinks` (`mental relink <path>` dry-runs; apply
+  only if the user agrees).
 - **Approach change** — before abandoning or switching an approach, search that
   name then `mental show <path> --json` for the hit (backlinks are on `show`).
   If the switch constrains the future, record it with `mental decide` at once.

@@ -225,6 +225,16 @@ export const CATALOG = {
     rest: { name: "path", summary: "Bundle-relative path", mcpName: "path", required: true },
     mcp: true,
   },
+  relink: {
+    name: "relink",
+    group: "Lookup",
+    summary: "Jev-suggested links between files (optional; needs a Jev key). Dry run by default; --apply writes only high-confidence links.",
+    usage: `${CMD} relink [path] [--apply]`,
+    examples: [`${CMD} relink notes/some-fact.md`, `${CMD} relink --apply --json`],
+    flags: [b("apply", { summary: "Append high-confidence links to the file as markdown (default: dry run)" })],
+    effects: "non_idempotent",
+    rest: { name: "path", summary: "Bundle-relative path (default: 5 most recent non-journal files)" },
+  },
   schema: {
     name: "schema",
     group: "Lookup",
@@ -357,12 +367,12 @@ export const CATALOG = {
   option: {
     name: "option",
     group: "Setup",
-    summary: "List or set optional features (track per-UUID; mcp/hooks user-global). Consent required.",
-    usage: `${CMD} option [track|mcp|hooks] on|off`,
-    examples: [`${CMD} option`, `${CMD} option track on --json`],
+    summary: "List or set optional features (track per-UUID; mcp/hooks user-global). Consent required. `option jev` manages the optional Jev API key (never printed).",
+    usage: `${CMD} option [track|mcp|hooks] on|off  |  ${CMD} option jev [key <KEY>|key -|key clear|on|off]`,
+    examples: [`${CMD} option`, `${CMD} option track on --json`, `${CMD} option jev key - < key.txt`],
     flags: [b("all"), b("this")],
     effects: "non_idempotent",
-    rest: { name: "feature", summary: "track | mcp | hooks, then on|off" },
+    rest: { name: "feature", summary: "track | mcp | hooks | jev, then on|off (jev: key <KEY>)" },
     mcp: true,
   },
   track: {

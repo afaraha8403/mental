@@ -27,7 +27,7 @@ test("option list has needsConsent; track off does not suggest option on", () =>
   const { root } = initRepo(home);
   seed(home, root);
   const listed = parseOk(mental(home, root, ["option", "--json"]), "option list");
-  assert.equal(listed.data.optionals.length, 3);
+  assert.equal(listed.data.optionals.length, 4);
   for (const row of listed.data.optionals) {
     assert.equal(row.needsConsent, true);
     assert.equal(typeof row.command, "string");

@@ -14,11 +14,13 @@ import { cmdStatus } from "../commands/status.mjs";
 import { cmdSearch } from "../commands/search.mjs";
 import { cmdShow } from "../commands/show.mjs";
 import { cmdList } from "../commands/list.mjs";
-import { cmdJournal } from "../commands/journal.mjs";
-import { cmdAttention } from "../commands/attention.mjs";
-import { cmdDecide } from "../commands/decide.mjs";
-import { cmdNote } from "../commands/note.mjs";
-import { cmdPark } from "../commands/park.mjs";
+import {
+  cmdJournalS as cmdJournal,
+  cmdAttentionS as cmdAttention,
+  cmdDecideS as cmdDecide,
+  cmdNoteS as cmdNote,
+  cmdParkS as cmdPark,
+} from "./similar.mjs";
 import { cmdHandoff } from "../commands/handoff.mjs";
 import { cmdPulse } from "../commands/pulse.mjs";
 import { VERSION, CMD } from "./pkg.mjs";
@@ -36,21 +38,29 @@ function capture(handler, args) {
       return true;
     },
   };
+  const fail = (err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    const errCode = /** @type {{ code?: string }} */ (err).code || "write";
+    return { code: 1, body: { ok: false, error: { code: String(errCode), message } } };
+  };
+  const finish = (code) => {
+    let body;
+    try {
+      body = JSON.parse(buf);
+    } catch {
+      body = { ok: false, error: { code: "mcp", message: buf || "empty handler output" } };
+    }
+    return { code, body };
+  };
   let code;
   try {
     code = handler({ ...args, json: true }, { stdout });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const errCode = /** @type {{ code?: string }} */ (err).code || "write";
-    return { code: 1, body: { ok: false, error: { code: String(errCode), message } } };
+    return fail(err);
   }
-  let body;
-  try {
-    body = JSON.parse(buf);
-  } catch {
-    body = { ok: false, error: { code: "mcp", message: buf || "empty handler output" } };
-  }
-  return { code, body };
+  // Handlers are synchronous unless an optional integration (Jev) is active.
+  if (code && typeof code.then === "function") return code.then(finish, fail);
+  return finish(code);
 }
 
 function runTool(name, args, ctx) {
@@ -190,6 +200,9 @@ function runTool(name, args, ctx) {
   }
   if (name === "pulse") return capture(cmdPulse, base);
   if (name === "option") {
+    if (String(args.feature || "").toLowerCase() === "jev") {
+      return { code: 2, body: { ok: false, error: { code: "usage", message: "Jev keys are set by the user in a terminal (mental option jev key <KEY>), never over MCP." } } };
+    }
     const rest = [];
     if (args.feature) rest.push(String(args.feature));
     if (args.action) rest.push(String(args.action));
@@ -250,17 +263,16 @@ function handle(msg, ctx) {
   if (method === "tools/call") {
     const name = msg.params?.name;
     const args = msg.params?.arguments || {};
-    const { body } = runTool(name, args, ctx);
-    const text = JSON.stringify(body);
-    const isError = body.ok === false;
-    return {
+    const toReply = ({ body }) => ({
       jsonrpc: "2.0",
       id,
       result: {
-        content: [{ type: "text", text }],
-        isError,
+        content: [{ type: "text", text: JSON.stringify(body) }],
+        isError: body.ok === false,
       },
-    };
+    });
+    const out = runTool(name, args, ctx);
+    return typeof out.then === "function" ? out.then(toReply) : toReply(out);
   }
   if (method === "ping") return { jsonrpc: "2.0", id, result: {} };
   if (id == null) return null;
@@ -287,6 +299,7 @@ export function serveMcp(ctx = {}) {
 
   return new Promise((resolve) => {
     let buf = Buffer.alloc(0);
+    const pending = new Set();
     stdin.on("data", (chunk) => {
       buf = Buffer.concat([buf, Buffer.from(chunk)]);
       while (true) {
@@ -310,10 +323,15 @@ export function serveMcp(ctx = {}) {
           continue;
         }
         const reply = handle(msg, rpcCtx);
-        if (reply) stdout.write(encode(reply));
+        if (reply && typeof reply.then === "function") {
+          const p = reply.then((r) => {
+            if (r) stdout.write(encode(r));
+          }).catch(() => {}).finally(() => pending.delete(p));
+          pending.add(p);
+        } else if (reply) stdout.write(encode(reply));
       }
     });
-    stdin.on("end", () => resolve(0));
+    stdin.on("end", () => Promise.all([...pending]).then(() => resolve(0)));
     stdin.on("error", () => resolve(1));
   });
 }

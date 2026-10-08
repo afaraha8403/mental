@@ -6,6 +6,9 @@ import { catalogRoot } from "../lib/heartbeat.mjs";
 import { readBundleFile } from "../lib/okf.mjs";
 import { listBacklinks } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
+import { getJev } from "../lib/jev.mjs";
+import { suggestLinks } from "../lib/jev-assist.mjs";
+import { CMD } from "../lib/pkg.mjs";
 
 export function cmdShow(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
@@ -56,15 +59,28 @@ export function cmdShow(args, io = {}) {
     body: file.data.body,
     backlinks,
   };
-  printResult(stdout, args, true, payload, undefined, (d) => {
-    const title = typeof d.frontmatter.title === "string" ? d.frontmatter.title : d.path;
-    const type = typeof d.frontmatter.type === "string" ? d.frontmatter.type : "";
-    const head = type ? `${title}  [${type}]` : title;
-    const linked =
-      d.backlinks.length === 0
-        ? ""
-        : `\n\nLinked from:\n${d.backlinks.map((b) => `  [${b.type}] ${b.title} (${b.path})`).join("\n")}`;
-    return `${kindLine("read", head)}\n${d.path}\n\n${d.body.trim() || "(empty)"}${linked}`;
-  });
-  return 0;
+  const finish = (suggested) => {
+    if (suggested && (suggested.proposed.length || suggested.maybe.length)) {
+      payload.suggestedLinks = { proposed: suggested.proposed, maybe: suggested.maybe, via: "jev" };
+    }
+    printResult(stdout, args, true, payload, undefined, (d) => {
+      const title = typeof d.frontmatter.title === "string" ? d.frontmatter.title : d.path;
+      const type = typeof d.frontmatter.type === "string" ? d.frontmatter.type : "";
+      const head = type ? `${title}  [${type}]` : title;
+      const linked =
+        d.backlinks.length === 0
+          ? ""
+          : `\n\nLinked from:\n${d.backlinks.map((b) => `  [${b.type}] ${b.title} (${b.path})`).join("\n")}`;
+      const sug = d.suggestedLinks
+        ? `\n\nSuggested links (jev; \`${CMD} relink ${d.path} --apply\` writes them):\n${[...d.suggestedLinks.proposed, ...d.suggestedLinks.maybe]
+            .map((s) => `  [${s.type}] ${s.title} (${s.path}) ${Math.round(s.score * 100)}%`)
+            .join("\n")}`
+        : "";
+      return `${kindLine("read", head)}\n${d.path}\n\n${d.body.trim() || "(empty)"}${linked}${sug}`;
+    });
+    return 0;
+  };
+  const jev = getJev(home, args.env ?? process.env);
+  if (!jev) return finish(null);
+  return suggestLinks({ jev, root, path: file.data.path.split("#")[0] }).then(finish, () => finish(null));
 }

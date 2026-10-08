@@ -5,6 +5,8 @@ import { resolveBundle } from "../lib/resolve.mjs";
 import { catalogRoot } from "../lib/heartbeat.mjs";
 import { mergeSearchResults, searchBundle, tokenizeQuery } from "../lib/index.mjs";
 import { printResult, EXIT_USAGE } from "../lib/output.mjs";
+import { getJev, jevHint, formatJevHint } from "../lib/jev.mjs";
+import { recoverSearch } from "../lib/jev-assist.mjs";
 
 function emptyFound(q, any) {
   const tokens = tokenizeQuery(String(q).trim().toLowerCase());
@@ -65,16 +67,45 @@ export function cmdSearch(args, io = {}) {
           queries.map((q) => searchBundle({ ...base, q, any: false })),
         );
   const q = queries.length === 1 ? queries[0] : queries;
-  const data = { ...resolved.data, q, any: queries.length > 1 ? true : any, ...found, truncated: found.total > found.hits.length };
-  printResult(stdout, args, true, data, undefined, (d) => {
-    const label = Array.isArray(d.q) ? d.q.join(" | ") : d.q;
-    if (d.hits.length === 0) return `no hits for ${label} (${d.backend})`;
-    return d.hits
-      .map((h) => {
+  const finish = (/** @type {typeof found} */ f, extra = {}) => {
+    const data = { ...resolved.data, q, any: queries.length > 1 ? true : any, ...f, truncated: f.total > f.hits.length, ...extra };
+    printResult(stdout, args, true, data, undefined, (d) => {
+      const label = Array.isArray(d.q) ? d.q.join(" | ") : d.q;
+      if (d.hits.length === 0) {
+        const line = `no hits for ${label} (${d.backend})`;
+        return d.jev && d.jev.text ? `${line}\n${formatJevHint(d.jev)}` : line;
+      }
+      const lines = d.hits.map((h) => {
         const line = `[${h.type}] ${h.title} (${h.path})`;
         return h.snippet ? `${line}\n  ${h.snippet}` : line;
-      })
-      .join("\n");
-  });
-  return 0;
+      });
+      if (d.recovered) lines.unshift(`no exact hits; ${d.hits.length} related via jev:`);
+      return lines.join("\n");
+    });
+    return 0;
+  };
+
+  if (found.hits.length > 0 || !root) return finish(found);
+
+  const jev = getJev(home, env);
+  if (!jev) {
+    const hint = jevHint({ home, env, surface: "search" });
+    return finish(found, hint ? { jev: hint } : {});
+  }
+  // Async only on this path so keyless and hit-bearing searches stay synchronous.
+  return recoverSearch({
+    jev,
+    root,
+    id: resolved.data.id,
+    home,
+    env,
+    queries,
+    filters: { type, status, tag, kind },
+  })
+    .catch(() => null)
+    .then((r) => {
+      if (!r || !r.ok || r.hits.length === 0) return finish(found);
+      const hits = r.hits.map(({ score, ...h }) => ({ ...h, jevScore: Math.round(score * 100) / 100 }));
+      return finish({ ...found, hits, total: hits.length }, { recovered: true, via: "jev", variants: r.variants });
+    });
 }

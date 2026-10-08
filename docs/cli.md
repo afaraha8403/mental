@@ -37,7 +37,8 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
 | `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op` |
 | `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`) |
-| `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`) |
+| `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`; with a Jev key also `suggestedLinks`) |
+| `mental relink [path] [--apply]` | Optional (needs a Jev key). Suggest links for a file, or the 5 most recent non-journal files. Dry run by default; `--apply` appends only high-confidence links under `## Related` |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
 | `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`, `--via`). Requires `--resume`. Then heartbeat; writes watermark |
 | `mental handoff --title --resume` | Planned boundary: journal then heartbeat. Both flags required. JSON `{ path, heartbeat }`. Writes watermark. `--via` optional |
@@ -58,6 +59,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental option` | List or set optional features (`track` per UUID; `mcp` / `hooks` user-global). `--all` sets track default on. `--this` before a UUID is usage |
 | `mental track` | Optional automated project-time record (off until `option track on`): private/customer copy, wall/billable, several clocks, dated client export. [Full contract](./track.md) |
 | `mental hooks on\|off` | Optional session hooks (default off; alias of `option hooks`) |
+| `mental option jev [on\|off\|key <KEY>\|key -\|key clear]` | Optional [Jev](#jev-optional) assist (TypeSafe AI System One). Status, mute, or store the key (config, mode 0600). Env `MENTAL_JEV_KEY` / `TYPESAFE_API_KEY` also works; config wins. Never in MCP |
 | `mental serve` | Optional MCP stdio (session verbs: heartbeat, journal, park, …). Identity/setup stay CLI |
 | `mental dashboard` | Optional read-only localhost explorer (`127.0.0.1:3847`; busy port falls back unless `--port` is set). Opens on where you left off, then a catalog, 3D mind map, or sit-down timeline beside the open file. Track clocks stay collapsed until opened. `--no-open` prints the URL. Loopback only; GET/HEAD; no CORS. Agents still `--json` |
 | `mental doctor` | PATH, bindings, ignore, skills, npm update, host plugin / skill-copy lag, decision budget, stale residue, `optionals[]`, `time.sqlite` never git-tracked (exit 3). `--fix` recopies home skills/rules and git excludes (never `--project` or optionals). `--fix-ignore` is ignore-only. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns). TTY: ✓ ok, ⚠ failed warn, ✖ error; ASCII fallback OK / ! / X. Footer `next:` is a portable command (no `&&`). JSON `data.next`. `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips host CLIs. |

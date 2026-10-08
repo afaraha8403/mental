@@ -233,7 +233,21 @@ Only if you turn it on (`mental option track on`). Agents automatically record p
 - Never store secrets, tokens, or private keys
 - `mental uninstall` does not delete OKF unless you type `DELETE`
 
-Optional: `mental install --mcp` · `mental hooks on` · `mental option track on` — default **off**. Skill + rule are the contract. Hours never go in git. [Track](docs/track.md).
+Optional: `mental install --mcp` · `mental hooks on` · `mental option track on` · `mental option jev key <KEY>` — default **off**. Skill + rule are the contract. Hours never go in git. [Track](docs/track.md).
+
+### Jev (optional)
+
+[Jev](https://typesafe.ai) (TypeSafe AI System One) is a fast, cheap yes/no relevance judge. Mental never needs it. With a key it can recover a zero-hit `mental search`, hint "similar to existing" before a write, suggest links on `mental show`, and propose them with `mental relink`. It fails open and only `relink --apply` writes, high-confidence links only.
+
+Add a key either way (config wins when both are set):
+
+```bash
+mental option jev key <KEY>        # stored in ~/.mental config (mode 0600)
+export MENTAL_JEV_KEY=<KEY>        # or TYPESAFE_API_KEY
+mental option jev off              # mute (also silences the reminder)
+```
+
+Without a key, `heartbeat` and a zero-hit `search` occasionally (at most every 3 days) tell the agent Jev exists so it can mention it. `MENTAL_NO_HINTS=1` silences that.
 
 ---
 
