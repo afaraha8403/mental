@@ -13,6 +13,7 @@ import { cmdHeartbeat } from "../commands/heartbeat.mjs";
 import { cmdStatus } from "../commands/status.mjs";
 import { cmdSearch } from "../commands/search.mjs";
 import { cmdShow } from "../commands/show.mjs";
+import { cmdMove } from "../commands/move.mjs";
 import { cmdList } from "../commands/list.mjs";
 import { cmdJournal } from "../commands/journal.mjs";
 import { cmdAttention } from "../commands/attention.mjs";
@@ -140,7 +141,16 @@ function runTool(name, args, ctx) {
         body: args.body,
         against: args.against,
         tag: args.tag,
+        project: args.project,
+        "move-to": args.move_to,
       },
+    });
+  }
+  if (name === "move") {
+    return capture(cmdMove, {
+      ...base,
+      rest: [String(args.path || "")],
+      flags: { to: args.to },
     });
   }
   if (name === "decide") {
@@ -154,13 +164,14 @@ function runTool(name, args, ctx) {
         body: args.body,
         via: args.via,
         tag: args.tag,
+        project: args.project,
       },
     });
   }
   if (name === "note") {
     return capture(cmdNote, {
       ...base,
-      flags: { title: args.title, status: args.status, description: args.description, body: args.body, tag: args.tag },
+      flags: { title: args.title, status: args.status, description: args.description, body: args.body, tag: args.tag, project: args.project },
     });
   }
   if (name === "park") {

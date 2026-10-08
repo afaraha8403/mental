@@ -47,6 +47,8 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental attention --title --kind` | Create or update residue (`direction` \| `concern` \| `thread` \| `verify`; `--status later` is come-back-to-this, not a note; `--status resolved` closes). `--via` optional |
 | `mental decide --title --body` | Create or update a decision. Create requires `--body` (the why). Same `--title` without `--body` updates; `--status decided` closes by title; `--path` targets a file. `--via` optional |
 | `mental note --title` | Scaffold a durable fact (not "come back to this" — that is `attention --status later`) |
+| `mental move <path> --to <project>` | Re-file one attention/decision/note into another bound project's bundle, keeping timestamp and body. Same as `attention --title … --move-to <project>`. Warns about dangling links; a name clash gets `-2` |
+| (create commands) `--project <id\|name>` | `attention`, `decide` and `note` can file into another bound project from any cwd (never `journal`/`park`/`handoff`) |
 | `mental local [--import \| --move]` | Project `./.mental` after ignore check |
 | `mental remap [--to id]` | List or retarget this clone’s UUID |
 | `mental split [--copy]` | New UUID for this clone (`mental new` is an alias) |

@@ -2,7 +2,7 @@
  * `mental decide` — create or update a decision. Paths are identities:
  * closing an open decision updates the existing file (same as attention).
  */
-import { resolveBundle } from "../lib/resolve.mjs";
+import { resolveWriteBundle } from "../lib/scope.mjs";
 import {
   DECISION_STATUSES,
   bundleName,
@@ -49,13 +49,7 @@ export function cmdDecide(args, io = {}) {
     return EXIT_USAGE;
   }
 
-  const resolved = resolveBundle({
-    cwd: args.cwd ?? process.cwd(),
-    home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
-    env: args.env ?? process.env,
-    dir: args.dir ?? null,
-    write: true,
-  });
+  const resolved = resolveWriteBundle(args);
   if (!resolved.ok) {
     printResult(stdout, args, false, undefined, resolved.error);
     return 1;

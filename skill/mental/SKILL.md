@@ -194,6 +194,9 @@ deciding, or superseding them; never delete without the user's say-so.
 `total` / `truncated` / `nextOffset`. `--since` / `--on YYYY-MM-DD` filter by
 timestamp. `--project <id|name>` reads one other project and `--all-projects`
 reads every bound project (rows/hits carry `project`; paging runs over the union).
+Filed something in the wrong project? `mental move <path> --to <project>` (or
+`attention --title … --move-to <project>`) re-files it with its timestamp;
+`attention`/`decide`/`note` also take `--project` to file elsewhere directly.
 `status` refreshes `status/current.md` as a disposable cache — not SoT. Never
 block work if Mental errors; mention it and continue.
 

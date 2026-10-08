@@ -68,6 +68,7 @@ const SCOPE_FLAGS = [
   b("all-projects", { mcpName: "all_projects", summary: "Read every bound project (rows carry `project`; paging applies to the union)" }),
 ];
 
+const WRITE_PROJECT = v("project", { summary: "File into another project's bundle instead of the active one (id, id prefix, or name from bindings)" });
 const VIA = v("via", { summary: "Short client token (cursor, claude-code, copilot, codex, opencode, mcp, cli). Not a session id." });
 const AGAINST = v("against", { summary: "Repo-relative plan path (no ..)" });
 const TITLE = v("title", { summary: "OKF title (same title updates)" });
@@ -138,6 +139,7 @@ export const CATALOG = {
       v("body", { summary: "Why this choice (required when creating)" }),
       v("slug"),
       v("tag", { summary: "Required on create: 1–3 comma-separated topic slugs. Omit on update to keep existing tags." }),
+      WRITE_PROJECT,
       VIA,
     ],
     effects: "idempotent",
@@ -163,6 +165,8 @@ export const CATALOG = {
       BODY,
       v("slug"),
       v("tag", { summary: "Required on create: 1–3 comma-separated topic slugs. Omit on update to keep existing tags." }),
+      WRITE_PROJECT,
+      v("move-to", { mcpName: "move_to", summary: "Re-file this existing item into another project (id, prefix, or name), keeping timestamp and body. Same as `mental move`." }),
       AGAINST,
       VIA,
     ],
@@ -238,6 +242,20 @@ export const CATALOG = {
     rest: { name: "path", summary: "Bundle-relative path", mcpName: "path", required: true },
     mcp: true,
   },
+  move: {
+    name: "move",
+    group: "Write",
+    summary: "Re-file one attention/decision/note into another project's bundle, keeping its timestamp, frontmatter and body. Source is removed after the target is written; a name clash gets a -2 suffix. Warns when other files still link to it.",
+    usage: `${CMD} move <path> --to <project>`,
+    examples: [
+      `${CMD} move attention/2026-09-01-wrong-bundle.md --to other-repo`,
+      `${CMD} move notes/some-fact.md --to <project-uuid> --json`,
+    ],
+    flags: [v("to", { required: true, summary: "Target project (id, id prefix, or name from bindings)" }), PATH],
+    effects: "non_idempotent",
+    rest: { name: "path", summary: "Bundle-relative path (attention/, decisions/ or notes/)", mcpName: "path", required: true },
+    mcp: true,
+  },
   schema: {
     name: "schema",
     group: "Lookup",
@@ -274,6 +292,7 @@ export const CATALOG = {
       BODY,
       v("slug"),
       v("tag", { summary: "Required: 1–3 comma-separated topic slugs." }),
+      WRITE_PROJECT,
     ],
     effects: "idempotent",
     mcp: true,

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Features
+- `mental move <path> --to <project>` (and `attention --move-to <project>`) re-files an attention/decision/note into another bound project, preserving timestamp, frontmatter and body; warns on dangling links; `-2` suffix on name clash. `attention`, `decide` and `note` take `--project` to file into another bundle from any cwd (never mints a binding for the cwd). MCP: `move`, `project`, `move_to`.
 - `mental list` and `mental search` page their results (default 50) with `--limit`, `--offset`, and `--all`, and report `total`, `returned`, `truncated`, and `nextOffset`. `--since` / `--on YYYY-MM-DD` filter by timestamp. Rows carry `timestamp`, `updated`, and `project`. MCP tools accept the same arguments.
 - `mental list` and `mental search` take `--project <id|name|id-prefix>` to read one other bound project and `--all-projects` to read every binding; results are tagged with `project`, report `scope` / `projects`, and page over the union. MCP: `project`, `all_projects`.
 - The heartbeat surfaces stale decisions and attention (open/deferred decisions, open/later attention untouched for 14+ days) as `stale` in JSON and a `Stale (> 14d)` text block, and the skill tells agents to propose resolving, deciding, or superseding them (#62).

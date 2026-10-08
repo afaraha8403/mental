@@ -5,6 +5,39 @@
 import { loadBindings } from "./bindings.mjs";
 import { catalogRoot } from "./heartbeat.mjs";
 import { pulseRootForBinding } from "./pulse.mjs";
+import { resolveBundle } from "./resolve.mjs";
+
+/**
+ * Resolve the bundle a create command writes into: the cwd's bundle, or the
+ * one named by `--project <id|name>` from any cwd.
+ * @param {{ flags?: Record<string, unknown>, cwd?: string, home?: string | null, env?: NodeJS.ProcessEnv, dir?: string | null }} args
+ */
+export function resolveWriteBundle(args) {
+  const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
+  const base = {
+    cwd: args.cwd ?? process.cwd(),
+    home,
+    env: args.env ?? process.env,
+    dir: args.dir ?? null,
+  };
+  const flag = args.flags?.project;
+  if (flag === undefined || flag === false) return resolveBundle({ ...base, write: true });
+  if (typeof flag !== "string" || !flag.trim()) {
+    return { ok: false, error: { code: "usage", message: "--project requires a project id or name" } };
+  }
+  // Read-only: naming a project must not mint a binding for the cwd.
+  const here = resolveBundle({ ...base, write: false });
+  const scope = resolveScope(args.flags, here.ok ? here : { data: {} }, home);
+  if (!scope.ok) return scope;
+  const target = scope.targets[0];
+  if (!target?.root) {
+    return {
+      ok: false,
+      error: { code: "not-found", message: `project ${flag} has no bundle on this machine` },
+    };
+  }
+  return { ok: true, data: { mode: "project", id: target.id, name: target.name, root: target.root } };
+}
 
 /**
  * @typedef {{ id: string | null, name: string | null, root: string | null }} ScopeTarget
