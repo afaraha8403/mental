@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { delimiter, join } from "node:path";
-import { findMentalPlugin, hostPluginChecks, skipHostPluginCheck } from "../bin/lib/host-plugins.mjs";
+import { CLAUDE_PANEL_MIN_VERSION, findMentalPlugin, hostPluginChecks, skipHostPluginCheck } from "../bin/lib/host-plugins.mjs";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
 import { skillMetadataVersion } from "../bin/lib/lockstep.mjs";
 import { VERSION } from "../bin/lib/pkg.mjs";
@@ -65,6 +65,41 @@ test("hostPluginChecks is quiet when Claude has no Mental plugin", () => {
     }),
   });
   assert.equal(checks.some((c) => c.id === "claude-plugin"), false);
+  assert.equal(checks.some((c) => c.id === "claude-panel"), false);
+});
+
+test("hostPluginChecks reports whether Claude Code can run the /mental panel", () => {
+  const home = tempHome();
+  const run = (claudeVersion) =>
+    hostPluginChecks({
+      home,
+      version: "0.4.1",
+      env: { ...gitEnv(home), MENTAL_SKIP_HOST_PLUGIN_CHECK: "0" },
+      spawn: (command, args) => {
+        if (command !== "claude") return { status: 127, stdout: "", stderr: "", error: undefined };
+        if (args.includes("--version")) {
+          return claudeVersion
+            ? { status: 0, stdout: `${claudeVersion} (Claude Code)\n`, stderr: "", error: undefined }
+            : { status: 1, stdout: "", stderr: "", error: undefined };
+        }
+        return { status: 0, stdout: JSON.stringify([{ id: "mental@mental", version: "0.4.1" }]), stderr: "", error: undefined };
+      },
+    }).find((c) => c.id === "claude-panel");
+
+  const behind = run("2.1.286");
+  assert.equal(behind.ok, false);
+  assert.equal(behind.level, "warn");
+  assert.match(behind.message, /2\.1\.286/);
+  assert.match(behind.message, new RegExp(CLAUDE_PANEL_MIN_VERSION.replace(/\./g, "\\.")));
+
+  const ready = run("2.2.0");
+  assert.equal(ready.ok, true);
+  assert.equal(ready.level, "info");
+  assert.match(ready.message, /\/mental panel available/);
+
+  const unknown = run("");
+  assert.equal(unknown.ok, true);
+  assert.equal(unknown.level, "info");
 });
 
 test("hostPluginChecks warns when a copied skill is behind", () => {

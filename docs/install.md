@@ -148,6 +148,13 @@ claude plugin install mental@mental
 
 After a release: `claude plugin marketplace update mental` then `claude plugin update mental@mental`, then restart.
 
+**In-session panel (Claude Code 2.1.287+).** The Claude plugin also ships a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods) that shows Mental inside the session:
+
+- **Band** — two rows above the prompt: the resume point, a live pulse while the agent works, open attention and decision counts, and a short receipt each time Mental writes (park, handoff, decision, attention). It steps aside while a survey is showing and drops to one row when the prompt area is short.
+- **`/mental`** — toggles a pane with **Now**, **Residue**, **Decisions**, **Session** (files touched, turns, context), and **Time** (Track sit-downs, when Track is on) tabs (`n` `r` `d` `s` `t`). **Park** (`p`) and **Handoff** (`h`) put the request in the prompt so the agent records it through the skill. The panel itself never writes. It docks beside the transcript in fullscreen at 110+ columns and opens as a dialog otherwise.
+
+The panel reads `mental heartbeat --json --passive`. `--passive` does not ping a running Track timer. Older Claude Code builds ignore the mod and the rest of the plugin works. `mental doctor` reports `claude-panel` with the Claude Code version it found. To try it from a checkout: `claude --plugin-dir /path/to/mental`, then `/mental`.
+
 **VS Code** — Command Palette → **Chat: Install Plugin From Source**, then `https://github.com/afaraha8403/mental`.
 
 **GitHub Copilot CLI:**

@@ -1,0 +1,398 @@
+/**
+ * Mental for Claude Code — the in-session panel (Claude Code mods, 2.1.287+).
+ *
+ * Draws a two-row band above the prompt (resume point, live session pulse,
+ * residue counts, context dial, receipts when Mental writes) and a `/mental`
+ * pane with Now / Residue / Decisions / Session / Time tabs. It reads the
+ * thread through `mental heartbeat --json --passive` and never writes: Park
+ * and Handoff fill the prompt so the agent records them through the skill.
+ *
+ * Runs in the mods sandbox: web globals only, no Node, no timers but `$.clock`.
+ */
+
+import {
+  isWriteCommand,
+  mentalCommandOf,
+  newSession,
+  noteContext,
+  noteEdit,
+  noteTurnComplete,
+  receiptOf,
+  viewModelOf,
+  EDIT_TOOLS,
+  RECEIPT_MS,
+} from "./lib/model.mjs";
+import { bandView, paneView, TABS } from "./lib/views.mjs";
+
+const PANE_ID = "mental";
+const PANE_TITLE = "Mental";
+const DOCK_MIN_COLUMNS = 110;
+const DEBOUNCE_MS = 15_000;
+const POLL_MS = 60_000;
+const FRAME_MS = 600;
+const HEARTBEAT_TIMEOUT_MS = 20_000;
+const STORE_TAB_KEY = "tab";
+const PARK_PROMPT = "Park this session in Mental";
+const HANDOFF_PROMPT = "Hand off this session in Mental";
+
+const COMMAND_SPEC = {
+  name: "mental",
+  description: "Toggle the Mental panel: resume point, residue, decisions, this session",
+  immediate: true,
+};
+
+/** Parse heartbeat stdout (may carry a leading warning line). */
+export function heartbeatOf(stdout) {
+  const text = String(stdout || "");
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+  try {
+    return JSON.parse(text.slice(start));
+  } catch {
+    return null;
+  }
+}
+
+/** @param {string} root */
+export function heartbeatArgvs(root) {
+  const tail = ["heartbeat", "--json", "--passive"];
+  const out = [];
+  if (root) out.push(["node", `${String(root).replace(/[\\/]+$/, "")}/bin/cli.mjs`, ...tail]);
+  out.push(["mental", ...tail], ["mental.cmd", ...tail]);
+  return out;
+}
+
+/**
+ * The engine calls the panel needs, each spelled `$.noun.verb(...)` at its
+ * call site (the mods validator forbids holding `$` itself).
+ * @typedef {{
+ *   run: (argv: string[], init?: object) => Promise<{ exitCode: number, stdout: string, stderr: string }>,
+ *   after: (ms: number, fn: () => void) => { cancel: () => void },
+ *   every: (ms: number, fn: () => void) => { cancel: () => void },
+ *   invalidate: () => void,
+ *   open: (args: object) => Promise<unknown>,
+ *   close: (args: object) => Promise<unknown>,
+ *   fill: (args: object) => Promise<{ isFilled?: boolean } | undefined>,
+ *   toast: (text: string) => void,
+ *   storeSet: (key: string, value: unknown) => Promise<unknown>,
+ * }} Host
+ */
+
+/** @type {import('claude-code').Register} */
+export const register = (on) => {
+  /** @type {Host | null} */
+  let host = null;
+  let cwd = "";
+  let root = "";
+  let s = newSession(Date.now());
+  /** @type {any} */
+  let vm = null;
+  let updatedAt = null;
+  let error = "";
+  let tab = "now";
+  let isPaneOpen = false;
+  let isFullscreen = false;
+  let frame = 0;
+  let inFlight = false;
+  let queued = false;
+  /** @type {{ cancel: () => void } | null} */
+  let debounce = null;
+  /** @type {{ cancel: () => void } | null} */
+  let poll = null;
+  /** @type {{ cancel: () => void } | null} */
+  let breath = null;
+  /** @type {{ cancel: () => void } | null} */
+  let receiptTimer = null;
+
+  const nowOf = () => Date.now();
+
+  function redraw() {
+    try {
+      host?.invalidate();
+    } catch {
+      /* the session may be gone */
+    }
+  }
+
+  async function runHeartbeat() {
+    let lastError = "";
+    for (const argv of heartbeatArgvs(root)) {
+      try {
+        const init = cwd ? { cwd, timeoutMs: HEARTBEAT_TIMEOUT_MS } : { timeoutMs: HEARTBEAT_TIMEOUT_MS };
+        const r = await host.run(argv, init);
+        const hb = heartbeatOf(r.stdout);
+        if (hb) return { hb, error: "" };
+        lastError = (r.stderr || "").trim().split("\n")[0] || `exit ${r.exitCode}`;
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+      }
+    }
+    return { hb: null, error: lastError || "heartbeat failed" };
+  }
+
+  async function refresh() {
+    if (!host) return;
+    if (inFlight) {
+      queued = true;
+      return;
+    }
+    inFlight = true;
+    try {
+      const { hb, error: err } = await runHeartbeat();
+      if (hb) {
+        vm = viewModelOf(hb, nowOf());
+        error = "";
+        updatedAt = nowOf();
+      } else {
+        error = err;
+        if (!vm) vm = { linked: false };
+      }
+    } finally {
+      inFlight = false;
+      redraw();
+    }
+    if (queued) {
+      queued = false;
+      void refresh();
+    }
+  }
+
+  function refreshSoon(delay = DEBOUNCE_MS) {
+    if (!host) return;
+    debounce?.cancel();
+    debounce = host.after(delay, () => {
+      debounce = null;
+      void refresh();
+    });
+  }
+
+  function setWorking(isWorking) {
+    s.working = isWorking;
+    if (isWorking && !breath && host) {
+      breath = host.every(FRAME_MS, () => {
+        frame += 1;
+        redraw();
+      });
+    } else if (!isWorking && breath) {
+      breath.cancel();
+      breath = null;
+    }
+    redraw();
+  }
+
+  function resetSession() {
+    breath?.cancel();
+    breath = null;
+    s = newSession(nowOf());
+    redraw();
+  }
+
+  async function openPane() {
+    const dialog = !isFullscreen;
+    const args = dialog
+      ? { id: PANE_ID, title: PANE_TITLE, holdToasts: true, closeOnEscape: true, rows: 18, focus: true }
+      : { id: PANE_ID, title: PANE_TITLE, holdToasts: true };
+    /** @type {any} */
+    const opened = await host.open(args);
+    if (opened && typeof opened === "object" && opened.isPlaced === false) {
+      await host.close({ id: PANE_ID }).catch(() => undefined);
+      return false;
+    }
+    isPaneOpen = true;
+    void refresh();
+    return true;
+  }
+
+  async function closePane() {
+    await host.close({ id: PANE_ID }).catch(() => undefined);
+    isPaneOpen = false;
+  }
+
+  async function fill(text) {
+    try {
+      const r = await host.fill({ text, mode: "replace" });
+      if (r && r.isFilled === false) {
+        host.toast(`Type: ${text}`);
+        return;
+      }
+      if (!isFullscreen && isPaneOpen) await closePane();
+      host.toast("Press Enter to send — the agent records it in Mental");
+    } catch {
+      host.toast(`Type: ${text}`);
+    }
+  }
+
+  on("session.start", async ($, e, next) => {
+    host = {
+      run: (argv, init) => $.process.run(argv, init),
+      after: (ms, fn) => $.clock.after(ms, fn),
+      every: (ms, fn) => $.clock.every(ms, fn),
+      invalidate: () => $.ui.invalidate("ui.render"),
+      open: (args) => $.ui.open(args),
+      close: (args) => $.ui.close(args),
+      fill: (args) => $.prompt.fill(args),
+      toast: (text) => $.ui.toast(text),
+      storeSet: (key, value) => $.store.set(key, value),
+    };
+    cwd = e.cwd || "";
+    root = typeof $.plugin.root === "string" ? $.plugin.root : "";
+    s = newSession(nowOf());
+    try {
+      const saved = await $.store.get(STORE_TAB_KEY);
+      if (typeof saved === "string" && TABS.some((t) => t.id === saved)) tab = saved;
+    } catch {
+      /* no store */
+    }
+    try {
+      await $.command.register(COMMAND_SPEC);
+    } catch {
+      /* a built-in or another plugin holds /mental; the band still works */
+    }
+    poll?.cancel();
+    poll = $.clock.every(POLL_MS, () => void refresh());
+    void refresh();
+    return next(e);
+  });
+
+  on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
+    if (!host || e.surface !== "terminal" || e.props.hasSurvey) return next(e);
+    if (e.props.isWorking !== s.working) setWorking(!!e.props.isWorking);
+    const { Box, Text, Button } = await $.ui.resolve(e);
+    return bandView(
+      { Box, Text, Button },
+      {
+        vm,
+        s,
+        now: nowOf(),
+        columns: e.props.bodyColumns,
+        maxRows: Math.min(2, e.props.maxRows || 2),
+        frame,
+      },
+    );
+  });
+
+  on("ui.render", { component: "Pane" }, async ($, e, next) => {
+    if (e.requestId !== PANE_ID || !host) return next(e);
+    const { Box, Text, Button } = await $.ui.resolve(e);
+    return paneView(
+      { Box, Text, Button },
+      {
+        vm,
+        s,
+        now: nowOf(),
+        columns: e.props.bodyColumns,
+        rows: e.props.scroll?.bodyRows,
+        tab,
+        updatedAt,
+        error,
+        cwd,
+        onTab: (id) => {
+          tab = id;
+          void host.storeSet(STORE_TAB_KEY, id).catch(() => undefined);
+          redraw();
+        },
+        onPark: () => void fill(PARK_PROMPT),
+        onHandoff: () => void fill(HANDOFF_PROMPT),
+        onRefresh: () => void refresh(),
+      },
+    );
+  });
+
+  on("command.run", { command: "mental" }, async ($, e, next) => {
+    if (!host) return next(e);
+    isFullscreen = !!e.presentation?.isFullscreen;
+    const columns = Number(e.presentation?.columns) || 0;
+    if (isPaneOpen) {
+      await closePane();
+      return isFullscreen ? { text: "Mental panel hidden" } : {};
+    }
+    if (isFullscreen && columns && columns < DOCK_MIN_COLUMNS) {
+      return { text: `Widen the terminal to ${DOCK_MIN_COLUMNS}+ columns to dock the Mental panel` };
+    }
+    const ok = await openPane();
+    if (!ok) return { text: `Widen the terminal to ${DOCK_MIN_COLUMNS}+ columns to dock the Mental panel` };
+    return isFullscreen ? { text: "Mental panel shown" } : {};
+  });
+
+  on("ui.close", { id: PANE_ID }, async ($, e, next) => {
+    const r = await next(e);
+    if (!r || r.deny === undefined) isPaneOpen = false;
+    return r;
+  });
+
+  on("command.run", { command: ["clear", "resume"] }, async ($, e, next) => {
+    const r = await next(e);
+    resetSession();
+    void refresh();
+    return r;
+  });
+
+  on("turn.start", ($, e, next) => {
+    setWorking(true);
+    return next(e);
+  });
+
+  on("turn.complete", async ($, e, next) => {
+    const r = await next(e);
+    noteTurnComplete(s);
+    setWorking(false);
+    refreshSoon();
+    return r;
+  });
+
+  on("session.measure", ($, e, next) => {
+    noteContext(s, e.context);
+    redraw();
+    return next(e);
+  });
+
+  on("session.compact", async ($, e, next) => {
+    s.compacting = true;
+    redraw();
+    try {
+      return await next(e);
+    } finally {
+      s.compacting = false;
+      redraw();
+    }
+  });
+
+  on("tool.call", async ($, e, next) => {
+    const r = await next(e);
+    try {
+      /** @type {any} */
+      const call = e;
+      if (EDIT_TOOLS.has(call.tool) && !r?.deny && !r?.isError) {
+        noteEdit(s, String(call.file_path || call.notebook_path || ""));
+        redraw();
+      }
+      const command = mentalCommandOf({ tool: call.tool, command: call.command });
+      if (command && isWriteCommand(command) && !r?.deny) {
+        const receipt = receiptOf(command, r, nowOf());
+        if (receipt) {
+          s.receipt = receipt;
+          if (command === "park" || command === "handoff" || command === "journal") {
+            s.edits = 0;
+            s.files = new Map();
+          }
+          receiptTimer?.cancel();
+          receiptTimer = $.clock.after(RECEIPT_MS + 50, () => {
+            receiptTimer = null;
+            redraw();
+          });
+        }
+        refreshSoon(1500);
+        redraw();
+      }
+    } catch {
+      /* never break a tool call over the panel */
+    }
+    return r;
+  });
+
+  on("session.end", ($, e, next) => {
+    for (const t of [debounce, poll, breath, receiptTimer]) t?.cancel();
+    debounce = poll = breath = receiptTimer = null;
+    return next(e);
+  });
+};

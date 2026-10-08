@@ -10,6 +10,7 @@
   "homepage": "https://github.com/afaraha8403/mental#readme",
   "repository": "https://github.com/afaraha8403/mental",
   "license": "MIT",
+  "hooks": "./claude-mod/hooks.json",
   "keywords": [
     "continuity",
     "coding-agents",

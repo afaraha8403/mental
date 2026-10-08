@@ -21,7 +21,7 @@ export function cmdHeartbeat(args, io = {}) {
     return 0;
   }
 
-  const collected = collectHeartbeat(args);
+  const collected = collectHeartbeat(args, { pingTrack: args.flags?.passive !== true });
   if (!collected.ok) {
     printResult(stdout, args, false, undefined, collected.error);
     return 1;

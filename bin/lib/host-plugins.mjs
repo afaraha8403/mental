@@ -84,6 +84,41 @@ function spawnJson(opts) {
   }
 }
 
+/** Claude Code release that ships the Mods API the in-session panel needs. */
+export const CLAUDE_PANEL_MIN_VERSION = "2.1.287";
+
+/**
+ * @param {NodeJS.ProcessEnv} env
+ * @param {typeof spawnSync} spawn
+ */
+function claudePanelRow(env, spawn) {
+  let found = "";
+  try {
+    const r = spawn("claude", ["--version"], {
+      encoding: "utf8",
+      env,
+      timeout: HOST_PLUGIN_TIMEOUT_MS,
+      shell: process.platform === "win32",
+      windowsHide: process.platform === "win32",
+    });
+    if (r.status === 0 && !r.error) found = /(\d+\.\d+\.\d+)/.exec(String(r.stdout || ""))?.[1] ?? "";
+  } catch {
+    found = "";
+  }
+  if (!found) {
+    return row("claude-panel", true, "Claude Code version unknown; the /mental panel needs Claude Code " + CLAUDE_PANEL_MIN_VERSION + "+", "info");
+  }
+  const behind = cmpSemver(found, CLAUDE_PANEL_MIN_VERSION) < 0;
+  return row(
+    "claude-panel",
+    !behind,
+    behind
+      ? `Claude Code ${found}; the /mental panel needs ${CLAUDE_PANEL_MIN_VERSION}+. Run \`claude update\` (the plugin still works without it).`
+      : `Claude Code ${found}; /mental panel available`,
+    behind ? "warn" : "info",
+  );
+}
+
 /**
  * @param {{
  *   home: string,
@@ -122,6 +157,7 @@ export function hostPluginChecks(opts) {
           behind ? "warn" : "info",
         ),
       );
+      checks.push(claudePanelRow(env, spawn));
     }
   }
 
