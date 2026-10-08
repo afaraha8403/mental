@@ -31,7 +31,7 @@ when_to_use: |
 
 ## Which mechanism matches a "mod"?
 
-Claude Desktop mods change the app's own UI. Cursor has no first-party mod system, so match by intent:
+Claude Desktop mods change the app's own UI. **Cursor has no first-party equivalent today; revisit when it ships one.** Until then, match by intent:
 
 | Goal | Right mechanism | MCP? | Reference |
 | --- | --- | --- | --- |

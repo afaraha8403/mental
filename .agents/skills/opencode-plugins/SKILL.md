@@ -28,7 +28,7 @@ when_to_use: |
 
 # OpenCode plugins and TUI extensions
 
-**UI reality:** OpenCode's UI is the terminal. There is no GUI canvas or side panel. The UI mechanism is a **TUI plugin** (v2), which needs no MCP. Hooks and tools in server plugins need no MCP either.
+**Not a desktop mod target.** OpenCode's docs say plugins change behavior, and "to change the terminal UI, build a CLI plugin" (`opencode.ai/v2/docs/build/plugins`). No documented plugin API changes the UI of the OpenCode desktop app or web UI. Do not treat this skill as the OpenCode equivalent of Claude Desktop mods; it covers server plugins (hooks, tools) and TUI plugins only. Both need no MCP. Re-check the docs for a desktop UI extension API before stating otherwise.
 
 ## First: which generation?
 

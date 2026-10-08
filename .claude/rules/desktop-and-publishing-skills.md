@@ -9,7 +9,9 @@ Read the matching skill before writing code or running a release step:
 | OpenCode plugin (v1 hooks, v2 server/TUI) | `.claude/skills/opencode-plugins/SKILL.md` |
 | Release or publish Mental: npm, Claude, Cursor, Copilot, Codex, OpenCode | `.claude/skills/publishing-mental-to-stores/SKILL.md` |
 
-Key facts: Copilot has no central store, only marketplace repos. Cursor Canvas is an agent artifact, not a mod; Cursor UI extension means a VS Code extension published to Open VSX. OpenCode has no GUI canvas and no official publish page. Codex public submission needs a remote MCP server, which Mental lacks.
+**Mod scope.** We only care about desktop apps with a Claude Desktop-style mod mechanism (extends the app's own UI). Today: Claude Desktop mods (no MCP), Copilot desktop canvases (no MCP, `@experimental`), Codex Plugin Extensions (needs MCP). Cursor has no mod equivalent yet (Canvas is agent output; VS Code extensions are a separate editor route); revisit later. OpenCode plugins are server or terminal only, not a desktop mod.
+
+Key facts: Copilot has no central store, only marketplace repos. OpenCode has no official publish page. Codex public submission needs a remote MCP server, which Mental lacks.
 
 ## Maintaining them
 

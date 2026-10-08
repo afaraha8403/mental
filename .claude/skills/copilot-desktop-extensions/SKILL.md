@@ -33,6 +33,8 @@ when_to_use: |
 
 Copilot is the one platform here where "mods" are first-class and need **no MCP server**. An extension is a separate Node.js process the CLI forks and talks to over JSON-RPC on stdio. It can add tools, register hooks, request env vars, and register **canvases**. Canvases are the UI: a panel in the app that the agent opens (`open_canvas`) and drives (`invoke_canvas_action`).
 
+**Verified against the SDK typings** (`canvas.d.ts`, `generated/rpc.d.ts`): `createCanvas` and `open` returning `{ url, title, status }` for a web-rendered panel are real. They are marked `@experimental` ("may change or be removed in future SDK or CLI releases"), and `CanvasHostContextCapabilities.canvases` says whether the host renders them. Check that capability and re-read the typings before relying on a canvas shape. The SDK docs (`extensions.md`, `agent-author.md`) do not mention canvases; the typings and `extensions_manage` scaffold are the source.
+
 Source of truth, in order: the `extensions_manage` tool with `operation: "guide"` (always call it before writing code), then the SDK docs shipped with the desktop app (`extensions.md`, `agent-author.md`, `examples.md`, `index.d.ts` under the app's `copilot-sdk\docs` folder; the path is machine-specific, so locate it rather than assuming).
 
 ## Requirements
