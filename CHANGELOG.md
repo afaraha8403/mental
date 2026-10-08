@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 - `mental list` and `mental search` page their results (default 50) with `--limit`, `--offset`, and `--all`, and report `total`, `returned`, `truncated`, and `nextOffset`. `--since` / `--on YYYY-MM-DD` filter by timestamp. Rows carry `timestamp`, `updated`, and `project`. MCP tools accept the same arguments.
+- `mental list` and `mental search` take `--project <id|name|id-prefix>` to read one other bound project and `--all-projects` to read every binding; results are tagged with `project`, report `scope` / `projects`, and page over the union. MCP: `project`, `all_projects`.
 - The heartbeat surfaces stale decisions and attention (open/deferred decisions, open/later attention untouched for 14+ days) as `stale` in JSON and a `Stale (> 14d)` text block, and the skill tells agents to propose resolving, deciding, or superseding them (#62).
 - `mental decide`, `mental attention`, and `mental note` require `--tag` (1–3 topic slugs) when creating a file. Omitting it on update leaves existing tags in place, so older files stay as they are. `mental doctor` warns `untagged` (exit 0) and lists files whose tags are missing or empty. The dashboard map defaults to a force graph of file dots and still has the Brain and Tree layouts.
 - The dashboard map groups by topic tag. Graph draws one hub per tag with its files around it, and Brain and Tree use those same tag hubs. Zoom and pan can move between the clusters.

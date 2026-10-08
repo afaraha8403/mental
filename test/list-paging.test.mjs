@@ -247,6 +247,98 @@ test("attention warns on settled-fact titles but not on real residue or resolves
   assert.equal(create("CLOSED: old thing", ["--status", "resolved"]).warning, undefined);
 });
 
+function seedTwo() {
+  const a = seed();
+  const { root } = initRepo(a.home, { origin: "git@github.com:afaraha8403/other.git", name: "other" });
+  parseOk(mental(a.home, root, ["journal", "--json", "--title", "Seed B", "--resume", "Continue — open loops: none"]), "seed b");
+  const where = parseOk(mental(a.home, root, ["where", "--json"]), "where b");
+  assert.notEqual(where.id, a.id);
+  return { ...a, otherCwd: root, otherBundle: where.root, otherId: where.id };
+}
+
+test("list --project and --all-projects scope across bindings with project-tagged rows", () => {
+  const s = seedTwo();
+  const ts = "2026-03-01T12:00:00.000Z";
+  for (let i = 0; i < 3; i++) note(s.bundle, `a${i}`, ts);
+  for (let i = 0; i < 2; i++) note(s.otherBundle, `b${i}`, ts);
+  const cur = parseOk(mental(s.home, s.cwd, ["list", "--type", "Note", "--json"]), "cur");
+  assert.equal(cur.total, 3);
+  assert.equal(cur.scope, "current");
+
+  const other = parseOk(mental(s.home, s.cwd, ["list", "--type", "Note", "--project", s.otherId, "--json"]), "other");
+  assert.equal(other.total, 2);
+  assert.ok(other.items.every((i) => i.project === s.otherId));
+
+  const all = parseOk(mental(s.home, s.cwd, ["list", "--type", "Note", "--all-projects", "--json"]), "all");
+  assert.equal(all.scope, "all");
+  assert.equal(all.total, 5);
+  assert.equal(all.items.filter((i) => i.project === s.id).length, 3);
+  assert.equal(all.items.filter((i) => i.project === s.otherId).length, 2);
+
+  const page = parseOk(
+    mental(s.home, s.cwd, ["list", "--type", "Note", "--all-projects", "--limit", "2", "--offset", "2", "--json"]),
+    "page",
+  );
+  assert.equal(page.returned, 2);
+  assert.equal(page.total, 5);
+  assert.equal(page.nextOffset, 4);
+
+  const fromElsewhere = parseOk(
+    mental(s.home, s.otherCwd, ["list", "--type", "Note", "--all-projects", "--json"]),
+    "from other",
+  );
+  assert.equal(fromElsewhere.total, 5);
+});
+
+test("project scope accepts name or id prefix and rejects unknown, ambiguous, and conflicting flags", () => {
+  const s = seedTwo();
+  const ok = parseOk(mental(s.home, s.cwd, ["list", "--project", s.otherId.slice(0, 8), "--json"]), "prefix");
+  assert.equal(ok.scope, "project");
+  const byName = parseOk(mental(s.home, s.cwd, ["list", "--project", "other", "--json"]), "name");
+  assert.deepEqual(byName.projects, [s.otherId]);
+  assert.equal(parseErr(mental(s.home, s.cwd, ["list", "--project", "nope-nope", "--json"])).code, "not-found");
+  assert.equal(
+    parseErr(mental(s.home, s.cwd, ["list", "--project", s.otherId, "--all-projects", "--json"])).code,
+    "usage",
+  );
+});
+
+test("search --all-projects unions hits tagged by project, with paging over the union", () => {
+  const s = seedTwo();
+  const ts = "2026-03-01T12:00:00.000Z";
+  for (let i = 0; i < 3; i++) note(s.bundle, `a${i}`, ts);
+  for (let i = 0; i < 2; i++) note(s.otherBundle, `b${i}`, ts);
+  reindex(s);
+  parseOk(mental(s.home, s.otherCwd, ["reindex", "--json"]), "reindex b");
+
+  const cur = parseOk(mental(s.home, s.cwd, ["search", "zebrafish", "--json"]), "cur");
+  assert.equal(cur.total, 3);
+  const all = parseOk(mental(s.home, s.cwd, ["search", "zebrafish", "--all-projects", "--json"]), "all");
+  assert.equal(all.total, 5);
+  assert.equal(all.hits.filter((h) => h.project === s.otherId).length, 2);
+  const page = parseOk(
+    mental(s.home, s.cwd, ["search", "zebrafish", "--all-projects", "--limit", "2", "--offset", "4", "--json"]),
+    "page",
+  );
+  assert.equal(page.returned, 1);
+  assert.equal(page.truncated, false);
+  const one = parseOk(mental(s.home, s.cwd, ["search", "zebrafish", "--project", s.otherId, "--json"]), "one");
+  assert.equal(one.total, 2);
+});
+
+test("MCP list and search accept project scope args", () => {
+  const s = seedTwo();
+  note(s.otherBundle, "b0", "2026-03-01T12:00:00.000Z");
+  const ctx = { cwd: s.cwd, home: s.home, env: { ...process.env, HOME: s.home, USERPROFILE: s.home }, dir: null };
+  const r = runTool("list", { all_projects: true, type: "Note" }, ctx).body;
+  assert.equal(r.data.scope, "all");
+  assert.equal(r.data.total, 1);
+  const p = runTool("list", { project: s.otherId, type: "Note" }, ctx).body;
+  assert.equal(p.data.scope, "project");
+  const tools = handle({ jsonrpc: "2.0", id: 1, method: "tools/list" }, ctx).result.tools;
+  assert.ok(tools.find((t) => t.name === "search").inputSchema.properties.all_projects);
+});
+
 test("MCP list and search accept paging args", () => {
   const s = seed();
   const { home, cwd, bundle } = s;

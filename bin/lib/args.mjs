@@ -110,7 +110,8 @@ export function parseArgv(argv) {
       continue;
     }
 
-    const spec = byName.get(name);
+    const local = args.command && getCommand(args.command) ? getCommand(args.command).flags.find((f) => f.name === name) : null;
+    const spec = local || byName.get(name);
     if (!spec) {
       args.unknownFlags.push(name);
       continue;

@@ -35,8 +35,8 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental pulse` | Cross-project compact rows from `bindings.json` (id, name, resume, attentionCount, openDecisionCount). No journal bodies. Writes watermark for the active bundle |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only; does not create identity) |
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
-| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op` |
-| `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`, `--since`, `--on`; pages of 50 via `--limit`, `--offset`, `--all`) |
+| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`, `--project`, `--all-projects`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op` |
+| `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`, `--since`, `--on`; pages of 50 via `--limit`, `--offset`, `--all`; `--project <id\|name>` or `--all-projects` to cross projects) |
 | `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`) |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
 | `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`, `--via`). Requires `--resume`. Then heartbeat; writes watermark |

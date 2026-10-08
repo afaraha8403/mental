@@ -192,7 +192,8 @@ that have sat untouched (`stale` in JSON). On orient, propose resolving,
 deciding, or superseding them; never delete without the user's say-so.
 `list` and `search` page (default 50): use `--limit`, `--offset`, `--all`; read
 `total` / `truncated` / `nextOffset`. `--since` / `--on YYYY-MM-DD` filter by
-timestamp.
+timestamp. `--project <id|name>` reads one other project and `--all-projects`
+reads every bound project (rows/hits carry `project`; paging runs over the union).
 `status` refreshes `status/current.md` as a disposable cache — not SoT. Never
 block work if Mental errors; mention it and continue.
 

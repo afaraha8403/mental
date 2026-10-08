@@ -63,6 +63,11 @@ const PAGE_FLAGS = [
   v("on", { summary: "Only items on this local day (YYYY-MM-DD)" }),
 ];
 
+const SCOPE_FLAGS = [
+  v("project", { summary: "Read one other project instead of the active one (id, id prefix, or name from bindings)" }),
+  b("all-projects", { mcpName: "all_projects", summary: "Read every bound project (rows carry `project`; paging applies to the union)" }),
+];
+
 const VIA = v("via", { summary: "Short client token (cursor, claude-code, copilot, codex, opencode, mcp, cli). Not a session id." });
 const AGAINST = v("against", { summary: "Repo-relative plan path (no ..)" });
 const TITLE = v("title", { summary: "OKF title (same title updates)" });
@@ -175,7 +180,7 @@ export const CATALOG = {
       `${CMD} search leftover overlay --any --json`,
       `${CMD} search -- -label`,
     ],
-    flags: FILTER_FLAGS.concat(PAGE_FLAGS, [
+    flags: FILTER_FLAGS.concat(PAGE_FLAGS, SCOPE_FLAGS, [
       b("any", { summary: "OR tokens instead of AND (union of words in one query)" }),
     ]),
     effects: "read_only",
@@ -215,10 +220,10 @@ export const CATALOG = {
   list: {
     name: "list",
     group: "Lookup",
-    summary: "List OKF concepts with typed frontmatter filters (no query). Active bundle only. Default page 50; page with --limit/--offset or --all; --since/--on filter by date. JSON includes total, returned, truncated, nextOffset; rows carry timestamp, updated, project.",
+    summary: "List OKF concepts with typed frontmatter filters (no query). Active bundle by default; --project <id|name> reads one other project, --all-projects reads every binding (rows carry `project`). Default page 50; page with --limit/--offset or --all; --since/--on filter by date. JSON includes total, returned, truncated, nextOffset; rows carry timestamp, updated, project.",
     usage: `${CMD} list`,
-    examples: [`${CMD} list --type Decision --status open`, `${CMD} list --json --kind verify`, `${CMD} list --all --since 2026-09-01`, `${CMD} list --limit 20 --offset 20`],
-    flags: FILTER_FLAGS.concat(PAGE_FLAGS),
+    examples: [`${CMD} list --type Decision --status open`, `${CMD} list --json --kind verify`, `${CMD} list --all --since 2026-09-01`, `${CMD} list --limit 20 --offset 20`, `${CMD} list --all-projects --status open --all`],
+    flags: FILTER_FLAGS.concat(PAGE_FLAGS, SCOPE_FLAGS),
     effects: "read_only",
     mcp: true,
   },

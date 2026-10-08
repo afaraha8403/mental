@@ -84,6 +84,8 @@ function runTool(name, args, ctx) {
         all: args.all === true,
         since: args.since,
         on: args.on,
+        project: args.project,
+        "all-projects": args.all_projects === true,
         any: args.any === true,
       },
     });
@@ -101,6 +103,8 @@ function runTool(name, args, ctx) {
         all: args.all === true,
         since: args.since,
         on: args.on,
+        project: args.project,
+        "all-projects": args.all_projects === true,
       },
     });
   }
