@@ -50,7 +50,7 @@ mental status --json
 Mid-chat, not just start/finish:
 
 - Before proposing a concrete approach, flag, crate, or env var: `mental search <that name> --json` as its own query (space-separated words are AND; `--any` is OR). Also `mental list --type Decision --json` (all statuses). If `id` is null, those catalogs are empty (unbound); use `pulse` for other repos.
-- Record attention the moment residue surfaces. "Come back to this" / "for later" is `--status later`, never `note`.
+- Record attention the moment residue surfaces. "Come back to this" / "for later" is `--status later`, never `note`. Settled facts ("DONE …", "CORRECTION …") are not residue: use `note`/journal or resolve the original item (`attention` warns on those titles).
 - Park when interrupted mid-hop; handoff only at a planned close
 - Re-call `mental heartbeat --json` whenever other agents may have written — it derives git live. On this repo’s bench machine a CLI heartbeat is **51 ms** p50; in-process (MCP) it is **11 ms**. See [benchmarks](./benchmarks.md).
 - Use `pulse` for multi-repo orchestration, not as a per-turn dump

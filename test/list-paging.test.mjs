@@ -218,6 +218,35 @@ test("heartbeat counts agree with list totals, including attention without statu
   assert.equal(open.total, 2);
 });
 
+test("heartbeat counts include nested attention and decision files", () => {
+  const { home, cwd, bundle } = seed();
+  const base = { tags: [], timestamp: "2026-03-01T12:00:00.000Z" };
+  writeOkf(bundle, "attention/top.md", { ...base, type: "Attention", title: "Top", description: "t", status: "open", kind: "concern" }, "# Top\n");
+  writeOkf(bundle, "attention/sub/nested.md", { ...base, type: "Attention", title: "Nested", description: "n", status: "open", kind: "concern" }, "# Nested\n");
+  writeOkf(bundle, "decisions/sub/nested-dec.md", { ...base, type: "Decision", title: "Nested dec", description: "d" }, "# Nested dec\n");
+
+  const hb = parseOk(mental(home, cwd, ["heartbeat", "--json"]), "heartbeat");
+  const att = parseOk(mental(home, cwd, ["list", "--type", "Attention", "--status", "open", "--json"]), "att");
+  const dec = parseOk(mental(home, cwd, ["list", "--type", "Decision", "--status", "open", "--json"]), "dec");
+  assert.equal(att.total, 2);
+  assert.equal(hb.attentionCount, att.total);
+  assert.equal(hb.openDecisionCount, dec.total);
+  assert.equal(dec.total, 1);
+});
+
+test("attention warns on settled-fact titles but not on real residue or resolves", () => {
+  const { home, cwd } = seed();
+  const create = (title, extra = []) =>
+    parseOk(
+      mental(home, cwd, ["attention", "--title", title, "--kind", "thread", "--tag", "sync", "--via", "cli", ...extra, "--json"]),
+      "attention",
+    );
+  assert.match(create("DONE 2026-09-09: shipped the thing").warning, /note|journal/);
+  assert.match(create("CORRECTION: ledger was wrong").warning, /settled fact/);
+  assert.equal(create("Chase the vendor about invoices").warning, undefined);
+  assert.equal(create("CLOSED: old thing", ["--status", "resolved"]).warning, undefined);
+});
+
 test("MCP list and search accept paging args", () => {
   const s = seed();
   const { home, cwd, bundle } = s;

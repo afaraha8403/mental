@@ -241,6 +241,10 @@ working memory after a hop but is not a choice-fork and not a durable fact:
 - `status: later` — "note that for later", "come back to this", "let's do this
   later". Default kind `thread`. Not park (park is an interruption and needs
   `--resume`). Never use `note` for "for later".
+- Settled facts are not residue. Outcomes and corrections ("DONE …",
+  "CLOSED …", "CORRECTION …") go to `note` (durable) or the journal, or close
+  the original item with `--status resolved`. `attention` warns when a new open
+  item's title starts with one of those words.
 - `status: resolved` — **must resolve**; residue that cannot close is a
   graveyard. Cap ≤7 on the heartbeat. Merge duplicates.
 

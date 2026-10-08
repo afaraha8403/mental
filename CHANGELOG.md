@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 - `mental search 2026-09-24` matches that date instead of AND-ing `2026`, `09`, and `24`. Results exclude nested `projects/` paths, and the index schema is rebuilt automatically.
-- Heartbeat counts agree with `mental list` totals: Attention and Decision files without a `status` count as `open` (#67).
+- Heartbeat counts agree with `mental list` totals: nested attention/decision files are counted, and files without a `status` count as `open` (#67).
+- `mental attention` warns (`warning` in JSON) when a new open item's title starts with `DONE`, `CLOSED`, `COMPLETE(D)`, or `CORRECTION`: settled facts belong in `note`/journal, not open residue. The skill documents the rule (#67).
 - Fixed "no file selected" message persisting after document selection by enforcing `[hidden] { display: none !important; }` across all components so specificity rules do not override hidden view states.
 - Fixed mind map node crowding, overlap, and cluster collisions by replacing force simulations with a deterministic, structured radial/columnar layout with 600px cluster separation, 100px column gutters, 38px row gutters, and edge-to-edge hierarchical connecting lines.
 - Fixed node dragging snapping back on mouse release by persisting drag coordinates in a pinned node store, disabling snap-back forces, and visually indicating pinned nodes with a dashed accent border.

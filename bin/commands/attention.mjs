@@ -19,6 +19,10 @@ import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
 
+const HISTORY_TITLE = /^\s*(DONE|CLOSED|COMPLETED?|CORRECTION|LEDGER CORRECTION)\b/i;
+const HISTORY_WARNING =
+  "this reads like a settled fact (outcome/correction), not residue. Record it with `mental note` or `mental journal`, or resolve the original item with `--status resolved`; otherwise it stays open indefinitely.";
+
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
 }
@@ -144,13 +148,19 @@ export function cmdAttention(args, io = {}) {
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
     const verb = written.updated ? "updated" : "wrote";
+    const warning =
+      !existing && status !== "resolved" && HISTORY_TITLE.test(title || "")
+        ? HISTORY_WARNING
+        : undefined;
     printResult(
       stdout,
       args,
       true,
-      { ...resolved.data, ...written, indexed },
+      { ...resolved.data, ...written, indexed, ...(warning ? { warning } : {}) },
       undefined,
-      () => kindLine("attention", `${verb} ${written.path}`),
+      () =>
+        kindLine("attention", `${verb} ${written.path}`) +
+        (warning ? `\nwarning: ${warning}` : ""),
     );
     return 0;
   } catch (err) {
