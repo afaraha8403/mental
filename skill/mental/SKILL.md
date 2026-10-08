@@ -214,6 +214,15 @@ a later agent will search (`Do not retry WEBKIT_DISABLE_COMPOSITING`), with
 - `deferred`: intentionally parked; state what it awaits.
 - `decided`: record what was chosen, why, and when.
 - `superseded`: preserve the file and link the replacement.
+- `obsolete`: no longer applies and nothing replaces it.
+
+Do not hand-edit `status`. When a note or decision is overwritten or no longer true, run
+`mental supersede <path> --by <newer> --json` (the newer file gets a `supersedes:` link) or
+`mental obsolete <path> --json`; `--restore` undoes either. Only notes and decisions can be marked,
+never journals, and the file is kept. Marked files leave heartbeat, brief and open-decision lists
+and rank last in search, labelled `superseded by <path>` / `obsolete`: follow the replacement, not
+the old file. Mark only when the user says so or the evidence is clear. `mental doctor` may propose
+marks (a `jev-repair` warning); report them and run `doctor --apply` only if the user agrees.
 
 ```text
 mental decide --title "…" --body "…" --status open --tag continuity --json
