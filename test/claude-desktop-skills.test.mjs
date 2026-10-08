@@ -1,19 +1,20 @@
 /**
- * Conformance for the standalone Claude Desktop skills under optional/.
- * They are copy-in skills (not autoloaded by the Mental plugin), so they must
- * stay out of skills/ and carry valid, self-consistent frontmatter and links.
+ * Conformance for the repo-local Claude Desktop skills in .agents/skills
+ * (mirrored to .claude/skills). They are for coding sessions in this repo only:
+ * never shipped in the npm package, never autoloaded by the Mental plugin.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { drift } from "../scripts/sync-project-skills.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SKILLS = ["claude-desktop-mods", "claude-desktop-plugins", "claude-desktop-extensions"];
 const NAME_RE = /^(?!-)(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-const skillDir = (name) => join(ROOT, "optional", name);
+const skillDir = (name) => join(ROOT, ".agents", "skills", name);
 const read = (file) => readFileSync(file, "utf8");
 
 function frontmatter(md) {
@@ -82,11 +83,21 @@ for (const name of SKILLS) {
   });
 }
 
-test("claude-desktop skills are standalone: not under skills/ and never plugin-reserved names", () => {
+test("claude-desktop skills are repo-local: not shipped, not autoloaded by the plugin", () => {
   const autoloaded = readdirSync(join(ROOT, "skills"));
-  for (const name of SKILLS) assert.ok(!autoloaded.includes(name), `${name} must not autoload`);
+  for (const name of SKILLS) {
+    assert.ok(!autoloaded.includes(name), `${name} must not autoload`);
+    assert.equal(existsSync(join(ROOT, "optional", name)), false, `${name} must not live in optional/`);
+  }
   const pkg = JSON.parse(read(join(ROOT, "package.json")));
-  assert.ok(pkg.files.includes("optional"), "optional/ must ship in the npm package");
+  for (const entry of pkg.files) {
+    assert.ok(!/^\.(agents|claude|cursor|codex)(\/|$)/.test(entry), `package.json files must not ship ${entry}`);
+  }
+});
+
+test(".claude/skills mirrors .agents/skills", () => {
+  assert.deepEqual(drift(), []);
+  for (const name of SKILLS) assert.ok(existsSync(join(ROOT, ".claude", "skills", name, "SKILL.md")));
 });
 
 test("JSON examples in the claude-desktop skills parse", () => {
