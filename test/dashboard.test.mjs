@@ -22,7 +22,11 @@ function writeConcept(bundle, rel, data, body) {
 function occupyPort(port) {
   return new Promise((resolve, reject) => {
     const server = createServer();
-    server.once("error", reject);
+    server.once("error", (err) => {
+      // Something else (e.g. a live dashboard) already holds the port; that is just as busy.
+      if (err && err.code === "EADDRINUSE") resolve({ close: (cb) => cb && cb() });
+      else reject(err);
+    });
     server.listen(port, "127.0.0.1", () => resolve(server));
   });
 }

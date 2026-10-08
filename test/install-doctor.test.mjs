@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
+import { gitEnv, initRepo, mental, symlinkSkip, tempHome } from "./helpers.mjs";
 import { EXIT_IO } from "../bin/lib/output.mjs";
 import { ensureMentalExcluded, MENTAL_IGNORE_LINE } from "../bin/lib/ignore.mjs";
 import { defaultExcludesFile } from "../bin/lib/ignore.mjs";
@@ -69,7 +69,7 @@ test("install never overwrites an unknown PATH command", () => {
   assert.equal(readFileSync(join(prefixBin, "mental"), "utf8"), "#!/bin/sh\necho leftover\n");
 });
 
-test("mental install follows a symlink skill dir (claude → agents)", () => {
+test("mental install follows a symlink skill dir (claude → agents)", { skip: symlinkSkip }, () => {
   const home = tempHome();
   const { root } = initRepo(home);
   const agents = join(home, ".agents", "skills", "mental");

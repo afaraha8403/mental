@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, writeFileSync, cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, cpSync, existsSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -12,6 +12,26 @@ export const CLI = fileURLToPath(new URL("../bin/cli.mjs", import.meta.url));
 export function tempHome(prefix = "mental-") {
   return canonicalPath(mkdtempSync(join(tmpdir(), prefix)));
 }
+
+/**
+ * `node:test` skip option: a reason string when this account cannot create symlinks
+ * (Windows without Developer Mode or elevation raises EPERM), otherwise false.
+ * @type {string | false}
+ */
+export const symlinkSkip = (() => {
+  const dir = mkdtempSync(join(tmpdir(), "mental-symprobe-"));
+  try {
+    writeFileSync(join(dir, "target"), "x");
+    symlinkSync(join(dir, "target"), join(dir, "link"));
+    return false;
+  } catch (err) {
+    return err && (err.code === "EPERM" || err.code === "EACCES")
+      ? `symlinks not permitted on this account (${err.code}); enable Developer Mode or run elevated`
+      : false;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+})();
 
 /**
  * Isolated git env so tests never read or write the machine gitconfig.
