@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-10-08
+
 ### Features
 - `mental decide`, `mental attention`, and `mental note` require `--tag` (1–3 topic slugs) when creating a file. Omitting it on update leaves existing tags in place, so older files stay as they are. `mental doctor` warns `untagged` (exit 0) and lists files whose tags are missing or empty. The dashboard map defaults to a force graph of file dots and still has the Brain and Tree layouts.
 - The dashboard map groups by topic tag. Graph draws one hub per tag with its files around it, and Brain and Tree use those same tag hubs. Zoom and pan can move between the clusters.
