@@ -26,7 +26,7 @@ import {
   RECEIPT_MS,
 } from "./lib/model.mjs";
 import { bandView, paneView, TABS } from "./lib/views.mjs";
-import { bandDesktop, footerDesktop, needsOf, paneDesktop, toolRowDesktop } from "./lib/desktop.mjs";
+import { bandDesktop, footerDesktop, needsOf, paneDesktop, toolRowDesktop, visibleNeedsOf } from "./lib/desktop.mjs";
 import { toolCardOf } from "./lib/toolcard.mjs";
 
 const PANE_ID = "mental";
@@ -48,6 +48,7 @@ const INTRO_MS = 1_600;
 const HEARTBEAT_TIMEOUT_MS = 20_000;
 const STORE_TAB_KEY = "tab";
 const STORE_OPEN_KEY = "open";
+const STORE_DISMISSED_KEY = "dismissed";
 const REOPEN_MS = 800;
 const NEEDS_FLASH_MS = 7000;
 const PARK_PROMPT = "Park this session in Mental";
@@ -80,13 +81,17 @@ export function heartbeatOf(stdout) {
   }
 }
 
-/** @param {string} root */
-export function heartbeatArgvs(root) {
-  const tail = ["heartbeat", "--json", "--passive"];
+/** @param {string} root @param {string[]} tail */
+export function cliArgvs(root, tail) {
   const out = [];
   if (root) out.push(["node", `${String(root).replace(/[\\/]+$/, "")}/bin/cli.mjs`, ...tail]);
   out.push(["mental", ...tail], ["mental.cmd", ...tail]);
   return out;
+}
+
+/** @param {string} root */
+export function heartbeatArgvs(root) {
+  return cliArgvs(root, ["heartbeat", "--json", "--passive"]);
 }
 
 /**
@@ -165,6 +170,14 @@ export const register = (on) => {
   let live = null;
   let openedAt = 0;
   let lastTryAt = 0;
+  let lastSig = "";
+  /** Needs the person hid from the footer and band (still shown in the panel). */
+  let dismissed = new Set();
+  /** @type {any[]} */
+  let nav = [];
+  /** @type {any} */
+  let route = null;
+  let routeSeq = 0;
 
   const nowOf = () => Date.now();
 
@@ -214,12 +227,93 @@ export const register = (on) => {
     } finally {
       inFlight = false;
       lastTryAt = nowOf();
-      redraw();
+      pruneDismissed();
+      // Redraw only when something on screen changed, so a refresh never
+      // repaints the pane under a scrolling finger.
+      const sig = signatureOf();
+      if (sig !== lastSig) {
+        lastSig = sig;
+        redraw();
+      }
     }
     if (queued) {
       queued = false;
       void refresh();
     }
+  }
+
+  function signatureOf() {
+    return JSON.stringify([
+      vm,
+      error,
+      dash.state,
+      Math.floor(nowOf() / 60_000),
+      route ? [route.view, route.status] : null,
+    ], (k, v) => (k === "handoffAge" ? undefined : v));
+  }
+
+  /** Forget hidden needs that are gone, so a concern that comes back shows again. */
+  function pruneDismissed() {
+    if (!dismissed.size || !vm?.linked) return;
+    const live = new Set(needsOf(vm).items.map((x) => x.key));
+    const kept = [...dismissed].filter((k) => live.has(k));
+    if (kept.length === dismissed.size) return;
+    dismissed = new Set(kept);
+    void host?.storeSet(STORE_DISMISSED_KEY, kept).catch(() => undefined);
+  }
+
+  /** Hide what the footer and band show now. The panel and Mental keep everything. */
+  function dismissNeeds() {
+    if (!host || !vm?.linked) return;
+    const keys = visibleNeedsOf(vm, dismissed).map((x) => x.key);
+    if (!keys.length) return;
+    dismissed = new Set([...dismissed, ...keys]);
+    void host.storeSet(STORE_DISMISSED_KEY, [...dismissed]).catch(() => undefined);
+    host.toast("Hidden from the footer — it's still in the Mental panel");
+    redraw();
+  }
+
+  /** Run a read-only Mental command and return its JSON `data`, or null. */
+  async function readMental(tail) {
+    for (const argv of cliArgvs(root, tail)) {
+      try {
+        const init = cwd ? { cwd, timeoutMs: HEARTBEAT_TIMEOUT_MS } : { timeoutMs: HEARTBEAT_TIMEOUT_MS };
+        const r = await host.run(argv, init);
+        const got = heartbeatOf(r.stdout);
+        if (got && got.ok !== false && got.data) return got.data;
+        if (got) return null;
+      } catch {
+        /* try the next launcher */
+      }
+    }
+    return null;
+  }
+
+  /** Show a list or an entry in the pane, remembering where we came from. */
+  async function go(next) {
+    if (!host) return;
+    if (route) nav.push({ ...route, crumb: route.crumb });
+    const seq = ++routeSeq;
+    route = { ...next, status: "loading" };
+    redraw();
+    const data = next.view === "list" ? await readMental(["list", "--json", "--type", next.type]) : await readMental(["show", next.path, "--json"]);
+    if (seq !== routeSeq || !route) return;
+    if (!data) route = { ...route, status: "error" };
+    else if (next.view === "list") route = { ...route, status: "ok", items: Array.isArray(data.items) ? data.items : [], total: data.total ?? data.items?.length ?? 0 };
+    else route = { ...route, status: "ok", doc: data };
+    redraw();
+  }
+
+  function goBack() {
+    routeSeq += 1;
+    route = nav.pop() || null;
+    redraw();
+  }
+
+  function clearRoute() {
+    routeSeq += 1;
+    route = null;
+    nav = [];
   }
 
   async function runDash(args) {
@@ -329,7 +423,6 @@ export const register = (on) => {
     live = host.every(LIVE_MS, () => {
       if (!isPaneOpen) return;
       if (!inFlight && nowOf() - Math.max(lastTryAt, openedAt) >= REFRESH_MS) void refresh();
-      else redraw();
     });
   }
 
@@ -342,6 +435,7 @@ export const register = (on) => {
     await host.close({ id: PANE_ID }).catch(() => undefined);
     isPaneOpen = false;
     stopLive();
+    clearRoute();
     rememberOpen(false);
     redraw();
   }
@@ -404,6 +498,7 @@ export const register = (on) => {
   async function showNeeds() {
     if (!host) return;
     flashUntil = nowOf() + NEEDS_FLASH_MS;
+    clearRoute();
     if (!isPaneOpen) {
       isFullscreen = true;
       await openPane();
@@ -454,6 +549,12 @@ export const register = (on) => {
     }
     if (isRich) {
       try {
+        const saved = await $.store.get(STORE_DISMISSED_KEY);
+        if (Array.isArray(saved)) dismissed = new Set(saved.filter((k) => typeof k === "string"));
+      } catch {
+        /* no store */
+      }
+      try {
         if ((await $.store.get(STORE_OPEN_KEY)) === true) {
           $.clock.after(REOPEN_MS, () => void openPane().catch(() => undefined));
         }
@@ -476,6 +577,8 @@ export const register = (on) => {
         now: nowOf(),
         isOpen: isPaneOpen,
         bandSeen,
+        dismissed,
+        onDismiss: () => dismissNeeds(),
         modes: Array.isArray(e.props.modes) ? e.props.modes : [],
         onToggle: () => void togglePane(),
       },
@@ -498,6 +601,8 @@ export const register = (on) => {
           columns: e.props.bodyColumns,
           maxRows: Math.min(2, e.props.maxRows || 2),
           onNeeds: () => void showNeeds(),
+          dismissed,
+          onDismiss: () => dismissNeeds(),
         },
       );
     }
@@ -541,14 +646,19 @@ export const register = (on) => {
           now: nowOf(),
           columns: e.props.bodyColumns,
           updatedAt,
-          refreshing: inFlight,
+          refreshing: false,
           nextAt: Math.max(lastTryAt, openedAt) + REFRESH_MS,
-          intro: nowOf() - openedAt < INTRO_MS,
+          intro: nowOf() - openedAt < INTRO_MS && !route,
           cwd,
           log: s.log,
           error,
           dash,
           flash: nowOf() < flashUntil,
+          route,
+          onOpen: (path) => void go({ view: "item", path, crumb: "Mental" }),
+          onOpenItem: (path, title) => void go({ view: "item", path, title, crumb: route?.view === "list" ? `Mental › ${route.type}` : "Mental" }),
+          onBrowse: (type) => void go({ view: "list", type }),
+          onBack: () => goBack(),
           onPark: () => void send(PARK_PROMPT, "Asking Claude to park this session…"),
           onHandoff: () => void send(HANDOFF_PROMPT, "Asking Claude to write the hand-off…"),
           onAskNeeds: () => void send(NEEDS_PROMPT, "Asking Claude what needs you…"),

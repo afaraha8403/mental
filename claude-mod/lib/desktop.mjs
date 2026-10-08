@@ -107,7 +107,7 @@ export function themed(build, theme = "auto") {
 export const SVG_MAX = 131072;
 const SANS = "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const MONO = "'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace";
-const PAD = 20;
+export const PAD = 20;
 const MAX_ITEMS = 6;
 
 const toneOf = (tone) =>
@@ -151,7 +151,7 @@ function agoOf(ms) {
 }
 
 /** @param {number} n */
-const r1 = (n) => Math.round(n * 10) / 10;
+export const r1 = (n) => Math.round(n * 10) / 10;
 
 /**
  * @param {number} x
@@ -159,7 +159,7 @@ const r1 = (n) => Math.round(n * 10) / 10;
  * @param {string} body already-escaped text or tspans
  * @param {{ size?: number, weight?: number, fill?: string, anchor?: string, mono?: boolean, spacing?: number, opacity?: number }} [o]
  */
-function txt(x, y, body, o = {}) {
+export function txt(x, y, body, o = {}) {
   const attrs = [
     `x="${r1(x)}"`,
     `y="${r1(y)}"`,
@@ -175,12 +175,12 @@ function txt(x, y, body, o = {}) {
 }
 
 /** An uppercase eyebrow label. */
-function eyebrow(x, y, label, fill = T.ink3) {
+export function eyebrow(x, y, label, fill = T.ink3) {
   return txt(x, y, esc(label.toUpperCase()), { size: 10, weight: 650, fill, spacing: 1.3 });
 }
 
 /** Entry animation state for the card being built (set by `paneDesktop`). */
-const FX = { intro: false, delay: 0 };
+export const FX = { intro: false, delay: 0 };
 
 /** A small dial that fills as the next refresh nears, and spins while one runs. */
 function refreshDial(cx, cy, { refreshing, now, nextAt }) {
@@ -193,14 +193,14 @@ function refreshDial(cx, cy, { refreshing, now, nextAt }) {
   const left = Math.max(0.5, (nextAt - now) / 1000);
   const total = 20;
   const start = r1(c * Math.max(0, Math.min(1, 1 - left / total)));
-  return `${track}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${T.violet2}" stroke-opacity="0.8" stroke-width="2" stroke-linecap="round" stroke-dasharray="${start} ${c}" transform="rotate(-90 ${cx} ${cy})"><animate attributeName="stroke-dasharray" from="${start} ${c}" to="${c} ${c}" dur="${r1(left)}s" fill="freeze"/></circle>`;
+  return `${track}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${T.violet2}" stroke-opacity="0.8" stroke-width="2" stroke-linecap="round" stroke-dasharray="${start} ${c}" transform="rotate(-90 ${cx} ${cy})"><animate attributeName="stroke-dasharray" from="${start} ${c}" to="${c} ${c}" dur="${r1(left)}s" fill="freeze"/><animate attributeName="stroke-dasharray" from="0 ${c}" to="${c} ${c}" begin="${r1(left)}s" dur="${total}s" repeatCount="indefinite"/></circle>`;
 }
 
 /**
  * Wrap the parts in an `<svg>` document with the card chrome.
  * @param {{ id: string, width: number, height: number, body: string[], defs?: string[], hero?: boolean }} o
  */
-function card({ id, width: W, height: H, body, defs = [], hero = false }) {
+export function card({ id, width: W, height: H, body, defs = [], hero = false }) {
   const radius = hero ? 18 : 16;
   const chrome = hero
     ? [
@@ -364,7 +364,7 @@ export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null, re
     y += 24;
     // Git foot: branch · changed files · when Mental last read the thread.
     const live = nextAt != null;
-    const right = refreshing ? "Refreshing" : updatedAt ? (live ? `Updated ${agoOf(now - updatedAt)}` : `↻ ${agoOf(now - updatedAt)}`) : "";
+    const right = refreshing ? "Refreshing" : updatedAt ? (live ? "Live" : `↻ ${agoOf(now - updatedAt)}`) : "";
     const rightW = right ? right.length * 6.4 + 8 + (live ? 20 : 0) : 0;
     const dirtyText = vm.dirty ? `${vm.changed || ""} changed`.trim() : "clean";
     const dirtyW = dirtyText.length * 6.6 + 18;
@@ -489,20 +489,30 @@ export function needsOf(vm) {
   if (!vm?.linked) return { items: [], later: 0 };
   const titleOf = (x) => oneLine(x?.title || x?.question || x?.description || x?.file || "");
   const items = [
-    ...(vm.needsEyes || []).map((x) => ({ kind: "eyes", label: "Needs eyes", color: T.rose, title: titleOf(x), at: msOf(x?.timestamp) })),
+    ...(vm.needsEyes || []).map((x) => ({ kind: "eyes", label: "Needs eyes", color: T.rose, title: titleOf(x), at: msOf(x?.timestamp), path: x?.path || "" })),
     ...(vm.attention || [])
       .filter((x) => x?.status !== "later")
       .map((x) => ({
-        kind: x?.kind || "thread",
+        kind: x?.kind || "thread", path: x?.path || "",
         label: KIND_LABEL[x?.kind] || "Attention",
         color: T.amber,
         title: titleOf(x),
         at: msOf(x?.timestamp),
       })),
-    ...(vm.decisions || []).map((x) => ({ kind: "decision", label: "Open decision", color: T.sky, title: titleOf(x), at: msOf(x?.timestamp) })),
-  ].filter((x) => x.title);
+    ...(vm.decisions || []).map((x) => ({ kind: "decision", label: "Open decision", color: T.sky, title: titleOf(x), at: msOf(x?.timestamp), path: x?.path || "" })),
+  ].filter((x) => x.title).map((x) => ({ ...x, key: `${x.kind}|${x.title}` }));
   const later = (vm.attention || []).filter((x) => x?.status === "later").length;
   return { items, later: Math.max(later, Number(vm.laterCount) || 0) };
+}
+
+/**
+ * `needsOf` minus what the person hid from the footer and band.
+ * @param {any} vm
+ * @param {Set<string> | string[] | undefined} dismissed
+ */
+export function visibleNeedsOf(vm, dismissed) {
+  const hide = dismissed instanceof Set ? dismissed : new Set(dismissed || []);
+  return needsOf(vm).items.filter((x) => !hide.has(x.key));
 }
 
 /**
@@ -867,6 +877,7 @@ export function paneDesktop(E, ctx) {
       children: [Button({ key: `${key}-btn`, label, onPress }), Text({ dimColor: true, wrap: "truncate-end", children: [hint] })],
     });
   const linked = !!vm?.linked;
+  if (ctx.route) return routeDesktop(E, ctx, svg, width);
   const track = linked && vm.track ? vm.track : null;
   const running = !!track && track.runningCount > 0;
   const dashState = dash?.state || "unknown";
@@ -880,6 +891,38 @@ export function paneDesktop(E, ctx) {
   const askNeeds =
     hasNeeds && ctx.onAskNeeds
       ? action("needs-ask", "? Ask Claude", "go through what needs me, one by one", ctx.onAskNeeds)
+      : null;
+  const openable = hasNeeds && ctx.onOpen ? needsOf(vm).items.filter((x) => x.path).slice(0, MAX_ITEMS) : [];
+  const needsLinks = openable.length
+    ? Box({
+        key: "needs-open",
+        flexDirection: "column",
+        children: openable.map((x, i) =>
+          Button({ key: `need-open-${i}`, label: `${x.label} › ${clip(x.title, 60)}`, onPress: () => ctx.onOpen(x.path) }),
+        ),
+      })
+    : null;
+  const browse =
+    linked && ctx.onOpen
+      ? Box({
+          key: "browse",
+          flexDirection: "column",
+          children: [
+            Text({ dimColor: true, children: ["Browse Mental — tap to read, then Back"] }),
+            Box({
+              key: "browse-row",
+              flexDirection: "row",
+              gap: 1,
+              children: [
+                Button({ key: "browse-journal", label: "Journal", onPress: () => ctx.onBrowse("Journal") }),
+                Button({ key: "browse-decision", label: "Decisions", onPress: () => ctx.onBrowse("Decision") }),
+                Button({ key: "browse-note", label: "Notes", onPress: () => ctx.onBrowse("Note") }),
+                Button({ key: "browse-attention", label: "Threads", onPress: () => ctx.onBrowse("Attention") }),
+              ],
+            }),
+            vm.handoffFile ? Button({ key: "browse-handoff", label: "Last hand-off ›", onPress: () => ctx.onOpen(vm.handoffFile) }) : null,
+          ].filter(Boolean),
+        })
       : null;
   const wrap = linked
     ? [
@@ -923,7 +966,7 @@ export function paneDesktop(E, ctx) {
       : state === "working"
         ? [sessionCard, files, activity, clock, clockAction, ...wrap, guards]
         : [...wrap, sessionCard, clock, clockAction, files, activity, guards];
-  const children = [hero, hasNeeds ? needs : null, askNeeds, hasNeeds ? null : needs, ...bandsByState, dashCard, dashAction, refreshAction].filter(
+  const children = [hero, hasNeeds ? needs : null, needsLinks, askNeeds, hasNeeds ? null : needs, ...bandsByState, browse, dashCard, dashAction, refreshAction].filter(
     Boolean,
   );
   return Box({
@@ -934,6 +977,151 @@ export function paneDesktop(E, ctx) {
     paddingY: 1,
     children,
   });
+}
+
+const TYPE_META = {
+  Journal: { label: "Journal", tone: "violet2" },
+  Decision: { label: "Decision", tone: "purple" },
+  Note: { label: "Note", tone: "sky" },
+  Attention: { label: "Thread", tone: "amber" },
+};
+const MAX_LIST = 30;
+const MAX_BODY_LINES = 200;
+
+const dateOfPath = (p) => String(p || "").match(/\d{4}-\d{2}-\d{2}/)?.[0] || "";
+
+/**
+ * Markdown as plain lines for native Text: headings bold, bullets dotted,
+ * inline marks dropped, blank runs collapsed.
+ * @param {string} body
+ * @returns {{ text: string, bold?: boolean, dim?: boolean }[]}
+ */
+export function markdownLines(body) {
+  const out = [];
+  let fence = false;
+  for (const raw of String(body || "").split(/\r?\n/)) {
+    const line = raw.replace(/\s+$/, "");
+    if (/^\s*```/.test(line)) {
+      fence = !fence;
+      continue;
+    }
+    if (fence) {
+      out.push({ text: `  ${line}`, dim: true });
+      continue;
+    }
+    if (!line.trim()) {
+      if (out.length && out[out.length - 1].text !== "") out.push({ text: "" });
+      continue;
+    }
+    const head = line.match(/^#{1,6}\s+(.*)$/);
+    const clean = (t) => t.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/`([^`]+)`/g, "$1").replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+    if (head) {
+      if (out.length && out[out.length - 1].text !== "") out.push({ text: "" });
+      out.push({ text: clean(head[1]), bold: true });
+      continue;
+    }
+    const bullet = line.match(/^(\s*)[-*+]\s+(.*)$/);
+    out.push({ text: bullet ? `${bullet[1]}• ${clean(bullet[2])}` : clean(line) });
+  }
+  while (out.length && out[out.length - 1].text === "") out.pop();
+  return out.slice(0, MAX_BODY_LINES);
+}
+
+/** The header card of a list or detail view: a kind-colored accent, title, meta. */
+function routeHeaderSvg({ width: W, kind, title, meta }) {
+  const accent = T[TYPE_META[kind]?.tone] || T.violet2;
+  const lines = wrapLines(oneLine(title) || "Untitled", Math.max(18, Math.floor((W - PAD * 2) / 11)), 2);
+  const metaLine = clip(meta.filter(Boolean).join("  ·  "), Math.max(20, Math.floor((W - PAD * 2) / 7)));
+  const top = 66;
+  const H = top + (lines.length - 1) * 26 + (metaLine ? 34 : 18);
+  const body = [
+    `<rect x="${PAD}" y="22" width="26" height="3" rx="1.5" fill="${accent}"/>`,
+    eyebrow(PAD, 42, TYPE_META[kind]?.label || kind || "Mental", accent),
+    ...lines.map((l, i) => txt(PAD, top + i * 26, esc(l), { size: 20, weight: 700 })),
+    metaLine ? txt(PAD, top + (lines.length - 1) * 26 + 24, esc(metaLine), { size: 12, fill: T.ink2 }) : "",
+  ];
+  return { source: card({ id: "rt", width: W, height: H, body }), height: H, alt: `${TYPE_META[kind]?.label || "Mental"}: ${title}` };
+}
+
+/**
+ * A list of one kind of entry, or one entry's body, with a Back button.
+ * @param {{ Box: Function, Text: Function, Button: Function }} E
+ */
+function routeDesktop(E, ctx, svg, width) {
+  const { Box, Text, Button } = E;
+  const route = ctx.route;
+  const back = Box({
+    key: "route-back",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    children: [
+      Button({ key: "back", label: "‹ Back", onPress: ctx.onBack }),
+      Text({ dimColor: true, wrap: "truncate-end", children: [route.view === "list" ? "Mental" : route.crumb || "Mental"] }),
+    ],
+  });
+  const note = (text, color) => Text(color ? { color, children: [text] } : { dimColor: true, children: [text] });
+  const children = [back];
+  if (route.view === "list") {
+    const meta = TYPE_META[route.type] || { label: route.type };
+    const plural_ = route.type === "Attention" ? "Threads" : `${meta.label}s`;
+    const items = (route.items || []).slice();
+    if (route.type === "Journal") items.sort((a, b) => String(b.path).localeCompare(String(a.path)));
+    const shown = items.slice(0, MAX_LIST);
+    const count = route.status === "ok" ? `${route.total ?? items.length} total` : "";
+    children.push(svg(() => routeHeaderSvg({ width, kind: route.type, title: plural_, meta: [count] })));
+    if (route.status === "loading") children.push(note("Reading…"));
+    else if (route.status === "error") children.push(note("Couldn't read that. Go back and try again.", T.rose));
+    else if (!shown.length) children.push(note(`No ${plural_.toLowerCase()} yet.`));
+    else {
+      shown.forEach((it, i) => {
+        const when = dateOfPath(it.path);
+        children.push(
+          Box({
+            key: `open-${i}`,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 2,
+            children: [
+              Button({ key: `open-${i}-btn`, label: clip(oneLine(it.title) || it.path, 56), onPress: () => ctx.onOpenItem(it.path, oneLine(it.title)) }),
+              Text({ dimColor: true, wrap: "truncate-end", children: [[it.status, when].filter(Boolean).join(" · ")] }),
+            ],
+          }),
+        );
+      });
+      if (items.length > shown.length) children.push(note(`Showing the newest ${shown.length} of ${route.total ?? items.length}. Open the dashboard for the rest.`));
+    }
+  } else {
+    const doc = route.doc;
+    const fm = doc?.frontmatter || {};
+    const kind = fm.type || route.type || "";
+    const meta = [fm.status, dateOfPath(route.path) || String(fm.timestamp || "").slice(0, 10), Array.isArray(fm.tags) ? fm.tags.slice(0, 4).join(" ") : ""];
+    children.push(svg(() => routeHeaderSvg({ width, kind, title: fm.title || route.title || route.path, meta })));
+    if (route.status === "loading") children.push(note("Reading…"));
+    else if (route.status === "error" || !doc) children.push(note("Couldn't open that. Go back and try again.", T.rose));
+    else {
+      if (fm.description) children.push(Text({ children: [oneLine(fm.description)] }));
+      const lines = markdownLines(doc.body);
+      children.push(
+        Box({
+          key: "route-body",
+          flexDirection: "column",
+          children: lines.map((l) => {
+            const p = { children: [l.text || " "] };
+            if (l.bold) {
+              p.bold = true;
+              p.color = T.violet2;
+            }
+            if (l.dim) p.dimColor = true;
+            return Text(p);
+          }),
+        }),
+      );
+      const back = Array.isArray(doc.backlinks) ? doc.backlinks.length : 0;
+      if (back) children.push(note(`${back} other entr${back === 1 ? "y links" : "ies link"} here.`));
+    }
+  }
+  return Box({ flexDirection: "column", alignItems: "stretch", gap: 1, paddingX: 2, paddingY: 1, children: children.filter(Boolean) });
 }
 
 /**
@@ -947,7 +1135,7 @@ export function footerDesktop(E, ctx) {
   const { Box, Text, Button, Svg } = E;
   const { vm, s, now, isOpen, modes = [], bandSeen = false } = ctx;
   const st = statusOf(vm, s, now);
-  const { items } = needsOf(vm);
+  const items = visibleNeedsOf(vm, ctx.dismissed);
   // With the band above the prompt already showing status, the footer is just
   // the opener; without it, the footer carries the status itself.
   const parts = ["Mental"];
@@ -962,6 +1150,7 @@ export function footerDesktop(E, ctx) {
       label: `${parts.join(" · ")}  ${isOpen ? "◧" : "◨"}`,
       onPress: ctx.onToggle,
     }),
+    !bandSeen && items.length && ctx.onDismiss ? Button({ key: "mental-dismiss", label: "✕ Hide", onPress: ctx.onDismiss }) : null,
     modes.length ? Text({ dimColor: true, children: [modes.join(" & ")] }) : null,
   ].filter(Boolean);
   return Box({ flexDirection: "row", alignItems: "center", gap: 1, children });
@@ -982,7 +1171,7 @@ export function bandDesktop(E, ctx) {
   const { vm, s, now, columns, maxRows = 2 } = ctx;
   const st = statusOf(vm, s, now);
   const cols = Math.max(40, Number(columns) || 100);
-  const { items } = needsOf(vm);
+  const items = visibleNeedsOf(vm, ctx.dismissed);
   // The band sits on the host's own chrome (light or dark), so primary text
   // takes the host's color and only accents carry a hex.
   const needs = items.length ? `${items.length} need${items.length === 1 ? "s" : ""} you` : "";
@@ -991,7 +1180,7 @@ export function bandDesktop(E, ctx) {
   if (st.state === "absent") message = "Not linked here. Ask the agent to link this folder.";
   else if (st.state === "loading") message = "Reading the thread…";
   else if (vm?.linked) message = vm.resume ? vm.resume : "No resume point yet";
-  const fixed = 2 + 7 + 3 + st.label.length + (needs ? needs.length + 3 : 0) + 6;
+  const fixed = 2 + 7 + 3 + st.label.length + (needs ? needs.length + 3 : 0) + (needs && ctx.onDismiss ? 10 : 0) + 6;
   const head = Box({
     key: "head",
     flexDirection: "row",
@@ -1012,6 +1201,7 @@ export function bandDesktop(E, ctx) {
         : needs
           ? Text({ color: needsColor, bold: true, children: [needs] })
           : null,
+      needs && Button && ctx.onDismiss ? Button({ key: "band-dismiss", label: "✕ Hide", onPress: ctx.onDismiss }) : null,
     ].filter(Boolean),
   });
   let second = "";

@@ -378,6 +378,17 @@ function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dash
           }
           return { exitCode: 0, stdout: "{}", stderr: "" };
         }
+        if (argv.includes("list")) {
+          const items = [
+            { path: "decisions/a.md", type: "Decision", title: "Use SQLite", description: "why", status: "accepted", tags: [] },
+            { path: "decisions/b.md", type: "Decision", title: "Skip cache", description: "", status: "open", tags: [] },
+          ];
+          return { exitCode: 0, stdout: JSON.stringify({ ok: true, data: { items, total: 2 } }), stderr: "" };
+        }
+        if (argv.includes("show")) {
+          const data = { path: argv[argv.indexOf("show") + 1], frontmatter: { type: "Decision", title: "Use SQLite", status: "accepted" }, body: "# Use SQLite\n\n- fast\n- local\n", backlinks: [] };
+          return { exitCode: 0, stdout: JSON.stringify({ ok: true, data }), stderr: "" };
+        }
         return { exitCode: 0, stdout: JSON.stringify(hb), stderr: "" };
       },
     },
@@ -488,7 +499,8 @@ test("Claude Desktop: footer opener, rich card pane, silent /mental, remembered 
   assert.match(textOf(band), /Verify docked pane at 110 cols/, "band names what needs you");
   let bandButtons = 0;
   walk(band, (n) => n.type === "Button" && bandButtons++);
-  assert.equal(bandButtons, 1);
+  assert.equal(bandButtons, 2, "needs button plus a footer-only Hide");
+  assert.ok(bandKeys.has("band-dismiss"));
   const slim = await eng.fire("ui.render", { component: "SessionMode", surface: "desktop", props: { modes: [] } });
   assert.doesNotMatch(textOf(slim), /need/, "with the band showing, the footer is just the opener");
   const mobile = await eng.fire("ui.render", { component: "AbovePrompt", surface: "mobile", props: { hasSurvey: false, maxRows: 4, bodyColumns: 60 } }, "PASSED");
@@ -661,14 +673,78 @@ test("Claude Desktop: open pane ticks live, shows the refresh dial, stops on clo
   const src = [];
   walk(pane, (n) => n.type === "Svg" && src.push(n.props.source));
   assert.match(src.join(""), /<animate/, "cards animate");
-  assert.match(src[0], /Updated|Refreshing/, "hero foot shows the refresh state");
+  assert.match(src[0], /live/i, "hero foot shows the live state");
+  const before = eng.calls.filter((c) => c[0] === "invalidate").length;
   live.fn();
   await eng.flush();
-  assert.ok(eng.calls.some((c) => c[0] === "invalidate"), "tick redraws the pane");
+  assert.equal(eng.calls.filter((c) => c[0] === "invalidate").length, before, "an idle tick never repaints (no scroll fight)");
   const close = eng.calls.length;
   await eng.fire("ui.close", { id: "mental" }, {});
   assert.ok(live.cancelled, "tick stops when the pane closes");
   assert.ok(eng.calls.length >= close);
+});
+
+test("Claude Desktop: browse Decisions, open an item, go Back", async () => {
+  const eng = fakeEngine({ surfaces: ["desktop"] });
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const paneOf = () => eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
+  const press = (tree, key) => {
+    let fn;
+    walk(tree, (n) => n.type === "Button" && n.props.key === key && (fn = n.props.onPress));
+    assert.ok(fn, `button ${key}`);
+    fn();
+  };
+  const footer = await eng.fire("ui.render", { component: "SessionMode", surface: "desktop", props: { modes: [] } }, "PASSED");
+  press(footer, "mental-toggle");
+  await eng.flush();
+  press(await paneOf(), "browse-decision");
+  await eng.flush();
+  let tree = assertValidTreeKeys(await paneOf());
+  assert.ok(tree.keys.has("back") && tree.keys.has("open-0-btn"), "list shows Back and rows");
+  assert.match(textOf(tree.node), /Use SQLite/);
+  press(tree.node, "open-0-btn");
+  await eng.flush();
+  tree = assertValidTreeKeys(await paneOf());
+  assert.match(textOf(tree.node), /fast/, "item body is readable");
+  press(tree.node, "back");
+  await eng.flush();
+  tree = assertValidTreeKeys(await paneOf());
+  assert.ok(tree.keys.has("open-0-btn"), "Back returns to the list");
+  press(tree.node, "back");
+  await eng.flush();
+  tree = assertValidTreeKeys(await paneOf());
+  assert.ok(tree.keys.has("browse-decision") && !tree.keys.has("back"), "Back from the list returns to the panel");
+});
+
+function assertValidTreeKeys(node) {
+  return { node, keys: assertValidTree(node) };
+}
+
+test("Claude Desktop: Hide drops the concern from the footer only, and it is remembered", async () => {
+  const eng = fakeEngine({ surfaces: ["desktop"] });
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const band = () => eng.fire("ui.render", { component: "AbovePrompt", surface: "desktop", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } }, "PASSED");
+  let fn;
+  walk(await band(), (n) => n.type === "Button" && n.props.key === "band-dismiss" && (fn = n.props.onPress));
+  assert.ok(fn, "Hide button on the band");
+  fn();
+  await eng.flush();
+  assert.ok(eng.calls.some((c) => c[0] === "store.set" && c[1] === "dismissed" && c[2].length >= 1), "remembered");
+  const after = assertValidTree(await band());
+  assert.ok(!after.has("band-dismiss"), "nothing left to hide");
+  const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
+  assert.match(textOf(pane), /Verify docked pane/, "the panel still lists it");
+});
+
+test("markdownLines turns notes into readable lines", async () => {
+  const { markdownLines } = await import("../claude-mod/lib/desktop.mjs");
+  const lines = markdownLines("# Title\n\n- **bold** item\n\n\n\nSee [link](http://x) and `code`.");
+  assert.equal(lines[0].bold, true);
+  assert.ok(lines.some((l) => l.text.startsWith("•") && !l.text.includes("**")));
+  assert.ok(lines.some((l) => l.text === "See link and code."));
+  assert.ok(lines.filter((l) => l.text === "").length <= 2, "blank runs collapse");
 });
 
 test("dashStateOf tells this project's dashboard from another's", async () => {

@@ -216,6 +216,7 @@ export function viewModelOf(hb, now) {
     resume: oneLine(handoff?.resume || ""),
     outcome: oneLine(handoff?.outcome || ""),
     via: handoff?.via || "",
+    handoffFile: typeof handoff?.file === "string" ? handoff.file : "",
     handoffAt,
     handoffAge: handoffAt == null ? null : Math.max(0, now - handoffAt),
     attention: Array.isArray(d.attention) ? d.attention : [],
