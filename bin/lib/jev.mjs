@@ -29,13 +29,22 @@ export const THRESHOLDS = {
   link: 0.9,
   /** Link: show as "maybe". Below this is silent. */
   linkMaybe: 0.5,
+  /** Choice/Score: minimum model confidence before an answer is acted on or shown as a pick. */
+  pick: 0.5,
 };
+
+/** Request budget, in estimated tokens. Docs: 64K per request, 32K for state + longest question. */
+const TOTAL_TOKENS_MAX = 48_000;
+const STATE_TOKENS_MAX = 24_000;
+const RETRY_WAIT_MAX_MS = 1500;
+const USAGE_DAYS = 30;
 
 /** Reminder cadence for an unconfigured Jev. */
 export const HINT_EVERY_MS = 3 * 24 * 60 * 60 * 1000;
 
 const CACHE_FILE = "jev-cache.json";
 const HINT_FILE = "jev-hint.json";
+const USAGE_FILE = "jev-usage.json";
 const CACHE_MAX = 500;
 const BATCH_MAX = 25;
 
@@ -56,20 +65,132 @@ export function getJev(home, env = process.env, opts = {}) {
   const doFetch = opts.fetch || globalThis.fetch;
   const timeoutMs = opts.timeoutMs ?? 4000;
   const backoffMs = opts.backoffMs ?? 250;
-  const ctx = { key, url, model, doFetch, timeoutMs, backoffMs };
+  const cfg = home ? loadConfig(home) : null;
+  const dailyTokens = cfg && !cfg.corrupt ? cfg.jev.dailyTokens : null;
+  const ctx = { key, url, model, doFetch, timeoutMs, backoffMs, home, env, dailyTokens };
   return {
     source: r.source || "config",
     ask: (state, questions) => askJev(ctx, state, questions),
-    gate: (state, questions) => gateNoul(ctx, home, env, state, questions),
+    decide: (state, questions) => decide(ctx, state, questions),
+    gate: (state, questions) => gateNoul(ctx, state, questions),
   };
+}
+
+/** @param {string} instructions @param {{ true?: string, false?: string }} [criteria] */
+export function noul(instructions, criteria) {
+  return criteria ? { type: "noul", instructions, criteria } : { type: "noul", instructions };
+}
+
+/** @param {string} instructions @param {Record<string, string | null>} criteria option → description */
+export function choice(instructions, criteria) {
+  return { type: "choice", instructions, criteria };
+}
+
+/** @param {string} instructions @param {string[]} levels lowest first (2-10) */
+export function score(instructions, levels) {
+  return { type: "score", instructions, criteria: levels };
+}
+
+/**
+ * One answer in a provider-neutral shape. Noul has no model confidence, so it is derived
+ * from the probability (0 at a coin flip, 1 when certain). Null when the answer is malformed.
+ * @param {any} raw
+ * @param {"noul" | "choice" | "score"} type
+ */
+export function normalize(raw, type) {
+  if (!raw || typeof raw !== "object") return null;
+  const conf = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  if (type === "noul") {
+    const p = raw.noul;
+    if (typeof p !== "number" || !Number.isFinite(p)) return null;
+    return { type, p, confidence: Math.abs(2 * p - 1) };
+  }
+  if (type === "choice") {
+    if (typeof raw.choice !== "string") return null;
+    return { type, choice: raw.choice, probabilities: raw.probabilities || {}, confidence: conf(raw.confidence) };
+  }
+  if (typeof raw.score !== "number" || !Number.isFinite(raw.score)) return null;
+  return { type, score: raw.score, legend: raw.legend ?? null, probabilities: raw.probabilities || {}, confidence: conf(raw.confidence) };
+}
+
+/**
+ * The chosen option only when the model is confident enough, else null.
+ * @param {{ choice?: string, confidence?: number | null } | null | undefined} answer
+ */
+export function pick(answer, minConfidence = THRESHOLDS.pick) {
+  if (!answer || typeof answer.choice !== "string") return null;
+  return typeof answer.confidence === "number" && answer.confidence >= minConfidence ? answer.choice : null;
+}
+
+/** Rough token estimate; deliberately pessimistic so requests stay under the documented limits. */
+export function estTokens(x) {
+  const s = typeof x === "string" ? x : JSON.stringify(x ?? "");
+  return Math.ceil(s.length / 3.5);
+}
+
+/** @param {{ headers?: { get?: (n: string) => string | null } }} res */
+function retryAfterMs(res) {
+  try {
+    const ms = Number(res.headers?.get?.("retry-after-ms"));
+    if (Number.isFinite(ms) && ms >= 0) return ms;
+    const s = Number(res.headers?.get?.("retry-after"));
+    if (Number.isFinite(s) && s >= 0) return s * 1000;
+  } catch {
+    // header unreadable → default backoff
+  }
+  return null;
+}
+
+/** @param {number} [now] */
+function dayKey(now = Date.now()) {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+/**
+ * Local usage ledger (tokens by day). Rebuildable; never contains content.
+ * @param {string | null} home
+ * @param {NodeJS.ProcessEnv} [env]
+ * @returns {{ model: string | null, days: Record<string, { requests: number, input: number, output: number }> }}
+ */
+export function readUsage(home, env = process.env) {
+  try {
+    const parsed = JSON.parse(readFileSync(cacheFile(home, env, USAGE_FILE), "utf8"));
+    if (parsed && typeof parsed.days === "object") return { model: parsed.model || null, days: parsed.days };
+  } catch {
+    // none yet
+  }
+  return { model: null, days: {} };
+}
+
+/** @param {string | null} home @param {NodeJS.ProcessEnv} [env] @param {number} [now] */
+export function usageToday(home, env = process.env, now = Date.now()) {
+  return readUsage(home, env).days[dayKey(now)] || { requests: 0, input: 0, output: 0 };
+}
+
+function recordUsage(ctx, usage, model) {
+  try {
+    const u = readUsage(ctx.home, ctx.env);
+    const k = dayKey();
+    const day = u.days[k] || { requests: 0, input: 0, output: 0 };
+    day.requests += 1;
+    day.input += Number(usage?.input_tokens) || 0;
+    day.output += Number(usage?.output_tokens) || 0;
+    u.days[k] = day;
+    for (const old of Object.keys(u.days).sort().slice(0, -USAGE_DAYS)) delete u.days[old];
+    mkdirSync(cacheMentalDir(ctx.home, ctx.env), { recursive: true });
+    writeFileSync(cacheFile(ctx.home, ctx.env, USAGE_FILE), JSON.stringify({ model: model || u.model, days: u.days }));
+  } catch {
+    // ledger is best-effort
+  }
 }
 
 /**
  * One System One request. Never throws.
- * @returns {Promise<{ ok: true, answers: Record<string, any> } | { ok: false, reason: string }>}
+ * @returns {Promise<{ ok: true, answers: Record<string, any>, model: string | null } | { ok: false, reason: string }>}
  */
 async function askJev(ctx, state, questions) {
   if (typeof ctx.doFetch !== "function") return { ok: false, reason: "no-fetch" };
+  if (ctx.dailyTokens && usageToday(ctx.home, ctx.env).input >= ctx.dailyTokens) return { ok: false, reason: "budget" };
   const body = JSON.stringify({ state, model: ctx.model, questions });
   let scheme = authScheme;
   let triedOther = false;
@@ -96,7 +217,7 @@ async function askJev(ctx, state, questions) {
       if (res.status === 401) return { ok: false, reason: "auth" };
       if (res.status === 429 || res.status === 529 || res.status >= 500) {
         if (attempt < 2) {
-          await sleep(ctx.backoffMs * 2 ** attempt);
+          await sleep(Math.min(retryAfterMs(res) ?? ctx.backoffMs * 2 ** attempt, RETRY_WAIT_MAX_MS));
           continue;
         }
         return { ok: false, reason: `http-${res.status}` };
@@ -105,7 +226,8 @@ async function askJev(ctx, state, questions) {
       const json = await res.json();
       authScheme = scheme;
       if (!json || typeof json.answers !== "object") return { ok: false, reason: "bad-response" };
-      return { ok: true, answers: json.answers };
+      recordUsage(ctx, json.usage, json.model);
+      return { ok: true, answers: json.answers, model: typeof json.model === "string" ? json.model : null };
     } catch (err) {
       const aborted = err && typeof err === "object" && /** @type {{ name?: string }} */ (err).name === "AbortError";
       if (attempt < 2 && !aborted) {
@@ -121,46 +243,77 @@ async function askJev(ctx, state, questions) {
 }
 
 /**
- * Batch Noul questions that share one state. Cached by (state, instructions).
- * @param {Record<string, string>} questions id → yes/no instructions
- * @returns {Promise<{ ok: boolean, reason?: string, scores: Record<string, number | null> }>}
+ * Typed questions sharing one state, in as few requests as the limits allow.
+ * Answers are cached by (state, question, model); a new model version drops the cache.
+ *
+ * @param {Record<string, { type: "noul" | "choice" | "score", instructions: string, criteria?: any }>} questions
+ * @returns {Promise<{ ok: boolean, reason?: string, answers: Record<string, ReturnType<typeof normalize>> }>}
  */
-async function gateNoul(ctx, home, env, state, questions) {
+async function decide(ctx, state, questions) {
   const ids = Object.keys(questions);
-  /** @type {Record<string, number | null>} */
-  const scores = Object.fromEntries(ids.map((id) => [id, null]));
-  if (ids.length === 0) return { ok: true, scores };
+  /** @type {Record<string, ReturnType<typeof normalize>>} */
+  const answers = Object.fromEntries(ids.map((id) => [id, null]));
+  if (ids.length === 0) return { ok: true, answers };
 
-  const cache = readCache(home, env);
+  const stateTokens = estTokens(state);
+  const longest = Math.max(...ids.map((id) => estTokens(questions[id])));
+  if (stateTokens + longest > STATE_TOKENS_MAX) return { ok: false, reason: "too-large", answers };
+
+  const cache = readCache(ctx.home, ctx.env);
   const stateHash = hash(JSON.stringify(state));
+  const keyOf = (id) => hash(`${stateHash}|${JSON.stringify(questions[id])}`);
   /** @type {string[]} */
   const missing = [];
   for (const id of ids) {
-    const k = hash(`${stateHash}|${questions[id]}`);
-    if (typeof cache.items[k] === "number") scores[id] = cache.items[k];
+    const hit = cache.items[keyOf(id)];
+    if (hit && typeof hit === "object" && hit.type === questions[id].type) answers[id] = hit;
     else missing.push(id);
   }
-  if (missing.length === 0) return { ok: true, scores };
+  if (missing.length === 0) return { ok: true, answers };
 
   let failed = null;
-  for (let i = 0; i < missing.length; i += BATCH_MAX) {
-    const slice = missing.slice(i, i + BATCH_MAX);
-    const qs = Object.fromEntries(slice.map((id) => [id, { type: "noul", instructions: questions[id] }]));
-    const r = await askJev(ctx, state, qs);
+  let i = 0;
+  while (i < missing.length) {
+    const slice = [];
+    let tokens = stateTokens;
+    while (i < missing.length && slice.length < BATCH_MAX) {
+      const t = estTokens(questions[missing[i]]);
+      if (slice.length > 0 && tokens + t > TOTAL_TOKENS_MAX) break;
+      slice.push(missing[i]);
+      tokens += t;
+      i++;
+    }
+    const r = await askJev(ctx, state, Object.fromEntries(slice.map((id) => [id, questions[id]])));
     if (!r.ok) {
       failed = r.reason;
       break;
     }
+    if (r.model && cache.model && r.model !== cache.model) cache.items = {};
+    if (r.model) cache.model = r.model;
     for (const id of slice) {
-      const p = r.answers?.[id]?.noul;
-      if (typeof p === "number" && Number.isFinite(p)) {
-        scores[id] = p;
-        cache.items[hash(`${stateHash}|${questions[id]}`)] = p;
+      const a = normalize(r.answers?.[id], questions[id].type);
+      if (a) {
+        answers[id] = a;
+        cache.items[keyOf(id)] = a;
       }
     }
   }
-  writeCache(home, env, cache);
-  return failed ? { ok: false, reason: failed, scores } : { ok: true, scores };
+  writeCache(ctx.home, ctx.env, cache);
+  return failed ? { ok: false, reason: failed, answers } : { ok: true, answers };
+}
+
+/**
+ * Yes/no gate over many questions that share one state.
+ * @param {Record<string, string>} questions id → yes/no instructions
+ * @returns {Promise<{ ok: boolean, reason?: string, scores: Record<string, number | null> }>}
+ */
+async function gateNoul(ctx, state, questions) {
+  const specs = Object.fromEntries(Object.entries(questions).map(([id, q]) => [id, noul(q)]));
+  const r = await decide(ctx, state, specs);
+  const scores = Object.fromEntries(
+    Object.entries(r.answers).map(([id, a]) => [id, a && a.type === "noul" ? a.p : null]),
+  );
+  return r.ok ? { ok: true, scores } : { ok: false, reason: r.reason, scores };
 }
 
 function sleep(ms) {
@@ -180,11 +333,11 @@ function cacheFile(home, env, name) {
 function readCache(home, env) {
   try {
     const parsed = JSON.parse(readFileSync(cacheFile(home, env, CACHE_FILE), "utf8"));
-    if (parsed && typeof parsed.items === "object") return { items: parsed.items };
+    if (parsed && typeof parsed.items === "object") return { model: parsed.model || null, items: parsed.items };
   } catch {
     // missing or corrupt → empty
   }
-  return { items: {} };
+  return { model: null, items: {} };
 }
 
 function writeCache(home, env, cache) {

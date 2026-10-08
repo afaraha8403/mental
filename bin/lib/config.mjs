@@ -29,7 +29,7 @@ function blankConfig() {
       track: EMPTY_FEATURE(),
     },
     seenOptionals: [],
-    jev: { key: null, enabled: true },
+    jev: { key: null, enabled: true, dailyTokens: null },
     corrupt: false,
   };
 }
@@ -59,7 +59,8 @@ export function loadConfig(home) {
     : [];
   if (parsed.jev && typeof parsed.jev === "object") {
     const key = typeof parsed.jev.key === "string" && parsed.jev.key.trim() ? parsed.jev.key.trim() : null;
-    out.jev = { key, enabled: parsed.jev.enabled !== false };
+    const dt = Number(parsed.jev.dailyTokens);
+    out.jev = { key, enabled: parsed.jev.enabled !== false, dailyTokens: Number.isFinite(dt) && dt > 0 ? Math.floor(dt) : null };
   }
   const feats = parsed.features && typeof parsed.features === "object" ? parsed.features : {};
   for (const id of FEATURES) {
@@ -84,7 +85,7 @@ export function saveConfig(home, data) {
     version: CONFIG_VERSION,
     features: data.features,
     seenOptionals: data.seenOptionals || [],
-    jev: data.jev || { key: null, enabled: true },
+    jev: data.jev || { key: null, enabled: true, dailyTokens: null },
   };
   // The file may hold an API key; keep it owner-only (no-op on Windows).
   writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`, { mode: 0o600 });
@@ -103,6 +104,10 @@ export function setJevConfig(home, patch) {
   }
   if (patch.key !== undefined) cfg.jev.key = patch.key && String(patch.key).trim() ? String(patch.key).trim() : null;
   if (patch.enabled !== undefined) cfg.jev.enabled = Boolean(patch.enabled);
+  if (patch.dailyTokens !== undefined) {
+    const n = Number(patch.dailyTokens);
+    cfg.jev.dailyTokens = Number.isFinite(n) && n > 0 ? Math.floor(n) : null;
+  }
   if (!cfg.seenOptionals.includes("jev")) cfg.seenOptionals.push("jev");
   saveConfig(home, cfg);
   return { ok: true, jev: cfg.jev };

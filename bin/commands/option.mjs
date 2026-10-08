@@ -5,7 +5,7 @@
 import { resolveBundle } from "../lib/resolve.mjs";
 import { readFileSync } from "node:fs";
 import { FEATURES, JEV_ENV_KEYS, listOptionals, loadConfig, maskKey, resolveJev, setFeature, setJevConfig } from "../lib/config.mjs";
-import { JEV_SIGNUP_URL } from "../lib/jev.mjs";
+import { JEV_SIGNUP_URL, usageToday } from "../lib/jev.mjs";
 import { enableHooks, disableHooks } from "../lib/hooks.mjs";
 import { enableMcp, disableMcp } from "../lib/mcp-hosts.mjs";
 import { copyTrackSkills } from "../lib/install-skills.mjs";
@@ -41,7 +41,7 @@ function uuidForThis(args) {
   return { uuid: where.id, where };
 }
 
-const JEV_USAGE = "mental option jev [key <KEY>|key -|key clear|on|off]";
+const JEV_USAGE = "mental option jev [key <KEY>|key -|key clear|on|off|budget <tokens/day>|budget off]";
 
 function readStdinSync() {
   try {
@@ -63,20 +63,41 @@ function cmdOptionJev(args, io, home) {
   const status = () => {
     const r = resolveJev(home, env);
     const stored = r.source === "config" ? loadConfig(home).jev.key : r.source === "env" ? envKey(env) : null;
+    const today = usageToday(home, env);
     return {
       feature: "jev",
       configured: r.configured,
       enabled: r.enabled,
       source: r.source,
       key: maskKey(stored),
+      dailyTokens: loadConfig(home).jev?.dailyTokens ?? null,
+      today: { requests: today.requests, inputTokens: today.input, outputTokens: today.output },
     };
   };
 
   if (!sub) {
     printResult(stdout, args, true, status(), undefined, (d) =>
       d.configured
-        ? `jev ${d.enabled ? "on" : "off"} (key ${d.key}, from ${d.source})`
+        ? `jev ${d.enabled ? "on" : "off"} (key ${d.key}, from ${d.source}); today ${d.today.requests} requests, ${d.today.inputTokens} input tokens${d.dailyTokens ? ` of ${d.dailyTokens} budget` : ""}`
         : `jev not configured. Optional: get a key at ${JEV_SIGNUP_URL}, then mental option jev key <KEY> (or set MENTAL_JEV_KEY).`,
+    );
+    return 0;
+  }
+
+  if (sub === "budget") {
+    const raw = (args.rest[2] || "").toLowerCase();
+    const n = Number(raw);
+    if (raw !== "off" && !(Number.isFinite(n) && n > 0)) {
+      printResult(stdout, args, false, undefined, { code: "usage", message: JEV_USAGE });
+      return EXIT_USAGE;
+    }
+    const r = setJevConfig(home, { dailyTokens: raw === "off" ? null : n });
+    if (!r.ok) {
+      printResult(stdout, args, false, undefined, r.error);
+      return 1;
+    }
+    printResult(stdout, args, true, status(), undefined, (d) =>
+      d.dailyTokens ? `option jev budget ${d.dailyTokens} input tokens/day` : "option jev budget off",
     );
     return 0;
   }

@@ -245,7 +245,10 @@ Add a key either way (config wins when both are set):
 mental option jev key <KEY>        # stored in ~/.mental config (mode 0600)
 export MENTAL_JEV_KEY=<KEY>        # or TYPESAFE_API_KEY
 mental option jev off              # mute (also silences the reminder)
+mental option jev budget 200000    # optional cap on input tokens per day (budget off to clear)
 ```
+
+Status (`mental option jev`) shows today's requests and tokens. Spend is tracked locally in `jev-usage.json` (counts only, no content). Requests are split to stay under the API's token limits, and cached answers are dropped when the model version changes.
 
 Without a key, `heartbeat` and a zero-hit `search` occasionally (at most every 3 days) tell the agent Jev exists so it can mention it. `MENTAL_NO_HINTS=1` silences that.
 

@@ -5,8 +5,8 @@ import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tempHome, initRepo, mental, gitEnv, CLI } from "./helpers.mjs";
-import { getJev, jevHint, THRESHOLDS } from "../bin/lib/jev.mjs";
-import { resolveJev, maskKey } from "../bin/lib/config.mjs";
+import { getJev, jevHint, THRESHOLDS, choice, score, noul, pick, normalize, usageToday } from "../bin/lib/jev.mjs";
+import { resolveJev, maskKey, setJevConfig } from "../bin/lib/config.mjs";
 import { applyLinks, queryVariants, sigTokens } from "../bin/lib/jev-assist.mjs";
 import { runTool } from "../bin/lib/mcp.mjs";
 
@@ -127,6 +127,107 @@ test("gate falls back raw auth on 401 and caches answers", async () => {
   const b = await jev.gate({ s: 1 }, { q: "is it?" });
   assert.equal(b.scores.q, 0.8);
   assert.equal(seen.length, before, "cached");
+});
+
+const okJson = (body) => async () => ({ status: 200, ok: true, headers: { get: () => null }, json: async () => body });
+
+test("decide: Choice and Score normalise with confidence; pick() gates on it", async () => {
+  const home = tempHome();
+  const fetch = okJson({
+    model: "jev-1.13.0",
+    usage: { input_tokens: 120, output_tokens: 9 },
+    answers: {
+      c: { type: "choice", choice: "bug", probabilities: { bug: 0.9, idea: 0.1 }, confidence: 0.8 },
+      lo: { type: "choice", choice: "idea", probabilities: { bug: 0.4, idea: 0.6 }, confidence: 0.2 },
+      s: { type: "score", score: 3.4, legend: "high", probabilities: { low: 0.1, high: 0.9 }, confidence: 0.7 },
+      n: { type: "noul", noul: 0.9 },
+      bad: { type: "choice" },
+    },
+  });
+  const jev = getJev(home, { MENTAL_JEV_KEY: KEY }, { fetch });
+  const r = await jev.decide(
+    { s: 1 },
+    { c: choice("kind?", { bug: null, idea: null }), lo: choice("kind?", { bug: null, idea: null }), s: score("urgent?", ["low", "high"]), n: noul("x?"), bad: choice("y", { a: null, b: null }) },
+  );
+  assert.equal(r.ok, true);
+  assert.equal(pick(r.answers.c), "bug");
+  assert.equal(pick(r.answers.lo), null, "low confidence is not a pick");
+  assert.equal(r.answers.s.score, 3.4);
+  assert.equal(r.answers.s.confidence, 0.7);
+  assert.ok(Math.abs(r.answers.n.confidence - 0.8) < 1e-9);
+  assert.equal(r.answers.bad, null, "malformed answer is dropped, not guessed");
+  assert.equal(normalize({ choice: "x" }, "score"), null);
+});
+
+test("decide: chunks by token budget and refuses an oversized state", async () => {
+  const home = tempHome();
+  const calls = [];
+  const fetch = async (_u, o) => {
+    const body = JSON.parse(o.body);
+    calls.push(Object.keys(body.questions).length);
+    return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({ answers: Object.fromEntries(Object.keys(body.questions).map((k) => [k, { noul: 0.5 }])) }) };
+  };
+  const jev = getJev(home, { MENTAL_JEV_KEY: KEY }, { fetch });
+  const qs = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`q${i}`, `question ${i}`]));
+  const r = await jev.gate({ s: "small" }, qs);
+  assert.equal(r.ok, true);
+  assert.deepEqual(calls, [25, 25, 10]);
+
+  const big = await jev.gate({ s: "x".repeat(200_000) }, { q: "y" });
+  assert.equal(big.ok, false);
+  assert.equal(big.reason, "too-large");
+  assert.equal(calls.length, 3, "no request for an oversized state");
+});
+
+test("retry honours retry-after-ms and the ledger plus budget stop spending", async () => {
+  const home = tempHome();
+  let n = 0;
+  const fetch = async () => {
+    n++;
+    if (n === 1) return { status: 429, ok: false, headers: { get: (h) => (h === "retry-after-ms" ? "5" : null) }, json: async () => ({}) };
+    return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({ model: "m1", usage: { input_tokens: 100, output_tokens: 1 }, answers: { q: { noul: 0.7 } } }) };
+  };
+  const env = { MENTAL_JEV_KEY: KEY };
+  const jev = getJev(home, env, { fetch, backoffMs: 5000 });
+  const t0 = Date.now();
+  const a = await jev.gate({ s: 1 }, { q: "one?" });
+  assert.equal(a.scores.q, 0.7);
+  assert.ok(Date.now() - t0 < 2000, "used retry-after-ms, not the 5s default backoff");
+  assert.equal(usageToday(home, env).input, 100);
+
+  setJevConfig(home, { dailyTokens: 100 });
+  const capped = getJev(home, env, { fetch });
+  const b = await capped.gate({ s: 2 }, { q: "two?" });
+  assert.equal(b.ok, false);
+  assert.equal(b.reason, "budget");
+  assert.equal(n, 2, "no request once the budget is spent");
+});
+
+test("a new model version invalidates cached answers", async () => {
+  const home = tempHome();
+  let model = "m1";
+  let calls = 0;
+  const fetch = async () => {
+    calls++;
+    return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({ model, answers: { q: { noul: model === "m1" ? 0.2 : 0.9 }, r: { noul: 0.4 } } }) };
+  };
+  const jev = getJev(home, { MENTAL_JEV_KEY: KEY }, { fetch });
+  assert.equal((await jev.gate({ s: 1 }, { q: "a?" })).scores.q, 0.2);
+  assert.equal((await jev.gate({ s: 1 }, { q: "a?" })).scores.q, 0.2);
+  assert.equal(calls, 1, "cached");
+  model = "m2";
+  await jev.gate({ s: 1 }, { r: "b?" });
+  assert.equal((await jev.gate({ s: 1 }, { q: "a?" })).scores.q, 0.9, "old-model answer was dropped");
+});
+
+test("option jev budget sets, shows and clears the daily cap", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const run = (...a) => mental(home, root, ["option", "jev", ...a, "--json"]);
+  assert.equal(parse(run("budget", "5000")).data.dailyTokens, 5000);
+  assert.equal(parse(run()).data.dailyTokens, 5000);
+  assert.equal(parse(run("budget", "off")).data.dailyTokens, null);
+  assert.notEqual(run("budget", "nope").status, 0);
 });
 
 test("helpers: sigTokens, queryVariants, applyLinks dedupe", () => {
