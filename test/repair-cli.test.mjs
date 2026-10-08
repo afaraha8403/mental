@@ -16,7 +16,7 @@ import {
   pathHasDir,
   repairLegacyBins,
 } from "../bin/lib/install-cli.mjs";
-import { initRepo, mental, tempHome } from "./helpers.mjs";
+import { FILE_SYMLINK_SKIP, initRepo, linkDir, mental, tempHome } from "./helpers.mjs";
 
 function seedLegacySymlink(home) {
   const target = join(
@@ -37,7 +37,7 @@ function seedLegacySymlink(home) {
   return legacy;
 }
 
-test("inspectLegacyBins fingerprints Mental-owned shims and leaves unknown files unknown", () => {
+test("inspectLegacyBins fingerprints Mental-owned shims and leaves unknown files unknown", { skip: FILE_SYMLINK_SKIP }, () => {
   const home = tempHome();
   const legacy = seedLegacySymlink(home);
   const unknown = join(home, ".local", "bin", "mental.cmd");
@@ -76,7 +76,7 @@ test("classifyLegacyBin preserves npm's standard cmd-shim launcher", () => {
   });
 });
 
-test("repairLegacyBins quarantines owned shims, preserves unknown files, and is idempotent", () => {
+test("repairLegacyBins quarantines owned shims, preserves unknown files, and is idempotent", { skip: FILE_SYMLINK_SKIP }, () => {
   const home = tempHome();
   const legacy = seedLegacySymlink(home);
   const unknown = join(home, ".local", "bin", "mental.cmd");
@@ -106,7 +106,7 @@ test("repairLegacyBins quarantines owned shims, preserves unknown files, and is 
   assert.deepEqual(again.moved, []);
 });
 
-test("repairLegacyBins restores quarantined shims when npm launcher verification fails", () => {
+test("repairLegacyBins restores quarantined shims when npm launcher verification fails", { skip: FILE_SYMLINK_SKIP }, () => {
   const home = tempHome();
   const legacy = seedLegacySymlink(home);
   const npmBinDir = join(home, "npm-bin");
@@ -123,7 +123,7 @@ test("repairLegacyBins restores quarantined shims when npm launcher verification
   assert.deepEqual(repaired.restored, [legacy]);
 });
 
-test("repairLegacyBins refuses migration when npm bin is not on PATH", () => {
+test("repairLegacyBins refuses migration when npm bin is not on PATH", { skip: FILE_SYMLINK_SKIP }, () => {
   const home = tempHome();
   const legacy = seedLegacySymlink(home);
 
@@ -138,7 +138,7 @@ test("repairLegacyBins refuses migration when npm bin is not on PATH", () => {
   assert.equal(existsSync(legacy), true);
 });
 
-test("repairLegacyBins also quarantines unsafe mental in the active npm prefix", () => {
+test("repairLegacyBins also quarantines unsafe mental in the active npm prefix", { skip: FILE_SYMLINK_SKIP }, () => {
   const home = tempHome();
   const npmBinDir = join(home, "npm-bin");
   const target = join(
@@ -179,12 +179,12 @@ test("pathHasDir accepts canonical aliases of the same directory", () => {
   const real = join(home, "real-bin");
   const alias = join(home, "alias-bin");
   mkdirSync(real);
-  symlinkSync(real, alias);
+  linkDir(real, alias);
   assert.equal(pathHasDir(alias, real), true);
   rmSync(alias);
 });
 
-test("doctor reports an unsafe legacy launcher with the repair command", () => {
+test("doctor reports an unsafe legacy launcher with the repair command", { skip: FILE_SYMLINK_SKIP }, () => {
   const home = tempHome();
   const { root } = initRepo(home);
   const legacy = seedLegacySymlink(home);

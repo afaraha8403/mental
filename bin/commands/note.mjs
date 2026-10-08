@@ -6,7 +6,7 @@ import { bundleName, ensureSkeleton, missingCreateTag, tagsFromFlag, writeNote }
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 
-const STATUSES = new Set(["draft", "active", "superseded"]);
+const STATUSES = new Set(["draft", "active", "superseded", "obsolete"]);
 
 export function cmdNote(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;

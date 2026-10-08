@@ -5,6 +5,22 @@ import { resolveBundle } from "../lib/resolve.mjs";
 import { catalogRoot } from "../lib/heartbeat.mjs";
 import { mergeSearchResults, searchBundle, tokenizeQuery } from "../lib/index.mjs";
 import { printResult, EXIT_USAGE } from "../lib/output.mjs";
+import { getJev, jevHint, formatJevHint } from "../lib/jev.mjs";
+import { recoverSearch } from "../lib/jev-assist.mjs";
+import { rerankHits } from "../lib/rerank.mjs";
+import { isStale, supersededByMap } from "../lib/supersede.mjs";
+
+/**
+ * Stale notes/decisions stay findable but rank after current ones and say what replaced them.
+ * An explicit `--status superseded|obsolete` filter keeps its own order. Fields are additive.
+ */
+function demoteStale(root, f, statusFilter) {
+  if (!f.hits.some((h) => isStale(h.status))) return f;
+  const by = supersededByMap(root, f.hits);
+  const hits = f.hits.map((h) => (by.has(h.path) ? { ...h, supersededBy: by.get(h.path) } : h));
+  if (isStale(statusFilter)) return { ...f, hits };
+  return { ...f, hits: [...hits.filter((h) => !isStale(h.status)), ...hits.filter((h) => isStale(h.status))] };
+}
 
 function emptyFound(q, any) {
   const tokens = tokenizeQuery(String(q).trim().toLowerCase());
@@ -65,16 +81,57 @@ export function cmdSearch(args, io = {}) {
           queries.map((q) => searchBundle({ ...base, q, any: false })),
         );
   const q = queries.length === 1 ? queries[0] : queries;
-  const data = { ...resolved.data, q, any: queries.length > 1 ? true : any, ...found, truncated: found.total > found.hits.length };
-  printResult(stdout, args, true, data, undefined, (d) => {
-    const label = Array.isArray(d.q) ? d.q.join(" | ") : d.q;
-    if (d.hits.length === 0) return `no hits for ${label} (${d.backend})`;
-    return d.hits
-      .map((h) => {
-        const line = `[${h.type}] ${h.title} (${h.path})`;
+  const finish = (/** @type {typeof found} */ f0, extra = {}) => {
+    const f = root ? demoteStale(root, f0, status) : f0;
+    const data = { ...resolved.data, q, any: queries.length > 1 ? true : any, ...f, truncated: f.total > f.hits.length, ...extra };
+    printResult(stdout, args, true, data, undefined, (d) => {
+      const label = Array.isArray(d.q) ? d.q.join(" | ") : d.q;
+      if (d.hits.length === 0) {
+        const line = `no hits for ${label} (${d.backend})`;
+        return d.jev && d.jev.text ? `${line}\n${formatJevHint(d.jev)}` : line;
+      }
+      const lines = d.hits.map((h) => {
+        const tag = isStale(h.status) ? ` - ${h.status}${h.supersededBy ? ` by ${h.supersededBy}` : ""}` : "";
+        const line = `[${h.type}] ${h.title} (${h.path})${tag}`;
         return h.snippet ? `${line}\n  ${h.snippet}` : line;
-      })
-      .join("\n");
-  });
-  return 0;
+      });
+      if (d.recovered) lines.unshift(`no exact hits; ${d.hits.length} related via jev${d.broad ? " (broad read of recent files)" : ""}:`);
+      return lines.join("\n");
+    });
+    return 0;
+  };
+
+  if (found.hits.length > 0 || !root) {
+    if (args.flags?.rank === true && root && found.hits.length > 1) {
+      const rj = getJev(home, env);
+      if (rj && !(resolved.data.mode === "personal" && !rj.personal)) {
+        return rerankHits({ jev: rj, queries, hits: found.hits })
+          .catch(() => null)
+          .then((r) => (r && r.ok ? finish({ ...found, hits: r.hits }, { ranked: true, via: "jev", ...(r.intent ? { intent: r.intent } : {}) }) : finish(found)));
+      }
+    }
+    return finish(found);
+  }
+
+  const jev = getJev(home, env);
+  if (!jev) {
+    const hint = jevHint({ home, env, surface: "search" });
+    return finish(found, hint ? { jev: hint } : {});
+  }
+  // Async only on this path so keyless and hit-bearing searches stay synchronous.
+  return recoverSearch({
+    jev,
+    root,
+    id: resolved.data.id,
+    home,
+    env,
+    queries,
+    filters: { type, status, tag, kind },
+  })
+    .catch(() => null)
+    .then((r) => {
+      if (!r || !r.ok || r.hits.length === 0) return finish(found);
+      const hits = r.hits.map(({ score, ...h }) => ({ ...h, jevScore: Math.round(score * 100) / 100 }));
+      return finish({ ...found, hits, total: hits.length }, { recovered: true, via: "jev", variants: r.variants, ...(r.broad ? { broad: true } : {}) });
+    });
 }

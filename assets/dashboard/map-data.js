@@ -195,95 +195,90 @@ export function toGraphData(payload) {
   return { nodes, links };
 }
 
+/** A topic needs this many files to earn its own bubble; smaller ones fall back to the file type. */
+export const MIN_CLUSTER = 3;
+
+const DONE_STATUS = new Set(["resolved", "superseded", "closed", "later", "deferred"]);
+
 /**
- * Flat file graph for the Obsidian-style view.
- * One node per catalog file. Links are the edges already on the payload.
- * A missing tags field becomes an empty list. Hubs are not built.
- * @param {{ nodes?: Array<{ path: string, type?: string, title?: string, tags?: string[] | string }>, edges?: Array<{ from: string, to: string, rel?: string }> }} payload
+ * Cluster graph for the default "Graph" layout.
+ * Every file belongs to exactly one cluster: its largest topic tag (when that topic has at least
+ * MIN_CLUSTER files), otherwise its file type. Topic tags are not nodes; they are the bubbles.
+ * Links are only the explicit payload edges. Tag-sharing edges are implied by the bubbles and dropped.
+ * @param {{ nodes?: Array<{ path: string, type?: string, title?: string, status?: string, tags?: string[] | string }>, edges?: Array<{ from: string, to: string, rel?: string }> }} payload
  */
-export function toForceGraph(payload) {
+export function toClusterGraph(payload) {
   const nodesIn = payload?.nodes || [];
   const edges = payload?.edges || [];
-  const hasTopics = nodesIn.some((node) => topicTags(node).length > 0);
   /** @type {Map<string, number>} */
   const degree = new Map(nodesIn.map((node) => [node.path, 0]));
   /** @type {Array<{ id: string, source: string, target: string, rel: string }>} */
   const links = [];
   const seen = new Set();
-
-  function addLink(source, target, rel) {
-    if (!source || !target || source === target) return;
-    const key = `${source}\0${target}`;
-    if (seen.has(key)) return;
+  for (const edge of edges) {
+    if (String(edge.rel || "").startsWith("tag:")) continue;
+    if (!degree.has(edge.from) || !degree.has(edge.to) || edge.from === edge.to) continue;
+    const key = `${edge.from}\0${edge.to}`;
+    if (seen.has(key)) continue;
     seen.add(key);
-    if (degree.has(source)) degree.set(source, (degree.get(source) || 0) + 1);
-    if (degree.has(target)) degree.set(target, (degree.get(target) || 0) + 1);
-    links.push({ id: key, source, target, rel });
+    degree.set(edge.from, degree.get(edge.from) + 1);
+    degree.set(edge.to, degree.get(edge.to) + 1);
+    links.push({ id: key, source: edge.from, target: edge.to, rel: edge.rel || "link" });
   }
 
   /** @type {Map<string, number>} */
   const tagCount = new Map();
-  if (hasTopics) {
-    for (const node of nodesIn) {
-      for (const slug of topicTags(node)) {
-        tagCount.set(slug, (tagCount.get(slug) || 0) + 1);
-        addLink(node.path, `tag:${slug}`, "topic");
-      }
-    }
+  for (const node of nodesIn) {
+    for (const slug of topicTags(node)) tagCount.set(slug, (tagCount.get(slug) || 0) + 1);
   }
 
-  for (const edge of edges) {
-    if (hasTopics && String(edge.rel || "").startsWith("tag:")) continue;
-    if (!degree.has(edge.from) || !degree.has(edge.to)) continue;
-    addLink(edge.from, edge.to, edge.rel || "link");
-  }
-
-  const tagList = [...tagCount.keys()];
-  const ring = Math.max(520, tagList.length * 90);
-  /** @type {Map<string, { x: number, y: number }>} */
-  const homes = new Map();
-  tagList.forEach((slug, index) => {
-    const angle = (2 * Math.PI * index) / tagList.length - Math.PI / 2;
-    homes.set(slug, { x: Math.cos(angle) * ring, y: Math.sin(angle) * ring });
-  });
-
+  /** @type {Map<string, { id: string, label: string, kind: "topic" | "type", type: string, color: string, count: number, open: number }>} */
+  const clusters = new Map();
   const nodes = nodesIn.map((node) => {
-    const linkCount = degree.get(node.path) || 0;
     const tags = topicTags(node);
-    const home = homes.get(tags[0]) || { x: 0, y: 0 };
+    const type = node.type || "";
+    const topic = tags
+      .filter((slug) => (tagCount.get(slug) || 0) >= MIN_CLUSTER)
+      .sort((a, b) => tagCount.get(b) - tagCount.get(a) || a.localeCompare(b))[0];
+    const clusterId = topic ? `topic:${topic}` : `type:${type || "file"}`;
+    let cluster = clusters.get(clusterId);
+    if (!cluster) {
+      cluster = topic
+        ? { id: clusterId, label: topic, kind: "topic", type: "", color: tagColor(topic), count: 0, open: 0 }
+        : {
+            id: clusterId,
+            label: `${KIND_META[type]?.label || type || "Files"} (no topic)`,
+            kind: "type",
+            type,
+            color: KIND_COLOR[type] || "#38bdf8",
+            count: 0,
+            open: 0,
+          };
+      clusters.set(clusterId, cluster);
+    }
+    const status = String(node.status || "").toLowerCase();
+    const done = DONE_STATUS.has(status);
+    cluster.count += 1;
+    if (!done) cluster.open += 1;
+    const linkCount = degree.get(node.path) || 0;
     return {
       id: node.path,
       path: node.path,
       title: node.title || node.path,
-      type: node.type || "",
+      type,
+      status,
+      done,
       tags,
-      isTag: false,
-      color: tags.length ? tagColor(tags[0]) : (KIND_COLOR[node.type] || "#38bdf8"),
+      description: node.description || "",
+      cluster: clusterId,
+      color: KIND_COLOR[type] || "#38bdf8",
       links: linkCount,
       weight: nodeWeight(linkCount),
-      homeX: home.x,
-      homeY: home.y,
     };
   });
 
-  for (const slug of tagList) {
-    const home = homes.get(slug);
-    const count = tagCount.get(slug) || 0;
-    nodes.push({
-      id: `tag:${slug}`,
-      path: "",
-      title: slug,
-      type: "tag",
-      tags: [slug],
-      isTag: true,
-      color: tagColor(slug),
-      links: count,
-      weight: nodeWeight(count),
-      homeX: home.x,
-      homeY: home.y,
-    });
-  }
-  return { nodes, links };
+  const ordered = [...clusters.values()].sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  return { nodes, links, clusters: ordered };
 }
 
 /**

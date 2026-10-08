@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, writeFileSync, cpSync, existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, cpSync, existsSync, readdirSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, sep } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -8,6 +8,25 @@ import { canonicalPath } from "../bin/lib/git.mjs";
 import { listPackedOkfFiles } from "../bin/lib/okf.mjs";
 
 export const CLI = fileURLToPath(new URL("../bin/cli.mjs", import.meta.url));
+
+/** Directory link that works unprivileged on Windows (junction) and as a symlink elsewhere. */
+export function linkDir(target, path) {
+  symlinkSync(target, path, "junction");
+}
+
+/** Skip reason when this host cannot create file symlinks (Windows without Developer Mode), else false. */
+export const FILE_SYMLINK_SKIP = (() => {
+  const dir = mkdtempSync(join(tmpdir(), "mental-symprobe-"));
+  try {
+    writeFileSync(join(dir, "t"), "x");
+    symlinkSync(join(dir, "t"), join(dir, "l"));
+    return false;
+  } catch (err) {
+    return err && err.code === "EPERM" ? "file symlinks need Developer Mode or elevation on this Windows host" : false;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+})();
 
 export function tempHome(prefix = "mental-") {
   return canonicalPath(mkdtempSync(join(tmpdir(), prefix)));

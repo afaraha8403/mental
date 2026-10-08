@@ -3,6 +3,7 @@
  * Agents: `mental heartbeat --json`.
  */
 import { collectHeartbeat, formatHeartbeat, HEARTBEAT_JSON_FIELDS } from "../lib/heartbeat.mjs";
+import { jevHint, formatJevHint } from "../lib/jev.mjs";
 import { printResult, EXIT_USAGE } from "../lib/output.mjs";
 
 const FOOTER = "more · mental doctor · mental search · mental --help";
@@ -49,8 +50,12 @@ export function cmdHeartbeat(args, io = {}) {
   }
 
   const env = args.env ?? process.env;
-  printResult(stdout, args, true, collected.data, undefined, (d) => {
-    const text = formatHeartbeat(d, new Date(), env, args);
+  const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
+  const hint = jevHint({ home, env, surface: "heartbeat" });
+  const data = hint ? { ...collected.data, jev: hint } : collected.data;
+  printResult(stdout, args, true, data, undefined, (d) => {
+    let text = formatHeartbeat(d, new Date(), env, args);
+    if (d.jev) text = `${text}\n\n${formatJevHint(d.jev)}`;
     if (!args.json && io.isTTY) return `${text}\n\n${FOOTER}`;
     return text;
   });

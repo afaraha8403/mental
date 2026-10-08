@@ -21,11 +21,14 @@ import { doctorNextAction, formatDoctorNextLine } from "../lib/doctor-next.mjs";
 import { CMD, NAME, VERSION } from "../lib/pkg.mjs";
 import { isOptedInLocal } from "../lib/import-legacy.mjs";
 import { findGitRoot } from "../lib/git.mjs";
-import { indexPath, listConcepts } from "../lib/index.mjs";
+import { indexPath, listConcepts, refreshIndex } from "../lib/index.mjs";
 import { checkForUpdate, cmpSemver, updateHint } from "../lib/update.mjs";
 import { hostPluginChecks } from "../lib/host-plugins.mjs";
 import { DECISION_HEARTBEAT_CAP, listOpenDecisions, ensureSkeleton, latestJournalHandoff, localDate } from "../lib/okf.mjs";
 import { parseDays, scanStale } from "../lib/stale.mjs";
+import { getJev } from "../lib/jev.mjs";
+import { deepChecks } from "../lib/doctor-deep.mjs";
+import { repairHistory, summarizeRepair, DEFAULT_REPAIR_FILES, MAX_REPAIR_FILES } from "../lib/doctor-repair.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { FEATURES, listOptionals, loadConfig, markOptionalSeen, isFeatureOn } from "../lib/config.mjs";
 import { formatOptionalsTable } from "./option.mjs";
@@ -97,13 +100,46 @@ function applySafeDoctorFixes({ home, cwd, env }) {
   };
 }
 
-export function cmdDoctor(args, io = {}) {
+/**
+ * Model-driven repair of historical data. Preview unless `--apply`. Never throws, never fails doctor.
+ * @returns {Promise<{ repair: object | null, check: ReturnType<typeof check> }>}
+ */
+async function runRepair({ args, jev, home, env, cwd, bundle }) {
+  const apply = args.flags?.apply === true;
+  let target = bundle;
+  if (apply) {
+    const w = resolveBundle({ cwd, home, env, dir: args.dir ?? null, write: true });
+    if (!w.ok || !isBundleRoot(w.data) || !w.data.root) {
+      return { repair: null, check: check("jev-repair", false, `cannot write here: ${w.ok ? "no bundle" : w.error.message}`, "warn") };
+    }
+    target = w.data;
+  }
+  const rawFiles = args.flags?.limit;
+  const files = rawFiles == null ? DEFAULT_REPAIR_FILES : Number.parseInt(String(rawFiles), 10);
+  if (!Number.isInteger(files) || files < 1 || files > MAX_REPAIR_FILES) {
+    return { repair: null, check: check("jev-repair", false, `--limit must be an integer from 1 to ${MAX_REPAIR_FILES}`, "warn") };
+  }
+  try {
+    const r = await repairHistory({ jev, home, env, root: target.root, apply, files });
+    if (apply && r.tags.applied + r.links.applied + r.stale.applied > 0) refreshIndex(target, home, env);
+    if (!r.ok) return { repair: r, check: check("jev-repair", true, `skipped (model unavailable: ${r.reason})`, "info") };
+    const pending = !apply && r.tags.proposals.length + r.links.results.length + r.stale.proposals.length > 0;
+    return { repair: r, check: check("jev-repair", !pending, summarizeRepair(r), pending ? "warn" : "info") };
+  } catch {
+    return { repair: null, check: check("jev-repair", true, "skipped (error)", "info") };
+  }
+}
+
+export async function cmdDoctor(args, io = {}) {
   const stdout = io.stdout ?? process.stdout;
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const cwd = args.cwd ?? process.cwd();
   const env = args.env ?? process.env;
   const doFix = Boolean(args.flags?.fix);
+  const doApply = args.flags?.apply === true;
   const fixIgnore = Boolean(args.flags?.["fix-ignore"]) || doFix;
+  /** @type {object | null} */
+  let repair = null;
 
   /** @type {ReturnType<typeof applySafeDoctorFixes> | null} */
   let fix = null;
@@ -332,6 +368,34 @@ export function cmdDoctor(args, io = {}) {
     }
   }
 
+  if (home && !args.flags?.offline) {
+    const jev = getJev(home, env);
+    if (jev) {
+      const bundle = resolved.ok && isBundleRoot(resolved.data) ? resolved.data : null;
+      const slice = Boolean(bundle) && (bundle.mode !== "personal" || jev.personal);
+      checks.push(
+        ...(await deepChecks({
+          jev,
+          home,
+          env,
+          root: bundle?.root ?? null,
+          slice,
+          days: parseDays(args.flags?.days),
+          skipTags: slice,
+        })),
+      );
+      if (slice) {
+        const r = await runRepair({ args, jev, home, env, cwd, bundle });
+        repair = r.repair;
+        checks.push(r.check);
+      }
+    } else if (doApply) {
+      checks.push(check("jev-repair", false, `--apply needs a decision model (${CMD} option decide key <KEY>); nothing written`, "warn"));
+    }
+  } else if (doApply) {
+    checks.push(check("jev-repair", false, "--apply needs a decision model and no --offline; nothing written", "warn"));
+  }
+
   const upd = checkForUpdate({ env });
   if (!upd.skipped && upd.latest) {
     const behind = cmpSemver(upd.latest, VERSION) > 0;
@@ -480,6 +544,7 @@ export function cmdDoctor(args, io = {}) {
     problems: problems.length,
     optionals: optionals.optionals,
     next,
+    ...(repair ? { repair } : {}),
     ...(fix ? { fix } : {}),
   };
   const ok = problems.length === 0;

@@ -1,0 +1,328 @@
+/**
+ * Jev-assisted helpers (search recovery, similar-to, link suggestions).
+ *
+ * Shape of every helper: free pre-filter proposes candidates, Jev gates each with a Noul,
+ * the result is advisory. Failure of Jev (network, auth, timeout) returns the baseline
+ * behaviour. Nothing here writes a file except `applyLinks`, which only runs on `relink --apply`.
+ */
+import { readFileSync, writeFileSync } from "node:fs";
+import { listConcepts, searchBundle, tokenizeQuery, extractLinks } from "./index.mjs";
+import { THRESHOLDS, choice, pick } from "./jev.mjs";
+
+const STOP = new Set([
+  "the", "and", "for", "with", "that", "this", "from", "into", "are", "was", "not", "but", "you", "all", "can",
+  "has", "have", "will", "its", "our", "your", "use", "using", "new", "add", "fix", "mental",
+]);
+const SEARCH_CANDIDATES = 12;
+const BROAD_CANDIDATES = 24;
+const SIMILAR_CANDIDATES = 8;
+const LINK_CANDIDATES = 10;
+const BODY_CHARS = 500;
+
+/** @param {string} s */
+export function oneLine(s) {
+  return String(s || "").replace(/\s+/g, " ").trim();
+}
+
+/** Long opaque runs are what a credential looks like. They never leave the machine. */
+export function redact(s) {
+  return oneLine(s)
+    .replace(/-----BEGIN[\s\S]*?(-----END[^-]*-----|$)/g, "[REDACTED]")
+    .replace(/\b(sk|gh[pousr]|xox[bap]|AKIA)[-_A-Za-z0-9]{8,}/g, "[REDACTED]")
+    .replace(/[A-Za-z0-9+/_=-]{24,}/g, "[REDACTED]");
+}
+
+/** Loose pre-filter only. A hit means "worth asking", never "is a secret". */
+export const SECRETISH = /(api[_ -]?key|secret|token|passw(or)?d|bearer|credential|private key|BEGIN [A-Z ]*KEY|\bsk-[A-Za-z0-9]|\bgh[pousr]_|AKIA[0-9A-Z]{8})/i;
+
+/** @param {string} s */
+export function sigTokens(s) {
+  return [
+    ...new Set(
+      tokenizeQuery(String(s || "").toLowerCase()).filter((t) => t.length >= 4 && !STOP.has(t)),
+    ),
+  ];
+}
+
+/** @param {string} a @param {string} b @param {number} max */
+function withinEdits(a, b, max) {
+  if (Math.abs(a.length - b.length) > max) return false;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const v = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      cur.push(v);
+      if (v < rowMin) rowMin = v;
+    }
+    if (rowMin > max) return false;
+    prev = cur;
+  }
+  return prev[b.length] <= max;
+}
+
+/** Non-journal concepts: journal files are append-only history, not subjects. */
+function subjects(root) {
+  return listConcepts(root).filter((c) => c.type !== "Journal");
+}
+
+/**
+ * Free query variants: bundle words within a typo of a query word, or sharing a stem prefix.
+ * @param {ReturnType<typeof listConcepts>} concepts
+ * @param {string[]} tokens
+ */
+export function queryVariants(concepts, tokens) {
+  const vocab = new Set();
+  for (const c of concepts) {
+    for (const t of sigTokens(`${c.title} ${c.description} ${c.tags.join(" ")}`)) vocab.add(t);
+  }
+  const out = new Set();
+  for (const t of tokens) {
+    if (t.length < 4) continue;
+    const maxEdits = t.length >= 8 ? 2 : 1;
+    const stem = t.length >= 6 ? t.slice(0, 5) : "";
+    for (const w of vocab) {
+      if (w === t) continue;
+      if ((stem && w.startsWith(stem)) || withinEdits(t, w, maxEdits)) out.add(w);
+    }
+  }
+  return [...out];
+}
+
+/** @param {{ title: string, description?: string, body: string }} c */
+function brief(c) {
+  return {
+    title: c.title,
+    description: c.description || undefined,
+    excerpt: oneLine(c.body).slice(0, BODY_CHARS) || undefined,
+  };
+}
+
+/**
+ * #64: when a search finds nothing, widen it for free and let Jev gate each candidate.
+ * Returns null when there is nothing to offer or Jev is unavailable (baseline behaviour wins).
+ *
+ * @param {{ jev: { gate: Function }, root: string, id: string | null, home: string | null, env: NodeJS.ProcessEnv,
+ *   queries: string[], filters: { type?: string, status?: string, tag?: string, kind?: string } }} o
+ */
+export async function recoverSearch({ jev, root, id, home, env, queries, filters }) {
+  const concepts = subjects(root);
+  const base = [...new Set(queries.flatMap((q) => tokenizeQuery(q.toLowerCase())))];
+  const variants = queryVariants(concepts, base.filter((t) => t.length >= 4));
+  const widened = [...new Set([...base, ...variants])];
+  if (widened.length === 0) return null;
+  const found = searchBundle({ root, id, home, env, q: widened.join(" "), any: true, limit: SEARCH_CANDIDATES, ...filters });
+  let cand = found.hits.filter((h) => h.type !== "Journal").slice(0, SEARCH_CANDIDATES);
+  let broad = false;
+  if (cand.length === 0) {
+    // No word overlap at all: let the model read the freshest files instead. This is the only way to find
+    // a paraphrase ("auth" vs "login"), so it stays small and respects the same filters.
+    const lc = (s) => String(s || "").toLowerCase();
+    cand = concepts
+      .filter((c) => (!filters.type || lc(c.type) === lc(filters.type)) && (!filters.status || lc(c.status) === lc(filters.status)))
+      .filter((c) => (!filters.tag || c.tags.map(lc).includes(lc(filters.tag))) && (!filters.kind || lc(c.kind) === lc(filters.kind)))
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, BROAD_CANDIDATES)
+      .map((c) => ({ path: c.path, type: c.type, title: c.title, snippet: "" }));
+    broad = true;
+  }
+  if (cand.length === 0) return null;
+
+  const byPath = new Map(concepts.map((c) => [c.path, c]));
+  const state = {
+    query: queries.join(" | "),
+    candidates: Object.fromEntries(
+      cand.map((h, i) => {
+        const c = byPath.get(h.path);
+        return [`c${i}`, c ? brief(c) : { title: h.title, excerpt: h.snippet || undefined }];
+      }),
+    ),
+  };
+  const questions = Object.fromEntries(
+    cand.map((_, i) => [
+      `c${i}`,
+      `Would someone searching for \`query\` want to see \`candidates.c${i}\`? Answer yes if it covers the same subject even when worded differently.`,
+    ]),
+  );
+  const r = await jev.gate(state, questions);
+  if (!r.ok && Object.values(r.scores).every((s) => s == null)) return { ok: false, reason: r.reason || "unavailable", hits: [], variants };
+  const hits = cand
+    .map((h, i) => ({ ...h, score: r.scores[`c${i}`] }))
+    .filter((h) => typeof h.score === "number" && h.score >= (broad ? THRESHOLDS.similar : THRESHOLDS.relevant))
+    .sort((a, b) => b.score - a.score);
+  return { ok: true, hits, variants, broad };
+}
+
+/**
+ * #64: before a write, find existing files the new title+body probably duplicates.
+ * Exact title matches are updates, not duplicates.
+ *
+ * @param {{ jev: { gate: Function }, root: string, title: string, body?: string, type?: string }} o
+ * @returns {Promise<Array<{ path: string, type: string, title: string, score: number }>>}
+ */
+export async function findSimilar({ jev, root, title, body = "" }) {
+  const want = sigTokens(title);
+  if (want.length === 0) return [];
+  const norm = title.trim().toLowerCase();
+  const scored = [];
+  for (const c of subjects(root)) {
+    if (c.title.trim().toLowerCase() === norm) continue;
+    if (c.status === "superseded" || c.status === "obsolete") continue;
+    const have = new Set(sigTokens(`${c.title} ${c.description}`));
+    const shared = want.filter((t) => have.has(t)).length;
+    if (shared === 0) continue;
+    scored.push({ c, rank: shared / Math.min(want.length, have.size || 1) + shared * 0.1 });
+  }
+  scored.sort((a, b) => b.rank - a.rank);
+  const cand = scored.slice(0, SIMILAR_CANDIDATES).map((s) => s.c);
+  if (cand.length === 0) return [];
+  const state = {
+    new: { title, excerpt: oneLine(body).slice(0, BODY_CHARS) || undefined },
+    candidates: Object.fromEntries(cand.map((c, i) => [`c${i}`, brief(c)])),
+  };
+  const criteria = Object.fromEntries([
+    ...cand.map((_, i) => [`c${i}`, null]),
+    ["none", "none of the candidates records the same thing"],
+  ]);
+  const r = await jev.decide(state, {
+    dup: choice(
+      "Which candidate already records essentially the same thing as `new`, so the author should update it instead of adding another? Answer none if no candidate is the same.",
+      criteria,
+    ),
+  });
+  const a = r.answers?.dup;
+  const picked = a ? pick(a, THRESHOLDS.similar) : null;
+  const m = picked && /^c(\d+)$/.exec(picked);
+  const c = m ? cand[Number(m[1])] : null;
+  if (!c) return [];
+  return [{ path: c.path, type: c.type, title: c.title, score: a.confidence }];
+}
+
+/** @param {string} a @param {string} b */
+function linked(a, b, srcA, srcB) {
+  return extractLinks(srcA, a).some((l) => l.dest === srcB) || extractLinks(srcB, b).some((l) => l.dest === srcA);
+}
+
+export const RELATIONS = {
+  related: "same thread of work or topic, no stronger relationship",
+  supports: "gives evidence or reasoning that backs the file",
+  supersedes: "replaces or overrules the file, which is now out of date",
+  contradicts: "conflicts with the file without replacing it",
+  depends_on: "the file builds on it or cannot work without it",
+};
+
+/**
+ * Label each kept row with how the candidate relates to the file. Advisory: any failure or low
+ * confidence leaves the row as plain `related`, so this never drops a link.
+ * @param {{ decide?: Function }} jev
+ */
+async function typeLinks(jev, state, cand, rows) {
+  for (const row of rows) row.relation = "related";
+  if (rows.length === 0 || typeof jev.decide !== "function") return;
+  const idx = new Map(cand.map((c, i) => [c.path, i]));
+  const questions = Object.fromEntries(
+    rows.map((row) => [
+      `r${idx.get(row.path)}`,
+      choice(`How does \`candidates.c${idx.get(row.path)}\` relate to \`file\`?`, RELATIONS),
+    ]),
+  );
+  try {
+    const r = await jev.decide(state, questions);
+    for (const row of rows) {
+      const a = r.answers?.[`r${idx.get(row.path)}`];
+      const rel = a ? pick(a, THRESHOLDS.pick) : null;
+      if (rel && Object.hasOwn(RELATIONS, rel)) row.relation = rel;
+    }
+  } catch {
+    /* labels are optional */
+  }
+}
+
+/**
+ * #65: files that probably relate to `target` but are not linked yet.
+ * Propose at >= link, maybe at >= linkMaybe, silent below.
+ *
+ * @param {{ jev: { gate: Function }, root: string, path: string }} o
+ * @returns {Promise<{ ok: boolean, reason?: string, proposed: Array<{ path: string, type: string, title: string, score: number }>, maybe: Array<{ path: string, type: string, title: string, score: number }> }>}
+ */
+export async function suggestLinks({ jev, root, path }) {
+  const all = subjects(root);
+  const target = all.find((c) => c.path === path);
+  const empty = { ok: true, proposed: [], maybe: [] };
+  if (!target) return empty;
+  const tTags = new Set(target.tags.map((t) => t.toLowerCase()));
+  const tTokens = new Set(sigTokens(`${target.title} ${target.description}`));
+  const tBody = new Set(sigTokens(target.body.slice(0, BODY_CHARS)));
+  const scored = [];
+  for (const c of all) {
+    if (c.path === target.path) continue;
+    if (linked(target.body, c.body, target.path, c.path)) continue;
+    const sharedTags = c.tags.filter((t) => tTags.has(t.toLowerCase())).length;
+    const sharedWords = sigTokens(`${c.title} ${c.description}`).filter((t) => tTokens.has(t)).length;
+    const sharedBody = sigTokens(c.body.slice(0, BODY_CHARS)).filter((t) => tBody.has(t)).length;
+    const sameAgainst = target.against && c.against === target.against ? 1 : 0;
+    const rank = sharedTags * 2 + sharedWords + sharedBody / 2 + sameAgainst;
+    if (rank >= 2) scored.push({ c, rank });
+  }
+  scored.sort((a, b) => b.rank - a.rank || b.c.mtime - a.c.mtime);
+  const cand = scored.slice(0, LINK_CANDIDATES).map((s) => s.c);
+  if (cand.length === 0) return empty;
+
+  const state = {
+    file: { type: target.type, ...brief(target) },
+    candidates: Object.fromEntries(cand.map((c, i) => [`c${i}`, { type: c.type, ...brief(c) }])),
+  };
+  const questions = Object.fromEntries(
+    cand.map((_, i) => [
+      `c${i}`,
+      `Does \`candidates.c${i}\` have a direct relationship to \`file\` (decided because of it, blocks it, same thread of work, supersedes it, or is evidence for it) rather than merely sharing a topic?`,
+    ]),
+  );
+  const r = await jev.gate(state, questions);
+  const rows = cand
+    .map((c, i) => ({ path: c.path, type: c.type, title: c.title, score: r.scores[`c${i}`] }))
+    .filter((s) => typeof s.score === "number" && s.score >= THRESHOLDS.linkMaybe)
+    .sort((a, b) => b.score - a.score);
+  await typeLinks(jev, state, cand, rows);
+  return {
+    ok: r.ok,
+    reason: r.reason,
+    proposed: rows.filter((s) => s.score >= THRESHOLDS.link),
+    maybe: rows.filter((s) => s.score < THRESHOLDS.link),
+  };
+}
+
+/**
+ * Append accepted links as ordinary markdown. Caller reindexes.
+ * @param {string} abs file to edit
+ * @param {Array<{ path: string, title: string, relation?: string, label?: string }>} links `label` overrides the relation word (e.g. "superseded by").
+ */
+export function applyLinks(abs, links) {
+  let text = readFileSync(abs, "utf8");
+  const fresh = links.filter((l) => !text.includes(`(${l.path})`));
+  if (fresh.length === 0) return 0;
+  const bullets = fresh
+    .map((l) => {
+      const rel = l.label
+        ? `${l.label}: `
+        : l.relation && l.relation !== "related" && Object.hasOwn(RELATIONS, l.relation)
+          ? `${l.relation}: `
+          : "";
+      return `- ${rel}[${l.title.replace(/[[\]]/g, "")}](${l.path})`;
+    })
+    .join("\n");
+  const headings = [...text.matchAll(/^## .*$/gm)];
+  const idx = headings.findIndex((h) => /^## Related\b/.test(h[0]));
+  if (idx >= 0) {
+    const next = headings[idx + 1];
+    const end = next ? next.index : text.length;
+    const section = text.slice(headings[idx].index, end).replace(/\s*$/, "");
+    const tail = next ? `\n\n${text.slice(end)}` : "\n";
+    text = `${text.slice(0, headings[idx].index)}${section}\n${bullets}${tail}`;
+  } else {
+    text = `${text.replace(/\s*$/, "\n")}\n## Related\n\n${bullets}\n`;
+  }
+  writeFileSync(abs, text);
+  return fresh.length;
+}

@@ -127,7 +127,7 @@ title: <Decision title>
 description: <one-line summary>
 tags: [<topic>]
 timestamp: <ISO-8601>
-status: open        # open → deferred → decided → superseded
+status: open        # open → deferred → decided → superseded | obsolete
 resource: <optional link to PR/code/discussion>
 ---
 

@@ -17,9 +17,12 @@ import {
 } from "./lib/catalog.mjs";
 import { cmdWhere } from "./commands/where.mjs";
 import { cmdStatus } from "./commands/status.mjs";
-import { cmdJournal } from "./commands/journal.mjs";
-import { cmdDecide } from "./commands/decide.mjs";
-import { cmdNote } from "./commands/note.mjs";
+import { cmdJournalS, cmdDecideS, cmdNoteS, cmdAttentionS, cmdParkS, cmdHandoffS } from "./lib/similar.mjs";
+import { cmdRelink } from "./commands/relink.mjs";
+import { cmdRetag } from "./commands/retag.mjs";
+import { cmdSupersede, cmdObsolete } from "./commands/supersede.mjs";
+import { cmdBrief } from "./commands/brief.mjs";
+import { cmdExtract } from "./commands/extract.mjs";
 import { cmdInstall } from "./commands/install.mjs";
 import { cmdDoctor } from "./commands/doctor.mjs";
 import { cmdLocal } from "./commands/local.mjs";
@@ -28,7 +31,6 @@ import { cmdReindex } from "./commands/reindex.mjs";
 import { cmdList } from "./commands/list.mjs";
 import { cmdShow } from "./commands/show.mjs";
 import { cmdHeartbeat } from "./commands/heartbeat.mjs";
-import { cmdAttention } from "./commands/attention.mjs";
 import { cmdRemap } from "./commands/remap.mjs";
 import { cmdSplit } from "./commands/split.mjs";
 import { cmdLink } from "./commands/link.mjs";
@@ -38,8 +40,6 @@ import { cmdUninstall } from "./commands/uninstall.mjs";
 import { cmdHooks } from "./commands/hooks.mjs";
 import { cmdServe } from "./commands/serve.mjs";
 import { cmdDashboard } from "./commands/dashboard.mjs";
-import { cmdPark } from "./commands/park.mjs";
-import { cmdHandoff } from "./commands/handoff.mjs";
 import { cmdPulse } from "./commands/pulse.mjs";
 import { cmdOption } from "./commands/option.mjs";
 import { cmdTrack } from "./commands/track.mjs";
@@ -57,9 +57,9 @@ export { cmdStatus } from "./commands/status.mjs";
 export const COMMANDS = {
   where: cmdWhere,
   status: cmdStatus,
-  journal: cmdJournal,
-  decide: cmdDecide,
-  note: cmdNote,
+  journal: cmdJournalS,
+  decide: cmdDecideS,
+  note: cmdNoteS,
   install: cmdInstall,
   doctor: cmdDoctor,
   local: cmdLocal,
@@ -67,8 +67,14 @@ export const COMMANDS = {
   reindex: cmdReindex,
   list: cmdList,
   show: cmdShow,
+  relink: cmdRelink,
+  retag: cmdRetag,
+  supersede: cmdSupersede,
+  obsolete: cmdObsolete,
+  brief: cmdBrief,
+  extract: cmdExtract,
   heartbeat: cmdHeartbeat,
-  attention: cmdAttention,
+  attention: cmdAttentionS,
   remap: cmdRemap,
   split: cmdSplit,
   new: cmdSplit,
@@ -79,8 +85,8 @@ export const COMMANDS = {
   hooks: cmdHooks,
   serve: cmdServe,
   dashboard: cmdDashboard,
-  park: cmdPark,
-  handoff: cmdHandoff,
+  park: cmdParkS,
+  handoff: cmdHandoffS,
   pulse: cmdPulse,
   option: cmdOption,
   track: cmdTrack,

@@ -1,5 +1,5 @@
 import { d3 } from "./vendor/mind-map.js";
-import { toMindMapGraph, toForceGraph } from "./map-data.js";
+import { toMindMapGraph, toClusterGraph } from "./map-data.js";
 
 /**
  * Truncate long strings with ellipsis.
@@ -51,9 +51,11 @@ export function startMap(container, onPick) {
 
   // Main viewport for D3 zoom & pan
   const viewport = svg.append("g").attr("class", "mind-map-viewport");
+  const bubbleLayer = viewport.append("g").attr("class", "graph-bubble-layer");
   const linksLayer = viewport.append("g").attr("class", "mind-map-links-layer");
   const crossLinksLayer = viewport.append("g").attr("class", "mind-map-cross-links-layer");
   const nodesLayer = viewport.append("g").attr("class", "mind-map-nodes-layer");
+  const labelsLayer = viewport.append("g").attr("class", "graph-labels-layer");
 
   // Floating controls overlay
   const wrap = container.closest("#map-wrap") || container;
@@ -110,6 +112,15 @@ export function startMap(container, onPick) {
   let activeLinks = [];
   let activeCrossLinks = [];
   let nodeMap = new Map();
+  /** @type {Array<any>} */
+  let graphNodes = [];
+  /** @type {Array<any>} */
+  let graphLinks = [];
+  /** @type {Array<any>} */
+  let graphClusters = [];
+  let adjacency = new Map();
+  let clusterById = new Map();
+  let labelFrame = 0;
 
   // D3 Zoom configuration
   const zoom = d3
@@ -118,7 +129,7 @@ export function startMap(container, onPick) {
     .on("zoom", (event) => {
       zoomScale = event.transform.k;
       viewport.attr("transform", event.transform);
-      nodesLayer.selectAll(".graph-label").classed("visible", (d) => d.isTag || zoomScale >= 1.15);
+      if (layoutMode === "graph") scheduleLabels();
     });
 
   svg.call(zoom).on("dblclick.zoom", null);
@@ -157,6 +168,10 @@ export function startMap(container, onPick) {
   }
   if (btnReset) {
     btnReset.onclick = () => {
+      if (layoutMode === "graph") {
+        renderGraph();
+        return;
+      }
       pinnedNodes.clear();
       activeNodes.forEach((n) => {
         n.x = n.origX;
@@ -191,11 +206,20 @@ export function startMap(container, onPick) {
       minY = Infinity,
       maxY = -Infinity;
 
-    const graphMode = layoutMode === "graph";
+    if (layoutMode === "graph") {
+      fitBoxes(
+        graphClusters
+          .filter((c) => Number.isFinite(c.cx))
+          .map((c) => ({ x0: c.cx - c.R, x1: c.cx + c.R, y0: c.cy - c.R - 22, y1: c.cy + c.R })),
+        animate,
+        1.4,
+      );
+      return;
+    }
     for (const d of activeNodes) {
       if (!Number.isFinite(d.x) || !Number.isFinite(d.y)) continue;
-      const hw = graphMode ? (d.isTag ? 56 : 18) : (d.w || 280) / 2 + 30;
-      const hh = graphMode ? (d.isTag ? 22 : 14) : (d.h || 34) / 2 + 20;
+      const hw = (d.w || 280) / 2 + 30;
+      const hh = (d.h || 34) / 2 + 20;
       minX = Math.min(minX, d.x - hw);
       maxX = Math.max(maxX, d.x + hw);
       minY = Math.min(minY, d.y - hh);
@@ -229,6 +253,16 @@ export function startMap(container, onPick) {
   }
 
   function zoomToNodes(nodes, animate = false) {
+    if (layoutMode === "graph") {
+      fitBoxes(
+        nodes
+          .filter((n) => Number.isFinite(n.x) && Number.isFinite(n.y))
+          .map((n) => ({ x0: n.x - 40, x1: n.x + 40, y0: n.y - 30, y1: n.y + 20 })),
+        animate,
+        1.6,
+      );
+      return;
+    }
     const prev = activeNodes;
     activeNodes = nodes;
     zoomToFit(animate);
@@ -240,9 +274,14 @@ export function startMap(container, onPick) {
       zoomToFit(animate);
       return;
     }
+    if (layoutMode === "graph") {
+      const hits = graphNodes.filter((n) => matchesTag(n));
+      if (hits.length) zoomToNodes(hits, animate);
+      else zoomToFit(animate);
+      return;
+    }
     const island = activeNodes.filter((node) => {
       if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return false;
-      if (node.isTag) return (node.tags || []).some((tag) => String(tag).toLowerCase() === filterTag);
       if (node.isHub) return matchesTag(node);
       return String(node.tags?.[0] || "").toLowerCase() === filterTag;
     });
@@ -344,12 +383,16 @@ export function startMap(container, onPick) {
   }
 
   function applyFilter() {
+    if (layoutMode === "graph") {
+      applyGraphFilter();
+      return;
+    }
     const fQuery = (filterQuery || "").toLowerCase().trim();
     const hasFilter = Boolean(filterTag || fQuery);
 
     if (!hasFilter) {
-      nodesLayer.selectAll(".mindmap-node, .graph-node").classed("dimmed", false).classed("filter-matched", false);
-      linksLayer.selectAll(".link-structural, .graph-link").classed("dimmed", false);
+      nodesLayer.selectAll(".mindmap-node").classed("dimmed", false).classed("filter-matched", false);
+      linksLayer.selectAll(".link-structural").classed("dimmed", false);
       crossLinksLayer.selectAll(".link-cross").classed("dimmed", false);
       return;
     }
@@ -394,30 +437,17 @@ export function startMap(container, onPick) {
       const tId = typeof l.target === "object" ? l.target.id : l.target;
       return !matchedConceptIds.has(sId) && !matchedConceptIds.has(tId);
     });
-
-    const matchedGraphIds = new Set();
-    nodesLayer.selectAll(".graph-node").each(function (d) {
-      const qMatch =
-        !fQuery ||
-        (d.title && d.title.toLowerCase().includes(fQuery)) ||
-        (d.path && d.path.toLowerCase().includes(fQuery)) ||
-        (Array.isArray(d.tags) && d.tags.some((t) => String(t).toLowerCase().includes(fQuery)));
-      const isMatch = matchesTag(d) && qMatch;
-      if (isMatch) matchedGraphIds.add(d.id);
-      d3.select(this).classed("dimmed", !isMatch).classed("filter-matched", isMatch);
-    });
-    linksLayer.selectAll(".graph-link").classed("dimmed", (l) => {
-      const sId = typeof l.source === "object" ? l.source.id : l.source;
-      const tId = typeof l.target === "object" ? l.target.id : l.target;
-      return !matchedGraphIds.has(sId) && !matchedGraphIds.has(tId);
-    });
   }
 
   function applyHighlights() {
+    if (layoutMode === "graph") {
+      applyGraphFocus();
+      return;
+    }
     const activeId = hoveredId || selected;
-    const allLinks = linksLayer.selectAll(".link-structural, .graph-link");
+    const allLinks = linksLayer.selectAll(".link-structural");
     const allCrossLinks = crossLinksLayer.selectAll(".link-cross");
-    const allNodes = nodesLayer.selectAll(".mindmap-node, .graph-node");
+    const allNodes = nodesLayer.selectAll(".mindmap-node");
 
     if (!activeId) {
       allLinks.classed("highlighted", false);
@@ -468,67 +498,335 @@ export function startMap(container, onPick) {
     simulation = null;
   }
 
-  function graphRadius(linkCount) {
-    const n = Number.isFinite(linkCount) ? Math.max(0, linkCount) : 0;
-    return 5 + Math.min(11, n);
+  const LABEL_FONT = 11;
+  const CLUSTER_FONT = 12.5;
+  const escapeHtml = (value) =>
+    String(value ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+
+  function nodeRadius(d) {
+    return 4.5 + Math.min(9, Math.sqrt(Math.max(0, d.links || 0)) * 2.4);
   }
 
-  function graphSeed(path, axis) {
-    let hash = axis + 1;
-    const text = String(path);
-    for (let i = 0; i < text.length; i++) hash = Math.imul(hash, 33) ^ text.charCodeAt(i);
-    return ((hash >>> 0) % 1000) / 1000;
+  /** Bubble = centroid of its members plus the farthest member, so it always hugs what is inside. */
+  function updateBubbleGeometry() {
+    const acc = new Map();
+    for (const n of graphNodes) {
+      if (!Number.isFinite(n.x) || !Number.isFinite(n.y)) continue;
+      const a = acc.get(n.cluster) || { sx: 0, sy: 0, n: 0 };
+      a.sx += n.x;
+      a.sy += n.y;
+      a.n += 1;
+      acc.set(n.cluster, a);
+    }
+    for (const c of graphClusters) {
+      const a = acc.get(c.id);
+      c.cx = a ? a.sx / a.n : c.hx;
+      c.cy = a ? a.sy / a.n : c.hy;
+      c.R = 0;
+    }
+    for (const n of graphNodes) {
+      const c = clusterById.get(n.cluster);
+      if (!c || !Number.isFinite(n.x)) continue;
+      c.R = Math.max(c.R, Math.hypot(n.x - c.cx, n.y - c.cy) + nodeRadius(n));
+    }
+    for (const c of graphClusters) c.R = Math.max(24, c.R + 12);
   }
 
-  function renderForce() {
+  function paintBubbles() {
+    bubbleLayer
+      .selectAll(".graph-bubble")
+      .select("circle")
+      .attr("cx", (d) => d.cx)
+      .attr("cy", (d) => d.cy)
+      .attr("r", (d) => d.R);
+  }
+
+  function scheduleLabels() {
+    if (labelFrame) return;
+    labelFrame = requestAnimationFrame(updateLabels);
+  }
+
+  /** Semantic zoom: greedy, collision-aware label placement in screen space, most important first. */
+  function updateLabels() {
+    labelFrame = 0;
+    if (layoutMode !== "graph" || !graphNodes.length) return;
+    const rect = container.getBoundingClientRect();
+    const W = rect.width || 600;
+    const H = rect.height || 400;
+    const t = d3.zoomTransform(svg.node());
+    const k = t.k;
+    const placed = [];
+    const free = (b) => {
+      for (const o of placed) {
+        if (b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0) return false;
+      }
+      return true;
+    };
+    const onScreen = (b) => b.x1 > 0 && b.x0 < W && b.y1 > 0 && b.y0 < H;
+    const hasFilter = Boolean(filterTag || filterQuery);
+    const activeId = hoveredId || selected;
+    const neighbors = activeId ? adjacency.get(activeId) : null;
+
+    for (const c of graphClusters) {
+      const el = c.labelEl;
+      if (!el || !Number.isFinite(c.cx)) continue;
+      const sx = t.applyX(c.cx);
+      const sy = t.applyY(c.cy) - c.R * k - 7;
+      const w = (c.short.length + String(c.count).length + 2) * CLUSTER_FONT * 0.62;
+      const box = { x0: sx - w / 2, x1: sx + w / 2, y0: sy - CLUSTER_FONT, y1: sy + 4 };
+      const show = onScreen(box) && free(box);
+      if (show) {
+        placed.push(box);
+        el.setAttribute("x", c.cx);
+        el.setAttribute("y", c.cy - c.R - 7 / k);
+        el.setAttribute("font-size", CLUSTER_FONT / k);
+      }
+      el.classList.toggle("visible", show);
+    }
+
+    const ranked = [];
+    for (const n of graphNodes) {
+      if (!n.labelEl) continue;
+      let s = (n.links || 0) * 10 + (n.done ? 0 : 5);
+      if (n.id === activeId) s += 1e7;
+      else if (neighbors && neighbors.has(n.id)) s += 1e5;
+      if (hasFilter) {
+        if (!n.match) {
+          if (n.labelOn) {
+            n.labelEl.classList.remove("visible");
+            n.labelOn = false;
+          }
+          continue;
+        }
+        s += 1e4;
+      }
+      ranked.push({ n, s });
+    }
+    ranked.sort((a, b) => b.s - a.s);
+
+    let count = 0;
+    const cap = Math.min(260, 24 + k * 45);
+    for (const { n } of ranked) {
+      const r = nodeRadius(n);
+      const forced = n.id === activeId || (neighbors && neighbors.has(n.id));
+      let show = false;
+      if (forced || (count < cap && (hasFilter || r * k >= 3.6))) {
+        const sx = t.applyX(n.x);
+        const sy = t.applyY(n.y);
+        const box = { x0: sx + r * k + 2, x1: sx + r * k + 8 + n.short.length * 6.4, y0: sy - 9, y1: sy + 9 };
+        if (onScreen(box) && (n.id === activeId || free(box))) {
+          placed.push(box);
+          show = true;
+          count += 1;
+          n.labelEl.setAttribute("font-size", LABEL_FONT / k);
+          n.labelEl.setAttribute("x", n.x + r + 3 / k);
+          n.labelEl.setAttribute("y", n.y + (LABEL_FONT * 0.35) / k);
+        }
+      }
+      if (show !== n.labelOn) {
+        n.labelEl.classList.toggle("visible", show);
+        n.labelOn = show;
+      }
+    }
+  }
+
+  function applyGraphFocus() {
+    const activeId = hoveredId || selected;
+    const neighbors = activeId ? adjacency.get(activeId) : null;
+    const focus = Boolean(neighbors && neighbors.size > 0);
+    nodesLayer
+      .selectAll(".graph-node")
+      .classed("linked-highlight", (d) => focus && neighbors.has(d.id))
+      .classed("faded", (d) => focus && d.id !== activeId && !neighbors.has(d.id));
+    linksLayer
+      .selectAll(".graph-link")
+      .classed("highlighted", (l) => Boolean(activeId) && (l.source.id === activeId || l.target.id === activeId))
+      .classed("faded", (l) => focus && l.source.id !== activeId && l.target.id !== activeId);
+    scheduleLabels();
+  }
+
+  function applyGraphFilter() {
+    const q = filterQuery;
+    const has = Boolean(filterTag || q);
+    const liveClusters = new Set();
+    for (const n of graphNodes) {
+      const qMatch =
+        !q ||
+        (n.title && n.title.toLowerCase().includes(q)) ||
+        (n.path && n.path.toLowerCase().includes(q)) ||
+        (n.description && n.description.toLowerCase().includes(q)) ||
+        (Array.isArray(n.tags) && n.tags.some((tag) => String(tag).toLowerCase().includes(q)));
+      n.match = !has || (matchesTag(n) && Boolean(qMatch));
+      if (n.match) liveClusters.add(n.cluster);
+    }
+    nodesLayer
+      .selectAll(".graph-node")
+      .classed("dimmed", (d) => has && !d.match)
+      .classed("filter-matched", (d) => has && d.match);
+    linksLayer.selectAll(".graph-link").classed("dimmed", (l) => has && !(l.source.match && l.target.match));
+    bubbleLayer.selectAll(".graph-bubble").classed("dimmed", (c) => has && !liveClusters.has(c.id));
+    scheduleLabels();
+  }
+
+  function fitBoxes(boxes, animate, maxScale) {
+    const rect = container.getBoundingClientRect();
+    const w = rect.width || 600;
+    const h = rect.height || 400;
+    if (w < 10 || h < 10 || !boxes.length) return;
+    const minX = Math.min(...boxes.map((b) => b.x0));
+    const maxX = Math.max(...boxes.map((b) => b.x1));
+    const minY = Math.min(...boxes.map((b) => b.y0));
+    const maxY = Math.max(...boxes.map((b) => b.y1));
+    const padX = 40;
+    const padTop = 58;
+    const padBottom = 36;
+    const dx = Math.max(1, maxX - minX);
+    const dy = Math.max(1, maxY - minY);
+    const scale = Math.min(maxScale, Math.max(0.05, Math.min((w - padX * 2) / dx, (h - padTop - padBottom) / dy)));
+    const t = d3.zoomIdentity
+      .translate(w / 2, padTop + (h - padTop - padBottom) / 2)
+      .scale(scale)
+      .translate(-(minX + maxX) / 2, -(minY + maxY) / 2);
+    if (animate) svg.transition().duration(500).call(zoom.transform, t);
+    else svg.call(zoom.transform, t);
+  }
+
+  function renderForce({ keepView = false } = {}) {
     linksLayer.selectAll(".link-structural").remove();
     crossLinksLayer.selectAll(".link-cross").remove();
     nodesLayer.selectAll(".mindmap-node").remove();
     stopForce();
+    wrap.dataset.layout = "graph";
 
-    const graph = toForceGraph(rawPayload);
-    if (!graph.nodes.length) {
+    const graph = toClusterGraph(rawPayload);
+    graphNodes = graph.nodes;
+    graphLinks = graph.links;
+    graphClusters = graph.clusters;
+    activeNodes = graphNodes;
+    linksLayer.selectAll(".graph-link").remove();
+    nodesLayer.selectAll(".graph-node").remove();
+    bubbleLayer.selectAll("*").remove();
+    labelsLayer.selectAll("*").remove();
+    if (!graphNodes.length) {
       if (emptyOverlay) emptyOverlay.hidden = false;
-      linksLayer.selectAll(".graph-link").remove();
-      nodesLayer.selectAll(".graph-node").remove();
       return;
     }
     if (emptyOverlay) emptyOverlay.hidden = true;
 
-    for (const node of graph.nodes) {
-      const spread = node.isTag ? 0 : 140;
-      node.x = (node.homeX || 0) + (graphSeed(node.id, 1) - 0.5) * spread;
-      node.y = (node.homeY || 0) + (graphSeed(node.id, 2) - 0.5) * spread;
+    clusterById = new Map(graphClusters.map((c) => [c.id, c]));
+    adjacency = new Map(graphNodes.map((n) => [n.id, new Set()]));
+    for (const l of graphLinks) {
+      adjacency.get(l.source)?.add(l.target);
+      adjacency.get(l.target)?.add(l.source);
     }
-    activeNodes = graph.nodes;
 
-    const linkSel = linksLayer.selectAll(".graph-link").data(graph.links, (d) => d.id);
-    linkSel.exit().remove();
-    const linkEnter = linkSel.enter().append("line").attr("class", "graph-link");
-    const allLinks = linkEnter.merge(linkSel);
+    // Pack one circle per cluster, then settle members inside their own circle (deterministic: no animation).
+    const members = new Map(graphClusters.map((c) => [c.id, []]));
+    for (const n of graphNodes) members.get(n.cluster).push(n);
+    for (const c of graphClusters) {
+      const list = members.get(c.id).sort((a, b) => (b.links || 0) - (a.links || 0) || a.id.localeCompare(b.id));
+      const area = list.reduce((sum, n) => sum + (nodeRadius(n) + 2.5) ** 2, 0);
+      c.hr = Math.max(26, Math.sqrt(area / 0.62));
+      c.short = shortText(c.label, 26);
+    }
+    const circles = graphClusters.map((c) => ({ r: c.hr + 30, c }));
+    d3.packSiblings(circles);
+    for (const circle of circles) {
+      circle.c.hx = circle.x;
+      circle.c.hy = circle.y;
+    }
+    for (const c of graphClusters) {
+      const list = members.get(c.id);
+      list.forEach((n, i) => {
+        const rr = c.hr * 0.9 * Math.sqrt((i + 0.5) / list.length);
+        const angle = i * 2.399963;
+        n.x = c.hx + rr * Math.cos(angle);
+        n.y = c.hy + rr * Math.sin(angle);
+      });
+    }
 
-    const nodeSel = nodesLayer.selectAll(".graph-node").data(graph.nodes, (d) => d.id);
-    nodeSel.exit().remove();
-    const nodeEnter = nodeSel.enter().append("g").attr("class", "graph-node");
-    nodeEnter.append("circle");
-    nodeEnter.append("text").attr("class", "graph-label").attr("dx", 12).attr("dy", 4);
-    const allNodes = nodeEnter.merge(nodeSel);
+    const contain = () => {
+      for (const n of graphNodes) {
+        const c = clusterById.get(n.cluster);
+        const dx = n.x - c.hx;
+        const dy = n.y - c.hy;
+        const dist = Math.hypot(dx, dy) || 1;
+        const max = c.hr - nodeRadius(n);
+        if (dist > max) {
+          const pull = ((dist - max) / dist) * 0.5;
+          n.x -= dx * pull;
+          n.y -= dy * pull;
+        }
+      }
+    };
+    simulation = d3
+      .forceSimulation(graphNodes)
+      .force("link", d3.forceLink(graphLinks).id((d) => d.id).distance(48).strength(0.015))
+      .force("x", d3.forceX((d) => clusterById.get(d.cluster).hx).strength(0.16))
+      .force("y", d3.forceY((d) => clusterById.get(d.cluster).hy).strength(0.16))
+      .force("collide", d3.forceCollide((d) => nodeRadius(d) + 2.5).iterations(2))
+      .force("contain", contain)
+      .stop();
+    for (let i = 0; i < 300; i++) simulation.tick();
+    updateBubbleGeometry();
 
-    allNodes.classed("tag", (d) => d.isTag);
+    const allBubbles = bubbleLayer.selectAll(".graph-bubble").data(graphClusters).enter().append("g").attr("class", "graph-bubble");
+    allBubbles
+      .append("circle")
+      .attr("class", "bubble-fill")
+      .attr("fill", (d) => d.color)
+      .attr("stroke", (d) => d.color);
+    allBubbles.each(function (c) {
+      const text = d3.select(this).append("text").attr("class", "bubble-label").attr("fill", c.color);
+      text.append("tspan").attr("class", "bubble-name").text(c.short);
+      text.append("tspan").attr("class", "bubble-count").attr("dx", 5).text(c.count);
+      c.labelEl = text.node();
+    });
+    allBubbles.on("click", (event, c) => {
+      event.stopPropagation();
+      zoomToNodes(members.get(c.id), true);
+    });
+
+    const allLinks = linksLayer.selectAll(".graph-link").data(graphLinks).enter().append("line").attr("class", "graph-link");
+    const allNodes = nodesLayer
+      .selectAll(".graph-node")
+      .data(graphNodes)
+      .enter()
+      .append("g")
+      .attr("class", (d) => (d.done ? "graph-node done" : "graph-node"));
     allNodes
-      .select("circle")
-      .attr("r", (d) => (d.isTag ? Math.max(16, Math.min(28, 12 + Math.sqrt(d.links || 0) * 2)) : graphRadius(d.links)))
-      .attr("fill", (d) => d.color || "#38bdf8");
-    allNodes.select(".graph-label").text((d) => shortText(d.title, d.isTag ? 18 : 28));
-    allNodes.classed("selected", (d) => d.path && d.path === selected);
-    nodesLayer.selectAll(".graph-label").classed("visible", (d) => d.isTag || zoomScale >= 1.15);
+      .append("circle")
+      .attr("r", nodeRadius)
+      .attr("fill", (d) => d.color || "#38bdf8")
+      .attr("stroke", (d) => (d.done ? d.color : null));
+    allNodes.each(function (d) {
+      d.short = shortText(d.title, 30);
+      d.labelEl = labelsLayer.append("text").attr("class", "graph-label").text(d.short).node();
+      d.labelOn = false;
+    });
+    allNodes.classed("selected", (d) => d.id === selected);
+
+    const paint = () => {
+      allLinks
+        .attr("x1", (d) => d.source.x)
+        .attr("y1", (d) => d.source.y)
+        .attr("x2", (d) => d.target.x)
+        .attr("y2", (d) => d.target.y);
+      allNodes.attr("transform", (d) => `translate(${d.x || 0},${d.y || 0})`);
+      updateBubbleGeometry();
+      paintBubbles();
+      scheduleLabels();
+    };
+    paint();
 
     allNodes
       .on("mouseenter", (event, d) => {
         hoveredId = d.id;
+        const bits = [d.type, d.status].filter(Boolean).join(" · ");
+        const where = clusterById.get(d.cluster)?.label || "";
+        const tags = (d.tags || []).length ? `<div class="tt-meta">${escapeHtml(d.tags.join(", "))}</div>` : "";
+        tooltip.innerHTML = `<div class="tt-title">${escapeHtml(d.title || d.path)}</div><div class="tt-meta">${escapeHtml(bits)}${where ? ` · ${escapeHtml(where)}` : ""}</div>${tags}<div class="tt-path">${escapeHtml(d.path)}</div>`;
         tooltip.hidden = false;
-        const tagLine = d.isTag ? "Topic" : (d.tags || []).join(", ");
-        tooltip.innerHTML = `<div class="tt-title">${d.title || d.path}</div><div class="tt-path">${d.path || tagLine}</div>`;
         positionTooltip(event);
         applyHighlights();
       })
@@ -541,14 +839,15 @@ export function startMap(container, onPick) {
       .on("click", (event, d) => {
         event.stopPropagation();
         selected = d.path || "";
-        allNodes.classed("selected", (n) => n.path === selected);
+        allNodes.classed("selected", (n) => n.id === selected);
         applyHighlights();
         if (d.path) onPick(d.path);
       })
       .call(
-        d3.drag()
+        d3
+          .drag()
           .on("start", (event, d) => {
-            if (!event.active && simulation) simulation.alphaTarget(0.3).restart();
+            if (!event.active) simulation.alphaTarget(0.2).restart();
             d.fx = d.x;
             d.fy = d.y;
           })
@@ -556,56 +855,35 @@ export function startMap(container, onPick) {
             d.fx = event.x;
             d.fy = event.y;
           })
-          .on("end", (event, d) => {
-            if (!event.active && simulation) simulation.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
+          .on("end", (event) => {
+            if (!event.active) simulation.alphaTarget(0);
           }),
       );
+    simulation.on("tick", paint);
 
-    simulation = d3
-      .forceSimulation(graph.nodes)
-      .force(
-        "link",
-        d3
-          .forceLink(graph.links)
-          .id((d) => d.id)
-          .distance((d) => (d.rel === "topic" ? 72 : 180))
-          .strength((d) => {
-            if (d.rel !== "topic") return 0.03;
-            const source = typeof d.source === "object" ? d.source : null;
-            const target = typeof d.target === "object" ? d.target : null;
-            if (!source || !target) return 0.2;
-            const file = source.isTag ? target : source;
-            const hub = source.isTag ? source : target;
-            const first = String(file.tags?.[0] || "");
-            return first && String(hub.tags?.[0] || "") === first ? 0.45 : 0.02;
-          }),
-      )
-      .force("charge", d3.forceManyBody().strength((d) => (d.isTag ? -280 : -18)).distanceMax(420))
-      .force("x", d3.forceX((d) => d.homeX || 0).strength((d) => (d.isTag ? 0.6 : 0.28)))
-      .force("y", d3.forceY((d) => d.homeY || 0).strength((d) => (d.isTag ? 0.6 : 0.28)))
-      .force("collide", d3.forceCollide((d) => (d.isTag ? 40 : graphRadius(d.links)) + 10).iterations(2))
-      .on("tick", () => {
-        allLinks
-          .attr("x1", (d) => d.source.x)
-          .attr("y1", (d) => d.source.y)
-          .attr("x2", (d) => d.target.x)
-          .attr("y2", (d) => d.target.y);
-        allNodes.attr("transform", (d) => `translate(${d.x || 0},${d.y || 0})`);
-      });
-    zoomToFit(false);
+    svg.on("click", () => {
+      selected = "";
+      hoveredId = "";
+      allNodes.classed("selected", false);
+      applyHighlights();
+    });
 
+    if (!keepView) zoomToFit(false);
     applyFilter();
     applyHighlights();
   }
 
-  function renderGraph() {
+  function renderGraph(opts) {
     if (layoutMode === "graph") {
-      renderForce();
+      renderForce(opts);
       return;
     }
     stopForce();
+    wrap.dataset.layout = layoutMode;
+    graphNodes = [];
+    graphClusters = [];
+    bubbleLayer.selectAll("*").remove();
+    labelsLayer.selectAll("*").remove();
     linksLayer.selectAll(".graph-link").remove();
     nodesLayer.selectAll(".graph-node").remove();
 
@@ -968,13 +1246,14 @@ export function startMap(container, onPick) {
     const rect = container.getBoundingClientRect();
     if (rect.width > 20 && rect.height > 20) {
       updateLinkPositions();
+      if (layoutMode === "graph") scheduleLabels();
     }
   });
   resizeObs.observe(container);
 
   // Theme listener to refresh colors
   const themeObserver = new MutationObserver(() => {
-    renderGraph();
+    renderGraph({ keepView: true });
   });
   themeObserver.observe(document.documentElement, {
     attributes: true,

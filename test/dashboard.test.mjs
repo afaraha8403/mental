@@ -110,8 +110,12 @@ test("listenDashboard also serves IPv6 loopback when the stack exists", async (t
 test("default port 3847 falls back when busy; explicit --port does not", async (t) => {
   const home = tempHome();
   const { root } = initRepo(home);
-  const blocker = await occupyPort(DASHBOARD_PORT);
-  t.after(() => new Promise((resolve) => blocker.close(resolve)));
+  // A dev dashboard already on the default port blocks it just as well.
+  const blocker = await occupyPort(DASHBOARD_PORT).catch((err) => {
+    if (err && err.code === "EADDRINUSE") return null;
+    throw err;
+  });
+  t.after(() => new Promise((resolve) => (blocker ? blocker.close(resolve) : resolve())));
   const dash = await listenDashboard({
     cwd: root,
     home,

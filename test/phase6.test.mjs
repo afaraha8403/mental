@@ -98,7 +98,7 @@ test("MCP initialize + tools/list + where", async () => {
   const init = handle({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }, {});
   assert.equal(init.result.serverInfo.name, "mental");
   const listed = handle({ jsonrpc: "2.0", id: 2, method: "tools/list" }, {});
-  for (const name of ["heartbeat", "where", "status", "search", "list", "show", "journal", "attention", "decide", "note", "park", "handoff", "pulse"]) {
+  for (const name of ["heartbeat", "where", "status", "search", "list", "show", "journal", "attention", "decide", "note", "park", "handoff", "pulse", "brief"]) {
     assert.ok(listed.result.tools.some((t) => t.name === name), `missing MCP tool: ${name}`);
   }
 

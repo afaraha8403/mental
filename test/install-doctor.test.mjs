@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
+import { gitEnv, initRepo, linkDir, mental, tempHome } from "./helpers.mjs";
 import { EXIT_IO } from "../bin/lib/output.mjs";
 import { ensureMentalExcluded, MENTAL_IGNORE_LINE } from "../bin/lib/ignore.mjs";
 import { defaultExcludesFile } from "../bin/lib/ignore.mjs";
@@ -76,7 +76,7 @@ test("mental install follows a symlink skill dir (claude → agents)", () => {
   mkdirSync(agents, { recursive: true });
   writeFileSync(join(agents, "SKILL.md"), "# old leftover skill\n");
   mkdirSync(join(home, ".claude", "skills"), { recursive: true });
-  symlinkSync(agents, join(home, ".claude", "skills", "mental"));
+  linkDir(agents, join(home, ".claude", "skills", "mental"));
 
   const r = mental(home, root, ["install", "--json"]);
   assert.equal(r.status, 0, r.stderr || r.stdout);
