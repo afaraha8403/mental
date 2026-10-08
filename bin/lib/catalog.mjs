@@ -55,6 +55,14 @@ const FILTER_FLAGS = [
   v("kind", { summary: "Attention kind", enum: ["direction", "concern", "thread", "verify"] }),
 ];
 
+const PAGE_FLAGS = [
+  v("limit", { mcpType: "integer", summary: "Page size (default 50; integer >= 1)" }),
+  v("offset", { mcpType: "integer", summary: "Skip this many rows (default 0)" }),
+  b("all", { summary: "Return every row (cannot combine with --limit/--offset)" }),
+  v("since", { summary: "Only items on/after YYYY-MM-DD (local day) or an ISO timestamp, by frontmatter timestamp else mtime" }),
+  v("on", { summary: "Only items on this local day (YYYY-MM-DD)" }),
+];
+
 const VIA = v("via", { summary: "Short client token (cursor, claude-code, copilot, codex, opencode, mcp, cli). Not a session id." });
 const AGAINST = v("against", { summary: "Repo-relative plan path (no ..)" });
 const TITLE = v("title", { summary: "OKF title (same title updates)" });
@@ -167,7 +175,7 @@ export const CATALOG = {
       `${CMD} search leftover overlay --any --json`,
       `${CMD} search -- -label`,
     ],
-    flags: FILTER_FLAGS.concat([
+    flags: FILTER_FLAGS.concat(PAGE_FLAGS, [
       b("any", { summary: "OR tokens instead of AND (union of words in one query)" }),
     ]),
     effects: "read_only",
@@ -207,10 +215,10 @@ export const CATALOG = {
   list: {
     name: "list",
     group: "Lookup",
-    summary: "List OKF concepts with typed frontmatter filters (no query). Default cap 50; JSON includes truncated and total.",
+    summary: "List OKF concepts with typed frontmatter filters (no query). Active bundle only. Default page 50; page with --limit/--offset or --all; --since/--on filter by date. JSON includes total, returned, truncated, nextOffset; rows carry timestamp, updated, project.",
     usage: `${CMD} list`,
-    examples: [`${CMD} list --type Decision --status open`, `${CMD} list --json --kind verify`],
-    flags: FILTER_FLAGS,
+    examples: [`${CMD} list --type Decision --status open`, `${CMD} list --json --kind verify`, `${CMD} list --all --since 2026-09-01`, `${CMD} list --limit 20 --offset 20`],
+    flags: FILTER_FLAGS.concat(PAGE_FLAGS),
     effects: "read_only",
     mcp: true,
   },
@@ -624,7 +632,7 @@ export function mcpInputSchema(c) {
     const key = f.mcpName || f.name.replace(/-/g, "_");
     if (properties[key]) continue;
     /** @type {Record<string, unknown>} */
-    const prop = { type: f.takesValue === false ? "boolean" : "string" };
+    const prop = { type: f.mcpType || (f.takesValue === false ? "boolean" : "string") };
     if (f.summary) prop.description = f.summary;
     if (f.enum) prop.enum = f.enum;
     properties[key] = prop;

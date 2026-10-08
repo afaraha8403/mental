@@ -36,7 +36,7 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only; does not create identity) |
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
 | `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op` |
-| `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`) |
+| `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`, `--since`, `--on`; pages of 50 via `--limit`, `--offset`, `--all`) |
 | `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`) |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
 | `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`, `--via`). Requires `--resume`. Then heartbeat; writes watermark |
@@ -131,6 +131,6 @@ Optional timers are default **off**. When on, agents generate private and custom
 
 Pulse watermark: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json` (`{ at: iso }` — rebuildable, not SoT). Written after delta by `pulse` / `park` / `handoff`; **heartbeat never writes it**.
 
-Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount` / `laterCount`. Extra later: `mental list --type Attention --status later`. Extra open decisions: `mental list --type Decision --status open`.
+Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount` / `laterCount`. Extra later: `mental list --type Attention --status later`. Extra open decisions: `mental list --type Decision --status open`. JSON `stale` (and a `Stale (> 14d)` text block) lists open/deferred decisions and open/later attention untouched for 14+ days, oldest first, capped at 5 per kind with a true `count`.
 
 See [identity](./identity.md) for UUID / local / leftover import, [agents](./agents.md) for the `--json` contract, and [optional time tracking](./track.md) for what hours can and cannot do.

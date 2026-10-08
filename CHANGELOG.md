@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Features
+- `mental list` and `mental search` page their results (default 50) with `--limit`, `--offset`, and `--all`, and report `total`, `returned`, `truncated`, and `nextOffset`. `--since` / `--on YYYY-MM-DD` filter by timestamp. Rows carry `timestamp`, `updated`, and `project`. MCP tools accept the same arguments.
+- The heartbeat surfaces stale decisions and attention (open/deferred decisions, open/later attention untouched for 14+ days) as `stale` in JSON and a `Stale (> 14d)` text block, and the skill tells agents to propose resolving, deciding, or superseding them (#62).
 - `mental decide`, `mental attention`, and `mental note` require `--tag` (1–3 topic slugs) when creating a file. Omitting it on update leaves existing tags in place, so older files stay as they are. `mental doctor` warns `untagged` (exit 0) and lists files whose tags are missing or empty. The dashboard map defaults to a force graph of file dots and still has the Brain and Tree layouts.
 - The dashboard map groups by topic tag. Graph draws one hub per tag with its files around it, and Brain and Tree use those same tag hubs. Zoom and pan can move between the clusters.
 - `mental dashboard` opens an optional read-only localhost explorer (`127.0.0.1:3847`, ephemeral fallback if busy) so a human can browse the catalog, explore an interactive 2D SVG mind map with D3.js (structured non-overlapping columnar layout per category, sticky drag-and-drop positioning, smooth organic cubic Bezier branch links, and collapsible branches), or peek at one file as rendered markdown. When Track is on, the page shows running clocks, today's stops, and a timeline of what was written during each sit-down. The CLI stays heartbeat-and-exit; agents keep `--json`.
@@ -15,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mental backup --out <dir>` packs this machine's OKF and identities into a portable directory (no sqlite, no hours, no machine paths). `mental restore --from` merges per UUID so dest-ahead work stays; `--replace --confirm REPLACE` is disaster-only for packed slices.
 
 ### Fixes
+- `mental search 2026-09-24` matches that date instead of AND-ing `2026`, `09`, and `24`. Results exclude nested `projects/` paths, and the index schema is rebuilt automatically.
+- Heartbeat counts agree with `mental list` totals: Attention and Decision files without a `status` count as `open` (#67).
 - Fixed "no file selected" message persisting after document selection by enforcing `[hidden] { display: none !important; }` across all components so specificity rules do not override hidden view states.
 - Fixed mind map node crowding, overlap, and cluster collisions by replacing force simulations with a deterministic, structured radial/columnar layout with 600px cluster separation, 100px column gutters, 38px row gutters, and edge-to-edge hierarchical connecting lines.
 - Fixed node dragging snapping back on mouse release by persisting drag coordinates in a pinned node store, disabling snap-back forces, and visually indicating pinned nodes with a dashed accent border.

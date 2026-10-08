@@ -8,25 +8,44 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { journalHops, parseFrontmatter } from "./okf.mjs";
+import { filterByWindow, timeFields } from "./paging.mjs";
 
 const require = createRequire(import.meta.url);
 /** Bump when the concepts table shape changes; mismatch drops and recreates. */
-export const INDEX_VERSION = "4";
+export const INDEX_VERSION = "5";
 
 const SNIPPET_CHARS = 160;
+const ISO_DATE_RE = /\d{4}-\d{2}-\d{2}/g;
 
 /**
  * Split a search needle into AND tokens. Punctuation is dropped; words are
- * prefix-matched. Quotes are not a phrase operator.
+ * prefix-matched. Quotes are not a phrase operator. A standalone ISO date
+ * (2026-09-24) stays one token so it matches that date, not 2026 AND 09 AND 24.
  * @param {string} needle
  * @returns {string[]}
  */
 export function tokenizeQuery(needle) {
-  return String(needle || "")
+  const text = String(needle || "");
+  /** @type {string[]} */
+  const dates = [];
+  const rest = text.replace(ISO_DATE_RE, (m, offset, whole) => {
+    const before = whole[offset - 1];
+    const after = whole[offset + m.length];
+    if ((before && /[\p{L}\p{N}-]/u.test(before)) || (after && /[\p{L}\p{N}-]/u.test(after))) return m;
+    dates.push(m);
+    return " ";
+  });
+  const words = rest
     .replace(/[^\p{L}\p{N}\s]+/gu, " ")
     .trim()
     .split(/\s+/)
     .filter(Boolean);
+  return [...dates, ...words];
+}
+
+/** @param {string} token */
+function ftsToken(token) {
+  return /^[\p{L}\p{N}]+$/u.test(token) ? `${token}*` : `"${token.replace(/"/g, "")}"*`;
 }
 
 /**
@@ -162,7 +181,7 @@ function walk(base, dir, out) {
       type,
       title,
       description,
-      status: String(data.status || ""),
+      status: String(data.status || (type.toLowerCase() === "attention" || type.toLowerCase() === "decision" ? "open" : "")),
       kind: data.kind ? String(data.kind) : "",
       from: data.from ? String(data.from) : "",
       against: data.against ? String(data.against) : "",
@@ -268,6 +287,7 @@ const SCHEMA_SQL = `
     against TEXT,
     tags_json TEXT,
     mtime INTEGER,
+    timestamp TEXT,
     body_text TEXT
   );
   CREATE TABLE IF NOT EXISTS links (
@@ -338,7 +358,7 @@ export function reindexBundle({ root, id, home, env = process.env }) {
       }
     }
     const insC = db.prepare(
-      "INSERT INTO concepts (path, type, title, description, status, kind, from_val, against, tags_json, mtime, body_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO concepts (path, type, title, description, status, kind, from_val, against, tags_json, mtime, timestamp, body_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     );
     const insL = db.prepare("INSERT INTO links (src, dest, raw) VALUES (?, ?, ?)");
     const insF = fts5 ? db.prepare("INSERT INTO concepts_fts (path, title, body_text) VALUES (?, ?, ?)") : null;
@@ -354,6 +374,7 @@ export function reindexBundle({ root, id, home, env = process.env }) {
         c.against,
         JSON.stringify(c.tags),
         c.mtime,
+        c.timestamp,
         c.searchable,
       );
       insF?.run(c.path, c.title, c.searchable);
@@ -437,6 +458,9 @@ export function searchBundle({
   tag,
   kind,
   limit = 50,
+  offset = 0,
+  sinceMs,
+  untilMs,
   any = false,
 }) {
   const needle = q.trim().toLowerCase();
@@ -444,29 +468,37 @@ export function searchBundle({
   const op = any ? "or" : "and";
   const parsed = { tokens, op };
   const filters = { type, status, tag, kind };
+  const finish = (backend, all) => {
+    const kept = filterByWindow(
+      all.filter((h) => !h.path.startsWith("projects/")),
+      { sinceMs, untilMs },
+    );
+    const hits = kept.slice(offset, offset + limit).map(({ mtime, ...h }) => h);
+    return { backend, hits, total: kept.length, offset, ...parsed };
+  };
   if (id && home) {
     const file = indexPath(home, id, env);
     const DatabaseSync = loadDatabaseSync();
     if (DatabaseSync && existsSync(file)) {
       maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file });
       try {
-        const found = searchSqlite(DatabaseSync, file, needle, { ...filters, limit, any, tokens });
-        return { backend: "sqlite", hits: found.hits, total: found.total, ...parsed };
+        return finish("sqlite", searchSqlite(DatabaseSync, file, needle, { ...filters, any, tokens }));
       } catch {
         // fall through to scan
       }
     }
   }
-  const found = searchScan(expandJournalSections(listConcepts(root)), needle, { ...filters, limit, any, tokens });
-  return { backend: "scan", hits: found.hits, total: found.total, ...parsed };
+  return finish("scan", searchScan(expandJournalSections(listConcepts(root)), needle, { ...filters, any, tokens }));
 }
 
 /**
  * Union of several searches (MCP `q` as string[]). Each query keeps its own AND tokens.
+ * Pass batches built with an unbounded limit and offset 0; paging applies here.
  * @param {Array<ReturnType<typeof searchBundle>>} batches
  * @param {number} [limit]
+ * @param {number} [offset]
  */
-export function mergeSearchResults(batches, limit = 50) {
+export function mergeSearchResults(batches, limit = 50, offset = 0) {
   const seen = new Set();
   /** @type {Array<ReturnType<typeof searchBundle>["hits"][number]>} */
   const hits = [];
@@ -492,7 +524,7 @@ export function mergeSearchResults(batches, limit = 50) {
     if (tr) return tr;
     return a.path.localeCompare(b.path);
   });
-  return { backend, hits: hits.slice(0, limit), total: hits.length, tokens, op: "or" };
+  return { backend, hits: hits.slice(offset, offset + limit), total: hits.length, offset, tokens, op: "or" };
 }
 
 /**
@@ -516,14 +548,15 @@ function maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file }) {
 /**
  * @param {typeof import("node:sqlite").DatabaseSync} DatabaseSync
  */
-function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, limit, any = false, tokens = [] }) {
+function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, any = false, tokens = [] }) {
   const db = new DatabaseSync(file);
   try {
     const { sql: extra, params: filterParams } = filterSql({ type, status, tag, kind });
     const likeBits = tokenLikeClause(tokens.length ? tokens : [needle], any);
     const like = db.prepare(
       `SELECT c.path AS path, c.type AS type, c.title AS title, c.description AS description,
-              c.status AS status, c.kind AS kind, c.tags_json AS tags_json, c.body_text AS body_text
+              c.status AS status, c.kind AS kind, c.tags_json AS tags_json, c.body_text AS body_text,
+              c.mtime AS mtime, c.timestamp AS timestamp
        FROM concepts c
        WHERE ${likeBits.sql}${extra}
        ORDER BY ${TYPE_ORDER_SQL}, CASE WHEN lower(c.title) LIKE ? THEN 0 ELSE 1 END, c.path`,
@@ -533,6 +566,7 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
       const fts = db.prepare(
         `SELECT c.path AS path, c.type AS type, c.title AS title, c.description AS description,
                 c.status AS status, c.kind AS kind, c.tags_json AS tags_json,
+                c.mtime AS mtime, c.timestamp AS timestamp,
                 snippet(concepts_fts, 2, '', '', '…', 32) AS snippet
          FROM concepts_fts
          JOIN concepts c ON c.path = concepts_fts.path
@@ -540,7 +574,7 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
          ORDER BY ${TYPE_ORDER_SQL}, bm25(concepts_fts)`,
       );
       const join = any ? " OR " : " AND ";
-      const q = tokens.length ? tokens.map((t) => `${t}*`).join(join) : needle;
+      const q = tokens.length ? tokens.map(ftsToken).join(join) : needle;
       rows = fts.all(q, ...filterParams);
     } catch {
       rows = [];
@@ -553,8 +587,7 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, lim
         rows = [];
       }
     }
-    const mapped = (rows || []).map((r) => rowToHit(r, needle));
-    return { hits: mapped.slice(0, limit), total: mapped.length };
+    return (rows || []).map((r) => rowToHit(r, needle));
   } finally {
     db.close();
   }
@@ -581,6 +614,8 @@ function tokenLikeClause(tokens, any) {
 function rowToHit(r, needle) {
   const body = String(r.body_text ?? r.snippet ?? "");
   const snippet = r.snippet != null && String(r.snippet).trim() ? String(r.snippet).trim() : scanSnippet(body, needle);
+  const mtime = Number(r.mtime) || 0;
+  const timestamp = r.timestamp ? String(r.timestamp) : "";
   return {
     path: String(r.path ?? ""),
     type: String(r.type ?? ""),
@@ -590,6 +625,8 @@ function rowToHit(r, needle) {
     kind: String(r.kind || ""),
     tags: parseTagsJson(r.tags_json),
     snippet,
+    mtime,
+    ...timeFields({ timestamp, mtime }),
   };
 }
 
@@ -619,7 +656,7 @@ function scanSnippet(text, needle, max = SNIPPET_CHARS) {
   return s;
 }
 
-function searchScan(concepts, needle, { type, status, tag, kind, limit, any = false, tokens = [] }) {
+function searchScan(concepts, needle, { type, status, tag, kind, any = false, tokens = [] }) {
   const terms = tokens.length ? tokens : needle ? [needle] : [];
   const hits = filterConcepts(concepts, { type, status, tag, kind })
     .filter((c) => {
@@ -636,6 +673,8 @@ function searchScan(concepts, needle, { type, status, tag, kind, limit, any = fa
       kind: c.kind,
       tags: c.tags,
       snippet: scanSnippet(c.searchable, terms[0] || needle),
+      mtime: c.mtime,
+      ...timeFields(c),
     }))
     .sort((a, b) => {
       const tr = typeRank(a.type) - typeRank(b.type);
@@ -645,7 +684,7 @@ function searchScan(concepts, needle, { type, status, tag, kind, limit, any = fa
       if (at !== bt) return at - bt;
       return a.path.localeCompare(b.path);
     });
-  return { hits: hits.slice(0, limit), total: hits.length };
+  return hits;
 }
 
 /**

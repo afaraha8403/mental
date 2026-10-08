@@ -79,6 +79,11 @@ function runTool(name, args, ctx) {
         status: args.status,
         tag: args.tag,
         kind: args.kind,
+        limit: args.limit,
+        offset: args.offset,
+        all: args.all === true,
+        since: args.since,
+        on: args.on,
         any: args.any === true,
       },
     });
@@ -91,6 +96,11 @@ function runTool(name, args, ctx) {
         status: args.status,
         tag: args.tag,
         kind: args.kind,
+        limit: args.limit,
+        offset: args.offset,
+        all: args.all === true,
+        since: args.since,
+        on: args.on,
       },
     });
   }

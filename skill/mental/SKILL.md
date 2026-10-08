@@ -187,6 +187,12 @@ Lists capped at 7; counts via `attentionCount` / `openDecisionCount` /
 decisions: `mental list --type Decision --status open --json`. Extra later:
 `mental list --type Attention --status later --json`. Use `mental status
 --json` when you also need notes.
+A `Stale (> 14d)` block lists open/deferred decisions and open/later attention
+that have sat untouched (`stale` in JSON). On orient, propose resolving,
+deciding, or superseding them; never delete without the user's say-so.
+`list` and `search` page (default 50): use `--limit`, `--offset`, `--all`; read
+`total` / `truncated` / `nextOffset`. `--since` / `--on YYYY-MM-DD` filter by
+timestamp.
 `status` refreshes `status/current.md` as a disposable cache — not SoT. Never
 block work if Mental errors; mention it and continue.
 
