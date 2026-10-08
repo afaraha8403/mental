@@ -50,12 +50,19 @@
       </div>
     </header>
 
-    <section class="pulse" aria-label="Where you left off">
+    <section class="pulse" id="pulse" aria-label="Where you left off">
       <div class="pulse-lead">
         <div class="pulse-badge-row">
           <span class="status-badge"><span class="status-pulse-dot" aria-hidden="true"></span> Where you left off</span>
+          <button type="button" id="pulse-toggle" class="pulse-toggle" aria-expanded="true" title="Collapse overview">
+            <span class="pulse-toggle-text">Hide overview</span>
+            <svg class="chevron-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
+          </button>
         </div>
-        <p id="strip" class="resume">Loading…</p>
+        <div class="resume-wrap">
+          <p id="strip" class="resume" data-clamped="true">Loading…</p>
+          <button type="button" id="resume-more" class="resume-more" aria-expanded="false" hidden>Show more</button>
+        </div>
         <div id="facts" class="facts"></div>
         <details id="track" class="clock-drawer" hidden>
           <summary>
@@ -82,28 +89,28 @@
       <div class="boards">
         <section id="board-eyes" class="board-card board-eyes" hidden>
           <div class="board-head">
-            <h2><span class="board-icon" aria-hidden="true">⚠️</span> Needs eyes</h2>
+            <h2><svg class="board-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> Needs eyes</h2>
             <span id="eyes-count" class="board-count" aria-hidden="true"></span>
           </div>
           <ul id="eyes-list"></ul>
         </section>
         <section class="board-card board-air">
           <div class="board-head">
-            <h2><span class="board-icon" aria-hidden="true">⚡</span> In the air</h2>
+            <h2><svg class="board-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg> In the air</h2>
             <span id="air-count" class="board-count" aria-hidden="true"></span>
           </div>
           <ul id="air-list"></ul>
         </section>
         <section id="board-later" class="board-card board-later" hidden>
           <div class="board-head">
-            <h2><span class="board-icon" aria-hidden="true">📌</span> Later</h2>
+            <h2><svg class="board-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"></path></svg> Later</h2>
             <span id="later-count" class="board-count" aria-hidden="true"></span>
           </div>
           <ul id="later-list"></ul>
         </section>
         <section class="board-card board-open">
           <div class="board-head">
-            <h2><span class="board-icon" aria-hidden="true">🎯</span> Unsettled</h2>
+            <h2><svg class="board-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg> Unsettled</h2>
             <span id="open-count" class="board-count" aria-hidden="true"></span>
           </div>
           <ul id="open-list"></ul>
@@ -151,8 +158,8 @@
             </div>
             <div class="map-layout-switcher" role="group" aria-label="Layout style">
               <button type="button" class="layout-toggle-btn active" id="btn-layout-graph" title="Graph: dots sized by links, like a note graph">Graph</button>
-              <button type="button" class="layout-toggle-btn" id="btn-layout-organic" title="Organic Brain: natural force clustering where connected items gravitate together">🧠 Brain</button>
-              <button type="button" class="layout-toggle-btn" id="btn-layout-tree" title="Structured Tree: organized column layout">🌲 Tree</button>
+              <button type="button" class="layout-toggle-btn" id="btn-layout-organic" title="Organic Brain: natural force clustering where connected items gravitate together">Brain</button>
+              <button type="button" class="layout-toggle-btn" id="btn-layout-tree" title="Structured Tree: organized column layout">Tree</button>
             </div>
             <div class="map-search-box">
               <svg class="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
@@ -178,6 +185,7 @@
           <ul id="session-list" aria-label="Sit-downs"></ul>
         </div>
       </aside>
+      <div id="resizer" class="resizer" role="separator" aria-orientation="vertical" aria-label="Resize catalog" aria-valuemin="280" aria-valuemax="640" tabindex="0" title="Drag to resize · double-click to reset"></div>
 
       <article aria-label="File">
         <div id="timeline-wrap" class="timeline-wrap" hidden>
@@ -185,7 +193,7 @@
           <ol id="timeline" hidden></ol>
         </div>
 
-        <div id="peek-container">
+        <div id="peek-container" class="is-empty">
           <header class="doc-head">
             <div class="doc-meta-bar">
               <p id="peek-meta" class="doc-meta-tags muted">Select a file.</p>
@@ -205,8 +213,14 @@
 
           <div id="peek-empty" class="peek-empty-state">
             <svg class="empty-doc-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-            <p class="empty-title">No file selected</p>
-            <p class="empty-subtitle muted">Pick an item from the catalog, explore nodes in the mind map, or view sit-down events.</p>
+            <p class="empty-title">Pick something to read</p>
+            <p class="empty-subtitle muted">Choose an item from the catalog, or jump straight in:</p>
+            <div class="empty-actions">
+              <button type="button" class="doc-btn" data-jump="Decision">Browse decisions</button>
+              <button type="button" class="doc-btn" data-jump="Attention">Browse attention</button>
+              <button type="button" class="doc-btn" data-jump="map">Open mind map</button>
+            </div>
+            <p class="empty-hint muted"><kbd>/</kbd> search &nbsp;·&nbsp; <kbd>↑</kbd><kbd>↓</kbd> move in the catalog</p>
           </div>
 
           <div id="peek-fm" hidden></div>

@@ -155,14 +155,14 @@ function relWhen(when) {
  * @param {number} total
  * @param {(() => void) | null} onMore
  */
-function fillBoard(listId, items, total, onMore) {
+function fillBoard(listId, items, total, onMore, emptyText = "All clear") {
   const ul = document.getElementById(listId);
   ul.replaceChildren();
   const shown = items || [];
   if (shown.length === 0) {
     const li = document.createElement("li");
     li.className = "pulse-empty";
-    li.textContent = "None";
+    li.textContent = emptyText;
     ul.append(li);
     return;
   }
@@ -214,6 +214,7 @@ async function loadHeartbeat() {
   const d = body?.ok ? body.data : null;
   if (!d) {
     setText("strip", "No bundle yet.");
+    syncResumeClamp();
     fillFacts([]);
     document.getElementById("board-eyes").hidden = true;
     document.getElementById("board-later").hidden = true;
@@ -228,6 +229,7 @@ async function loadHeartbeat() {
   }
 
   setText("strip", d.handoff?.resume || "No journal yet.");
+  syncResumeClamp();
   const when = relWhen(d.handoff?.when);
   const last = d.handoff?.outcome ? `${d.handoff.outcome}${when ? ` (${when})` : ""}` : "";
   const branch = d.git?.branch ? `${d.git.branch} · ${d.git.dirty ? "dirty" : "clean"}` : "";
@@ -253,9 +255,9 @@ async function loadHeartbeat() {
   setText("open-count", d.openDecisionCount ? String(d.openDecisionCount) : "");
 
   fillBoard("eyes-list", d.needsEyes || [], d.needsEyesCount || 0, () => showCatalog({ type: "Attention", kind: "verify" }));
-  fillBoard("air-list", air, airTotal, () => showCatalog({ type: "Attention", status: "open" }));
+  fillBoard("air-list", air, airTotal, () => showCatalog({ type: "Attention", status: "open" }), "Nothing in the air");
   fillBoard("later-list", d.later || [], d.laterCount || 0, () => showCatalog({ type: "Attention", status: "later" }));
-  fillBoard("open-list", d.openDecisions || [], d.openDecisionCount || 0, null);
+  fillBoard("open-list", d.openDecisions || [], d.openDecisionCount || 0, null, "No open decisions");
 
   state.track = d.track || null;
   document.getElementById("view-sessions").hidden = !state.track;
@@ -316,6 +318,57 @@ async function loadTrack() {
   }
 }
 
+function metaLine(row) {
+  const meta = document.createElement("span");
+  meta.className = "row-meta";
+  const spec = KIND[row.type];
+  const label = document.createElement("span");
+  label.className = "row-kind";
+  label.textContent = spec ? spec.label : row.type || "";
+  meta.append(label);
+  if (row.status) {
+    const status = document.createElement("span");
+    status.className = `row-status status-${String(row.status).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    status.textContent = row.status;
+    meta.append(status);
+  }
+  const tags = Array.isArray(row.tags) ? row.tags.slice(0, 2) : [];
+  for (const tag of tags) {
+    const t = document.createElement("span");
+    t.className = "row-tag";
+    t.textContent = `#${tag}`;
+    meta.append(t);
+  }
+  return meta;
+}
+
+function catalogRow(row) {
+  const li = document.createElement("li");
+  if (row.path === state.path) li.className = "active";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  const spec = KIND[row.type];
+  btn.className = `row row-rich${spec ? ` kind-${row.type.toLowerCase()}` : ""}`;
+  btn.dataset.path = row.path;
+  if (row.status) btn.dataset.status = String(row.status).toLowerCase();
+  if (row.path === state.path) btn.setAttribute("aria-current", "true");
+  const mark = document.createElement("span");
+  mark.className = "row-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = spec ? spec.emoji : "•";
+  const body = document.createElement("span");
+  body.className = "row-body";
+  const title = document.createElement("span");
+  title.className = "row-title";
+  title.textContent = row.title;
+  title.title = row.title;
+  body.append(title, metaLine(row));
+  btn.append(mark, body);
+  btn.addEventListener("click", () => peek(row.path));
+  li.append(btn);
+  return li;
+}
+
 async function loadList() {
   const extra = {
     offset: state.offset,
@@ -343,32 +396,18 @@ async function loadList() {
   if (rows.length === 0) {
     const li = document.createElement("li");
     li.className = "pulse-empty";
-    li.textContent = state.q ? "No matches found." : "No items in this category.";
+    li.textContent = state.q ? `No matches for “${state.q}”.` : "No items in this category.";
     ul.append(li);
   }
 
-  for (const row of rows) {
-    const li = document.createElement("li");
-    if (row.path === state.path) li.className = "active";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "row";
-    btn.dataset.path = row.path;
-    if (row.path === state.path) btn.setAttribute("aria-current", "true");
-    const title = document.createElement("span");
-    title.className = "row-title";
-    title.textContent = row.title;
-    btn.append(kindChip(row.type), title);
-    btn.addEventListener("click", () => peek(row.path));
-    li.append(btn);
-    ul.append(li);
-  }
+  for (const row of rows) ul.append(catalogRow(row));
   document.getElementById("prev").disabled = state.offset <= 0;
   document.getElementById("next").disabled = end >= state.total;
 }
 
 function clearPeek(title, meta) {
   state.currentBody = "";
+  document.getElementById("peek-container").classList.add("is-empty");
   setText("peek-title", title);
   setText("peek-meta", meta);
   const fm = document.getElementById("peek-fm");
@@ -405,6 +444,7 @@ async function peek(path) {
 
   const emptyState = document.getElementById("peek-empty");
   if (emptyState) emptyState.hidden = true;
+  document.getElementById("peek-container").classList.remove("is-empty");
 
   const docActions = document.getElementById("doc-actions");
   if (docActions) docActions.hidden = false;
@@ -816,8 +856,130 @@ document.getElementById("peek-body").addEventListener("click", (ev) => {
   peek(link.dataset.path.split("#")[0]);
 });
 
+function syncResumeClamp() {
+  const strip = document.getElementById("strip");
+  const more = document.getElementById("resume-more");
+  if (!strip || !more) return;
+  strip.dataset.clamped = "true";
+  more.setAttribute("aria-expanded", "false");
+  more.textContent = "Show more";
+  requestAnimationFrame(() => {
+    more.hidden = !(strip.scrollHeight > strip.clientHeight + 1);
+  });
+}
+
+function initResume() {
+  const strip = document.getElementById("strip");
+  const more = document.getElementById("resume-more");
+  more.addEventListener("click", () => {
+    const open = strip.dataset.clamped === "true";
+    strip.dataset.clamped = open ? "false" : "true";
+    more.setAttribute("aria-expanded", String(open));
+    more.textContent = open ? "Show less" : "Show more";
+  });
+  window.addEventListener("resize", () => {
+    if (strip.dataset.clamped === "true") more.hidden = !(strip.scrollHeight > strip.clientHeight + 1);
+  });
+}
+
+function initPulseToggle() {
+  const pulse = document.getElementById("pulse");
+  const btn = document.getElementById("pulse-toggle");
+  const label = btn.querySelector(".pulse-toggle-text");
+  const apply = (collapsed) => {
+    pulse.classList.toggle("collapsed", collapsed);
+    btn.setAttribute("aria-expanded", String(!collapsed));
+    btn.title = collapsed ? "Expand overview" : "Collapse overview";
+    label.textContent = collapsed ? "Show overview" : "Hide overview";
+    syncResumeClamp();
+  };
+  apply(localStorage.getItem("mental-dashboard-pulse") === "collapsed");
+  btn.addEventListener("click", () => {
+    const collapsed = !pulse.classList.contains("collapsed");
+    localStorage.setItem("mental-dashboard-pulse", collapsed ? "collapsed" : "open");
+    apply(collapsed);
+  });
+}
+
+function initResizer() {
+  const main = document.getElementById("main");
+  const bar = document.getElementById("resizer");
+  const MIN = 280;
+  const MAX = 640;
+  const set = (px, persist) => {
+    const w = Math.min(MAX, Math.max(MIN, Math.round(px)));
+    main.style.setProperty("--aside-w", `${w}px`);
+    bar.setAttribute("aria-valuenow", String(w));
+    if (persist) localStorage.setItem("mental-dashboard-aside", String(w));
+  };
+  const saved = Number(localStorage.getItem("mental-dashboard-aside"));
+  if (saved) set(saved, false);
+
+  bar.addEventListener("pointerdown", (ev) => {
+    ev.preventDefault();
+    bar.setPointerCapture(ev.pointerId);
+    bar.classList.add("dragging");
+    document.body.classList.add("resizing");
+  });
+  bar.addEventListener("pointermove", (ev) => {
+    if (!bar.hasPointerCapture(ev.pointerId)) return;
+    set(ev.clientX - main.getBoundingClientRect().left, false);
+  });
+  const end = (ev) => {
+    if (!bar.hasPointerCapture(ev.pointerId)) return;
+    bar.releasePointerCapture(ev.pointerId);
+    bar.classList.remove("dragging");
+    document.body.classList.remove("resizing");
+    set(ev.clientX - main.getBoundingClientRect().left, true);
+  };
+  bar.addEventListener("pointerup", end);
+  bar.addEventListener("pointercancel", end);
+  bar.addEventListener("dblclick", () => {
+    main.style.removeProperty("--aside-w");
+    bar.removeAttribute("aria-valuenow");
+    localStorage.removeItem("mental-dashboard-aside");
+  });
+  bar.addEventListener("keydown", (ev) => {
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+    ev.preventDefault();
+    const current = document.querySelector("#main > aside").getBoundingClientRect().width;
+    set(current + (ev.key === "ArrowRight" ? 24 : -24), true);
+  });
+}
+
+// Arrow keys walk the catalog; Enter/Space open via the native button click.
+document.getElementById("list").addEventListener("keydown", (ev) => {
+  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+  const rows = [...document.querySelectorAll("#list button.row")];
+  const at = rows.indexOf(document.activeElement);
+  if (at < 0) return;
+  ev.preventDefault();
+  const next = rows[at + (ev.key === "ArrowDown" ? 1 : -1)];
+  if (next) next.focus();
+  else if (ev.key === "ArrowUp") searchInput.focus();
+});
+searchInput.addEventListener("keydown", (ev) => {
+  if (ev.key !== "ArrowDown") return;
+  const first = document.querySelector("#list button.row");
+  if (first) {
+    ev.preventDefault();
+    first.focus();
+  }
+});
+
+document.getElementById("peek-empty").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-jump]");
+  if (!btn) return;
+  const jump = btn.dataset.jump;
+  if (jump === "map") showView("map");
+  else showCatalog({ type: jump });
+});
+
 state.view = "list";
 initTheme();
+initResume();
+initPulseToggle();
+initResizer();
 renderChips();
 loadProjects().then(() => {
   loadHeartbeat();
