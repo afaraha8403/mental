@@ -1,5 +1,5 @@
 ---
-description: Build GitHub Copilot desktop extensions, Cursor canvas or plugins, OpenCode plugins, or publish Mental to a store or marketplace. Load the matching project skill first.
+description: Build GitHub Copilot desktop extensions, Cursor extensions or plugins, OpenCode plugins, or publish Mental to a store or marketplace. Load the matching project skill first.
 alwaysApply: false
 ---
 
@@ -10,11 +10,11 @@ Read the matching skill before writing code or running a release step:
 | Task | Skill |
 | --- | --- |
 | Copilot desktop extension: `extension.mjs`, canvases, tools (no MCP needed) | `.agents/skills/copilot-desktop-extensions/SKILL.md` |
-| Cursor plugin, rules, skills, canvas (no MCP needed) | `.agents/skills/cursor-canvas-and-plugins/SKILL.md` |
+| Cursor UI (VS Code extension on Open VSX), plugin, rules, skills; canvas is not a mod (no MCP needed) | `.agents/skills/cursor-extensions-and-plugins/SKILL.md` |
 | OpenCode plugin (v1 hooks, v2 server/TUI) | `.agents/skills/opencode-plugins/SKILL.md` |
 | Release or publish Mental: npm, Claude, Cursor, Copilot, Codex, OpenCode | `.agents/skills/publishing-mental-to-stores/SKILL.md` |
 
-Key facts: Copilot has no central store, only marketplace repos. Cursor has no documented canvas authoring API. OpenCode has no GUI canvas and no official publish page. Codex public submission needs a remote MCP server, which Mental lacks.
+Key facts: Copilot has no central store, only marketplace repos. Cursor Canvas is an agent artifact, not a mod; Cursor UI extension means a VS Code extension published to Open VSX. OpenCode has no GUI canvas and no official publish page. Codex public submission needs a remote MCP server, which Mental lacks.
 
 ## Maintaining them
 

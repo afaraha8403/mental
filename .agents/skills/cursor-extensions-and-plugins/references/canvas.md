@@ -2,6 +2,8 @@
 
 Source: `https://cursor.com/docs/agent/tools/canvas`. No developer authoring API is documented there.
 
+**Canvas is an agent-output artifact (dashboard, report, audit), not a mod or UI extension mechanism.** To add panels or views to Cursor itself, use a VS Code extension: [vscode-extensions.md](vscode-extensions.md).
+
 ## What is documented
 
 - Canvases are interactive artifacts shown beside the chat; the built-in `/canvas` skill produces them.

@@ -24,3 +24,7 @@ Sources: `https://cursor.com/docs/plugins`, `https://cursor.com/docs/reference/p
 5. The community directory `cursor.directory` is separate and not the official store.
 
 Do not submit without the user's go-ahead.
+
+## Not applicable: Open VSX
+
+Mental is a Cursor plugin, not a VS Code extension, so it is not published to Open VSX. Open VSX applies only if Mental ever ships an editor extension (see `cursor-extensions-and-plugins`).

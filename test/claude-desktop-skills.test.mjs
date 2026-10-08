@@ -19,7 +19,7 @@ const SKILLS = [
   "codex-desktop-plugins",
   "codex-desktop-skills",
   "copilot-desktop-extensions",
-  "cursor-canvas-and-plugins",
+  "cursor-extensions-and-plugins",
   "opencode-plugins",
   "publishing-mental-to-stores",
 ];
