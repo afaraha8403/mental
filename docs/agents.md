@@ -135,6 +135,18 @@ What it **cannot** do: reconstruct hours from git, fill a missed `start` from ch
 
 Human contract: [What time tracking can and cannot do](./track.md). Agent procedure: [optional/mental-track/SKILL.md](../optional/mental-track/SKILL.md).
 
+## Claude Desktop build skills
+
+Three standalone skills in `optional/` teach an agent to build for Claude Desktop. They are copy-in skills: not autoloaded by the plugin and not installed by `mental install`. Copy the folder you need into your agent's skills directory.
+
+| Build a… | Skill | What it is |
+| --- | --- | --- |
+| Mod (JS module in Claude Code) | [claude-desktop-mods](../optional/claude-desktop-mods/SKILL.md) | Hooks, panes, UI; CLI and Desktop Code tab |
+| Plugin (skills, commands, agents, hooks, MCP) | [claude-desktop-plugins](../optional/claude-desktop-plugins/SKILL.md) | `plugin.json`, requirements, per-surface support, publishing |
+| Extension (`.mcpb` local MCP server) | [claude-desktop-extensions](../optional/claude-desktop-extensions/SKILL.md) | One-click MCP bundle with manifest |
+
+A mod is a plugin plus a module, so start with the plugins skill when unsure.
+
 ## JSON envelope
 
 Stable:
