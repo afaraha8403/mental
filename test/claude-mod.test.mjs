@@ -628,6 +628,32 @@ test("desktop cards escape text and stay under the Svg cap", async () => {
   }
 });
 
+test("toolCardOf reads mental shell calls and themes the chat row", async () => {
+  const { toolCardOf } = await import("../claude-mod/lib/toolcard.mjs");
+  const { toolRowDesktop, themed } = await import("../claude-mod/lib/desktop.mjs");
+  assert.equal(toolCardOf({ input: { command: "ls -la" }, output: "x" }), null);
+  assert.equal(toolCardOf({ input: null, output: null }), null);
+  const park = toolCardOf({ input: { command: 'mental park --title "Ship <it>"' }, output: "ok" });
+  assert.equal(park?.state, "done");
+  assert.ok(park?.title);
+  assert.equal(toolCardOf({ input: { command: 'mental park --title "x"' }, output: "" })?.state, "running");
+  assert.equal(toolCardOf({ input: '{"command":"mental heartbeat --json"}', output: "" })?.kind.length > 0, true);
+  const el = (type) => (props) => ({ type, props });
+  const row = toolRowDesktop({ Svg: el("Svg"), Box: el("Box") }, { model: { ...park, title: "<b>&" }, theme: "auto" });
+  const svg = row.props.children[0].props;
+  assert.match(svg.source, /prefers-color-scheme:light/);
+  assert.doesNotMatch(svg.source, /<b>/);
+  assert.ok(svg.source.length <= 131072);
+  assert.ok(typeof themed === "function");
+  const eng = fakeEngine({});
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const hit = await eng.fire("ui.render", { component: "ToolUse", surface: "desktop", props: { input: { command: 'mental park --title "x"' }, output: "ok" } });
+  assert.ok(hit && hit !== undefined, "mental call gets a card");
+  const miss = await eng.fire("ui.render", { component: "ToolUse", surface: "terminal", props: { input: { command: 'mental park --title "x"' }, output: "ok" } });
+  assert.ok(!miss || !JSON.stringify(miss).includes("prefers-color-scheme"), "terminal untouched");
+});
+
 test("register degrades when heartbeat cannot run", async () => {
   const eng = fakeEngine({ fail: true });
   await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });

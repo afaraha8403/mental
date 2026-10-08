@@ -14,7 +14,7 @@ import { LOGO_PNG } from "./logo.mjs";
 import { bandStateOf, pressureReasonOf, topFiles, PRESSURE_CONTEXT_PCT, PRESSURE_EDITS } from "./model.mjs";
 
 /** Dashboard tokens (assets/dashboard/style.css). */
-export const T = {
+const DARK = {
   bg: "#09090b",
   surface: "#111114",
   elevated: "#18181c",
@@ -31,7 +31,78 @@ export const T = {
   emerald: "#10b981",
   rose: "#fb7185",
   purple: "#a855f7",
+  wash: "#ffffff",
+  inkA: "#ffffff",
+  inkB: "#c9c3e6",
+  heroA: "#120d22",
+  heroB: "#0a0910",
 };
+
+/** The same tokens for a light host (the dashboard's light theme). */
+const LIGHT = {
+  bg: "#fafafa",
+  surface: "#ffffff",
+  elevated: "#f4f4f5",
+  border: "#e4e4e7",
+  ink: "#18181b",
+  ink2: "#52525b",
+  ink3: "#71717a",
+  violet: "#7c3aed",
+  violet2: "#6d28d9",
+  lilac: "#8b5cf6",
+  sky: "#0284c7",
+  amber: "#b45309",
+  green: "#059669",
+  emerald: "#047857",
+  rose: "#e11d48",
+  purple: "#9333ea",
+  wash: "#18181b",
+  inkA: "#18181b",
+  inkB: "#6d28d9",
+  heroA: "#f5f0ff",
+  heroB: "#ece8fb",
+};
+
+export const PALETTES = { dark: DARK, light: LIGHT };
+
+/** Live tokens. Builders read this; `themed` swaps it for one build. */
+export const T = { ...DARK };
+
+/**
+ * Build a card in one theme, or in both when the host's theme is unknown: the
+ * two drawings share one SVG and a media query shows the one that matches
+ * (dark is what shows when styles are ignored).
+ * @param {() => { source: string, height: number, alt: string } | null} build
+ * @param {"dark" | "light" | "auto"} [theme]
+ */
+export function themed(build, theme = "auto") {
+  const run = (name) => {
+    const prev = { ...T };
+    Object.assign(T, PALETTES[name]);
+    try {
+      return build();
+    } finally {
+      Object.assign(T, prev);
+    }
+  };
+  if (theme === "dark" || theme === "light") return run(theme);
+  const d = run("dark");
+  const l = run("light");
+  if (!d || !l) return d || l;
+  const inner = (src) => src.replace(/^<svg[^>]*>/, "").replace(/<\/svg>$/, "");
+  const head = d.source.match(/^<svg[^>]*>/)[0];
+  const light = inner(l.source)
+    .replace(/\bid="([^"]+)"/g, 'id="$1L"')
+    .replace(/url\(#([^)]+)\)/g, "url(#$1L)");
+  const source = [
+    head,
+    "<style>.mL{display:none}@media (prefers-color-scheme:light){.mD{display:none}.mL{display:inline}}</style>",
+    `<g class="mD">${inner(d.source)}</g>`,
+    `<g class="mL" display="none">${light}</g>`,
+    "</svg>",
+  ].join("");
+  return { source, height: d.height, alt: d.alt };
+}
 
 export const SVG_MAX = 131072;
 const SANS = "Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
@@ -39,7 +110,8 @@ const MONO = "'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospa
 const PAD = 20;
 const MAX_ITEMS = 6;
 
-const TONES = { violet: T.violet2, purple: T.purple, sky: T.sky, amber: T.amber, green: T.emerald, zinc: T.ink2 };
+const toneOf = (tone) =>
+  ({ violet: T.violet2, purple: T.purple, sky: T.sky, amber: T.amber, green: T.emerald, zinc: T.ink2 })[tone];
 const KIND_LABEL = {
   thread: "Open thread",
   concern: "Concern",
@@ -120,11 +192,11 @@ function card({ id, width: W, height: H, body, defs = [], hero = false }) {
     : [`<rect width="${W}" height="${H}" fill="${T.surface}"/>`];
   const heroDefs = hero
     ? [
-        `<linearGradient id="${id}bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#120d22"/><stop offset="1" stop-color="#0a0910"/></linearGradient>`,
-        `<pattern id="${id}dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1" fill="#ffffff" fill-opacity="0.07"/></pattern>`,
+        `<linearGradient id="${id}bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${T.heroA}"/><stop offset="1" stop-color="${T.heroB}"/></linearGradient>`,
+        `<pattern id="${id}dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1" fill="${T.wash}" fill-opacity="0.07"/></pattern>`,
         `<radialGradient id="${id}glow"><stop offset="0" stop-color="${T.violet}" stop-opacity="0.42"/><stop offset="1" stop-color="${T.violet}" stop-opacity="0"/></radialGradient>`,
         `<radialGradient id="${id}glow2"><stop offset="0" stop-color="${T.sky}" stop-opacity="0.16"/><stop offset="1" stop-color="${T.sky}" stop-opacity="0"/></radialGradient>`,
-        `<linearGradient id="${id}ink" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9c3e6"/></linearGradient>`,
+        `<linearGradient id="${id}ink" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${T.inkA}"/><stop offset="1" stop-color="${T.inkB}"/></linearGradient>`,
       ]
     : [];
   const stroke = hero ? `stroke="${T.violet}" stroke-opacity="0.3"` : `stroke="${T.border}"`;
@@ -148,7 +220,7 @@ export function statusOf(vm, s, now) {
     case "compacting":
       return { state, label: "Compacting", color: T.violet2, pulse: true };
     case "receipt":
-      return { state, label: s.receipt.label, color: TONES[s.receipt.tone] || T.violet2, pulse: false };
+      return { state, label: s.receipt.label, color: toneOf(s.receipt.tone) || T.violet2, pulse: false };
     case "loading":
       return { state, label: "Reading", color: T.ink3, pulse: true };
     case "absent":
@@ -206,7 +278,7 @@ export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null }) 
     for (let i = 0; i < 3; i++) {
       const w = inner * [0.92, 0.78, 0.5][i];
       body.push(
-        `<rect x="${PAD}" y="${y + 14 + i * 24}" width="${r1(w)}" height="13" rx="6.5" fill="#ffffff" fill-opacity="0.06"><animate attributeName="fill-opacity" values="0.04;0.11;0.04" dur="1.6s" begin="${i * 0.2}s" repeatCount="indefinite"/></rect>`,
+        `<rect x="${PAD}" y="${y + 14 + i * 24}" width="${r1(w)}" height="13" rx="6.5" fill="${T.wash}" fill-opacity="0.06"><animate attributeName="fill-opacity" values="0.04;0.11;0.04" dur="1.6s" begin="${i * 0.2}s" repeatCount="indefinite"/></rect>`,
       );
     }
     y += 14 + 3 * 24;
@@ -263,7 +335,7 @@ export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null }) 
       alt += ` Last outcome: ${vm.outcome}.`;
     }
     y += 10;
-    body.push(`<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="#ffffff" stroke-opacity="0.07"/>`);
+    body.push(`<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="${T.wash}" stroke-opacity="0.07"/>`);
     y += 24;
     // Git foot: branch · changed files · when Mental last read the thread.
     const right = updatedAt ? `↻ ${agoOf(now - updatedAt)}` : "";
@@ -525,7 +597,7 @@ export function activitySvg({ log, now, width: W }) {
   const body = [eyebrow(PAD, 30, "Recorded in Mental")];
   let y = 56;
   rows.forEach((r, i) => {
-    const color = TONES[r.tone] || T.violet2;
+    const color = toneOf(r.tone) || T.violet2;
     if (i < rows.length - 1) body.push(`<line x1="${PAD + 4}" y1="${y + 4}" x2="${PAD + 4}" y2="${y + 20}" stroke="${T.border}" stroke-width="1.5"/>`);
     body.push(`<circle cx="${PAD + 4}" cy="${y - 4}" r="4" fill="${color}"/>`);
     const label = r.label;
@@ -624,7 +696,7 @@ export function trackSvg({ vm, now, width: W }) {
   const d0 = day.getTime() + 6 * 3600_000;
   const d1 = day.getTime() + 24 * 3600_000;
   const xOf = (ms) => PAD + ((Math.max(d0, Math.min(d1, ms)) - d0) / (d1 - d0)) * inner;
-  body.push(`<rect x="${PAD}" y="${y}" width="${inner}" height="8" rx="4" fill="#ffffff" fill-opacity="0.05"/>`);
+  body.push(`<rect x="${PAD}" y="${y}" width="${inner}" height="8" rx="4" fill="${T.wash}" fill-opacity="0.05"/>`);
   for (const h of [9, 12, 15, 18, 21]) {
     const x = xOf(day.getTime() + h * 3600_000);
     body.push(`<line x1="${r1(x)}" y1="${y + 12}" x2="${r1(x)}" y2="${y + 16}" stroke="${T.ink3}" stroke-opacity="0.6"/>`);
@@ -636,14 +708,14 @@ export function trackSvg({ vm, now, width: W }) {
     const color = stale ? T.amber : T.violet;
     body.push(`<rect x="${r1(x0)}" y="${y}" width="${r1(x1 - x0)}" height="8" rx="4" fill="url(#${id}seg)"/>`);
     body.push(`<circle cx="${r1(x1)}" cy="${y + 4}" r="5" fill="${color}" fill-opacity="0.25"><animate attributeName="r" values="5;10;5" dur="2.4s" repeatCount="indefinite"/><animate attributeName="fill-opacity" values="0.35;0;0.35" dur="2.4s" repeatCount="indefinite"/></circle>`);
-    body.push(`<circle cx="${r1(x1)}" cy="${y + 4}" r="4" fill="#ffffff"/>`);
+    body.push(`<circle cx="${r1(x1)}" cy="${y + 4}" r="4" fill="${T.surface}" stroke="${color}" stroke-width="2"/>`);
   } else {
     const x = xOf(now);
     body.push(`<line x1="${r1(x)}" y1="${y - 3}" x2="${r1(x)}" y2="${y + 11}" stroke="${T.ink3}" stroke-dasharray="2 2"/>`);
   }
   y += 28;
   const defs = [
-    `<linearGradient id="${id}ink" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="${T.lilac}"/></linearGradient>`,
+    `<linearGradient id="${id}ink" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${T.inkA}"/><stop offset="1" stop-color="${T.lilac}"/></linearGradient>`,
     `<linearGradient id="${id}seg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${stale ? T.amber : T.violet}" stop-opacity="0.35"/><stop offset="1" stop-color="${stale ? T.amber : T.violet2}"/></linearGradient>`,
   ];
   const height = Math.round(y + PAD - 4);
@@ -730,10 +802,12 @@ export function dashSvg({ width: W, dash = { state: "unknown" } }) {
  */
 export function paneDesktop(E, ctx) {
   const { Box, Button, Svg } = E;
-  const { vm, s, now, columns, updatedAt, cwd, log = [], error = "", dash } = ctx;
+  const { vm, s, now, columns, updatedAt, cwd, log = [], error = "", dash, theme = "auto" } = ctx;
   const width = widthOf(columns);
-  const svg = (built) =>
-    built ? Svg({ source: built.source, alt: built.alt, width, height: built.height }) : null;
+  const svg = (make) => {
+    const built = themed(make, theme);
+    return built ? Svg({ source: built.source, alt: built.alt, width, height: built.height }) : null;
+  };
   const row = (key, buttons) =>
     buttons.length ? Box({ key, flexDirection: "row", gap: 1, children: buttons }) : null;
   const linked = !!vm?.linked;
@@ -741,7 +815,7 @@ export function paneDesktop(E, ctx) {
   const running = !!track && track.runningCount > 0;
   const dashState = dash?.state || "unknown";
   const children = [
-    svg(heroSvg({ vm, s, now, width, error, updatedAt })),
+    svg(() => heroSvg({ vm, s, now, width, error, updatedAt })),
     row("actions", [
       ...(linked
         ? [
@@ -751,9 +825,9 @@ export function paneDesktop(E, ctx) {
         : []),
       Button({ key: "refresh", label: "↻ Refresh", onPress: ctx.onRefresh }),
     ]),
-    linked ? svg(needsSvg({ vm, now, width })) : null,
-    svg(sessionSvg({ s, now, width })),
-    svg(trackSvg({ vm, now, width })),
+    linked ? svg(() => needsSvg({ vm, now, width })) : null,
+    svg(() => sessionSvg({ s, now, width })),
+    svg(() => trackSvg({ vm, now, width })),
     track
       ? row("track", [
           running
@@ -761,10 +835,10 @@ export function paneDesktop(E, ctx) {
             : Button({ key: "track-start", label: "▶ Start clock", onPress: ctx.onTrackStart }),
         ])
       : null,
-    svg(filesSvg({ s, cwd, width })),
-    svg(activitySvg({ log, now, width })),
-    svg(guardrailsSvg({ vm, width })),
-    svg(dashSvg({ width, dash })),
+    svg(() => filesSvg({ s, cwd, width })),
+    svg(() => activitySvg({ log, now, width })),
+    svg(() => guardrailsSvg({ vm, width })),
+    svg(() => dashSvg({ width, dash })),
     row("dash", [
       Button({
         key: "dashboard",
@@ -779,9 +853,6 @@ export function paneDesktop(E, ctx) {
     gap: 1,
     paddingX: 2,
     paddingY: 1,
-    backgroundColor: T.bg,
-    width: "100%",
-    flexGrow: 1,
     children,
   });
 }
@@ -884,4 +955,57 @@ export function bandDesktop(E, ctx) {
     rows.push(Text({ color: secondColor, wrap: "truncate-end", children: [clip(second, cols)] }));
   }
   return Box({ flexDirection: "column", children: rows });
+}
+
+/**
+ * An inline chat row for a `mental …` shell call: logo, what it did, the title.
+ * @param {NonNullable<ReturnType<typeof import("./toolcard.mjs").toolCardOf>>} m
+ * @returns {{ source: string, height: number, alt: string }}
+ */
+export function toolCardSvg(m, { width: W = 460 } = {}) {
+  const id = "t";
+  const accent = m.state === "failed" ? T.rose : toneOf(m.tone) || T.violet2;
+  const left = PAD + 34;
+  const inner = W - left - PAD;
+  const body = [
+    `<rect x="0" y="14" width="3.5" height="H" rx="1.75" fill="${accent}"/>`,
+    `<image href="${LOGO_PNG}" xlink:href="${LOGO_PNG}" x="${PAD - 4}" y="16" width="26" height="26"/>`,
+    txt(left, 26, esc(m.kind.toUpperCase()), { size: 10, weight: 650, fill: accent, spacing: 1.3 }),
+  ];
+  if (m.state === "running") {
+    body.push(
+      `<circle cx="${W - PAD - 4}" cy="22" r="3.5" fill="${accent}"><animate attributeName="opacity" values="1;0.2;1" dur="1.2s" repeatCount="indefinite"/></circle>`,
+    );
+  }
+  let y = 48;
+  const lines = wrapLines(m.title, fitChars(inner, 14.5), 3);
+  for (const line of lines) {
+    body.push(txt(left, y, esc(line), { size: 14.5, weight: 600, fill: m.state === "running" ? T.ink2 : T.ink }));
+    y += 20;
+  }
+  if (m.detail) {
+    y += 1;
+    for (const line of wrapLines(m.detail, fitChars(inner, 11.5), 2)) {
+      body.push(txt(left, y, esc(line), { size: 11.5, fill: T.ink3 }));
+      y += 16;
+    }
+  }
+  const height = Math.max(58, Math.round(y + 8));
+  const fixed = body.map((b) => b.replace('height="H"', `height="${height - 28}"`));
+  return {
+    source: card({ id, width: W, height, body: fixed }),
+    height,
+    alt: `Mental — ${m.kind}: ${m.title}${m.detail ? `. ${m.detail}` : ""}`,
+  };
+}
+
+/** The chat row as an element: one themed Svg. */
+export function toolRowDesktop({ Svg, Box }, ctx) {
+  const width = ctx.width || 460;
+  const built = themed(() => toolCardSvg(ctx.model, { width }), ctx.theme);
+  if (!built) return null;
+  return Box({
+    flexDirection: "column",
+    children: [Svg({ source: built.source, alt: built.alt, width, height: built.height })],
+  });
 }

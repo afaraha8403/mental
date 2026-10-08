@@ -26,7 +26,8 @@ import {
   RECEIPT_MS,
 } from "./lib/model.mjs";
 import { bandView, paneView, TABS } from "./lib/views.mjs";
-import { bandDesktop, footerDesktop, paneDesktop } from "./lib/desktop.mjs";
+import { bandDesktop, footerDesktop, paneDesktop, toolRowDesktop } from "./lib/desktop.mjs";
+import { toolCardOf } from "./lib/toolcard.mjs";
 
 const PANE_ID = "mental";
 const PANE_TITLE = "Mental";
@@ -452,6 +453,19 @@ export const register = (on) => {
         frame,
       },
     );
+  });
+
+  on("ui.render", { component: "ToolUse" }, async ($, e, next) => {
+    if (!RICH_SURFACES.includes(e.surface)) return next(e);
+    const model = toolCardOf({ input: e.props?.input, output: e.props?.output });
+    if (!model) return next(e);
+    try {
+      const { Box, Svg } = await $.ui.resolve(e);
+      if (!Svg) return next(e);
+      return toolRowDesktop({ Box, Svg }, { model, theme: "auto" }) || next(e);
+    } catch {
+      return next(e);
+    }
   });
 
   on("ui.render", { component: "Pane" }, async ($, e, next) => {
