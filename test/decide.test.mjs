@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tempHome, initRepo, mental } from "./helpers.mjs";
 import { getJev, choice, noul, score } from "../bin/lib/jev.mjs";
 import { resolveDecide, setDecideConfig, loadConfig } from "../bin/lib/config.mjs";
-import { buildRequest, parseResponse, providerSettings, missingSetting } from "../bin/lib/decide-providers.mjs";
+import { buildRequest, parseResponse, providerSettings, missingSetting, PROVIDER_INFO } from "../bin/lib/decide-providers.mjs";
 
 const KEY = "sk_decide_SECRET_9876543210";
 
@@ -73,6 +73,11 @@ test("cloudflare: account-scoped url, model required, envelope unwrapped, ids ma
   assert.equal(wrapped.answers.a.noul, 0.3);
   const bare = parseResponse("cloudflare", { answers: { q1: { choice: "feat" } } }, built.idMap, QS);
   assert.equal(bare.answers.b.choice, "feat");
+});
+
+test("provider batch caps respect documented per-request limits", () => {
+  assert.equal(PROVIDER_INFO.openai.batchMax, 10);
+  assert.equal(PROVIDER_INFO.cloudflare.batchMax, 64);
 });
 
 test("typesafe and custom send the native shape with original ids", () => {

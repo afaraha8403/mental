@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The shipped agent rule and CLI reference now cover optional Jev: the `data.jev` hint, `data.similar`, `relink`, `retag` and `jev-*` doctor advice. Agents never set or run `option decide` / `option jev`.
 
 ### Fixes
+- OpenAI Decisions batches now cap at 10 questions per request (the documented limit) instead of 16. Verified the Cloudflare Clef response shape (`model`, `answers`, `usage`), which the adapter already handles bare or inside the REST `result` envelope.
 - Jev, found in live testing: `mental doctor` no longer suggests a junk topic when the bundle has almost no tags (a topic needs at least 3 files and 0.7 confidence), and `relink` and `show` now find candidates from body text, not only titles, with a calibrated 0.75 link threshold. The secret guard keeps its own 0.9 bar.
 - Fixed "no file selected" message persisting after document selection by enforcing `[hidden] { display: none !important; }` across all components so specificity rules do not override hidden view states.
 - Fixed mind map node crowding, overlap, and cluster collisions by replacing force simulations with a deterministic, structured radial/columnar layout with 600px cluster separation, 100px column gutters, 38px row gutters, and edge-to-edge hierarchical connecting lines.

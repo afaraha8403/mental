@@ -28,7 +28,7 @@ export const PROVIDER_INFO = {
     signup: "https://platform.openai.com/api-keys",
     url: "https://api.openai.com/v1/decisions",
     model: "gpt-6-luna",
-    batchMax: 16,
+    batchMax: 10,
     totalTokens: 48_000,
     stateTokens: 24_000,
   },
