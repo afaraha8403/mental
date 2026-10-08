@@ -19,4 +19,6 @@ If `mental heartbeat --json` includes `data.track.enabled`, follow the Mental Tr
 
 If you invoked `mental` this turn, end the user-visible reply with `🧠 **Mental**` then a markdown bullet list: `- emoji **Kind** › *action* › title`. Read with no title omits the third slot. Never inline. No `────────`. Not `</br>`. Example in the Mental skill. Not a code fence.
 
+Jev is an optional TypeSafe AI key that improves search, link and doctor results. If `data.jev` appears (heartbeat or a zero-hit search), relay its one line to the user once. Never set a key or run `mental option jev` yourself. If `data.similar` appears on a write, update that file instead of adding a near-duplicate. `jev-*` lines from `mental doctor` are advice: report them, do not auto-fix.
+
 On a pasted transcript or a plan-progress question ("where in the plan / what's left?"), use the Mental skill. Cheap reload is `mental heartbeat --json`, not a notes dump.

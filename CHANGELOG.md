@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The shipped agent rule and CLI reference now cover optional Jev: the `data.jev` hint, `data.similar`, `relink`, and `jev-*` doctor advice. Agents never set or run `option jev`.
+
 ### Features
 - Optional **Jev** assist (TypeSafe AI System One, a fast typed-judgment API). Mental works fully without it; with a key it adds: search recovery when a query has zero hits (typo/variant expansion, then Jev keeps only relevant files, `data.recovered`), a "similar to existing" hint on `journal`/`decide`/`note`/`attention`/`park` writes (`data.similar`, never blocks the write), suggested links on `mental show` (`data.suggestedLinks`), and `mental relink [path] [--apply]` (dry run by default; `--apply` writes only high-confidence links under `## Related`). Everything fails open: no key, network error, timeout, or HTTP error leaves behavior unchanged. Set the key with `mental option jev key <KEY>` (config, default) or env `MENTAL_JEV_KEY` / `TYPESAFE_API_KEY`; `mental option jev off` mutes it. Without a key, `heartbeat` and a zero-hit `search` print a rate-limited (3 days per surface) reminder that Jev exists (`data.jev`); `MENTAL_NO_HINTS=1` silences it. Agents relay the hint but never set a key or enable Jev (the MCP `option` tool rejects `jev`).
 - `mental doctor` runs optional Jev content checks when a key is set (all warn-only, exit code unchanged): stale residue that looks resolved/obsolete, contradictory decisions, a missing or vague handoff `Resume:`, topic suggestions for untagged files (suggest only, never written), and files that may contain credentials (paths only; values are redacted before sending). Personal-slice notes are never sent; calls fail open and count toward the daily budget. `mental doctor --offline` skips them.
