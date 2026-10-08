@@ -155,7 +155,7 @@ test("guards fail open on a server error and stay off for the personal slice", a
   const bad = await mock(0.95, { status: 500 });
   try {
     const { home, root } = await setup(bad);
-    const r = parse(await mentalAsync(home, root, ["journal", "--json", "--title", "T", "--body", `key ${SECRET}`, "--resume", "Edit a file"]));
+    const r = parse(await mentalAsync(home, root, ["journal", "--json", "--title", "T", "--body", "the admin password is hunter2", "--resume", "Edit a file"]));
     assert.equal(r.data.guard, undefined);
   } finally {
     bad.close();
