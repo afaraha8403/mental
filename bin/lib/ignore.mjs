@@ -20,7 +20,7 @@ export const MENTAL_IGNORE_COMMENT =
  * @param {{ env?: NodeJS.ProcessEnv }} [opts]
  */
 export function runGitGlobal(args, { env = process.env } = {}) {
-  return spawnSync("git", args, { encoding: "utf8", env });
+  return spawnSync("git", args, { encoding: "utf8", env, windowsHide: true });
 }
 
 export function gitAvailable({ env = process.env } = {}) {
@@ -96,6 +96,7 @@ export function checkMentalIgnored({ cwd, env = process.env } = {}) {
   const ci = spawnSync("git", ["-C", cwd, "check-ignore", "-q", "--", ".mental/probe"], {
     encoding: "utf8",
     env,
+    windowsHide: true,
   });
   if (ci.status === 128) return { ok: false, liveIgnored: null, reason: "not-a-repo" };
   const liveIgnored = ci.status === 0;

@@ -361,8 +361,9 @@ export const register = (on) => {
     redraw();
     const recheck = () =>
       host.after(DASH_RECHECK_MS, async () => {
+        const before = dash.state;
         await probeDash();
-        redraw();
+        if (dash.state !== before) redraw();
         if (dash.state === "starting") recheck();
       });
     recheck();
@@ -590,7 +591,10 @@ export const register = (on) => {
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
     if (!host || !BAND_SURFACES.includes(e.surface) || e.props.hasSurvey) return next(e);
     noteSurface(e.surface);
-    if (e.props.isWorking !== s.working) setWorking(!!e.props.isWorking);
+    // Coerce first: an absent prop (`undefined`) must not differ from `false`,
+    // or every render invalidates and the next render repeats it.
+    const working = !!e.props.isWorking;
+    if (working !== s.working) setWorking(working);
     if (isRich) {
       bandSeen = true;
       const { Box, Text, Button, Svg } = await $.ui.resolve(e);

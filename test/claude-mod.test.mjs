@@ -684,6 +684,17 @@ test("Claude Desktop: open pane ticks live, shows the refresh dial, stops on clo
   assert.ok(eng.calls.length >= close);
 });
 
+test("Claude Desktop: a band render without isWorking never repaints (no scroll snap-back loop)", async () => {
+  const eng = fakeEngine({ surfaces: ["desktop"] });
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const before = eng.calls.filter((c) => c[0] === "invalidate").length;
+  for (let i = 0; i < 3; i++) {
+    await eng.fire("ui.render", { component: "AbovePrompt", surface: "desktop", props: { bodyColumns: 48 } }, "PASSED");
+  }
+  assert.equal(eng.calls.filter((c) => c[0] === "invalidate").length, before, "an absent isWorking equals false and must not invalidate");
+});
+
 test("Claude Desktop: browse Decisions, open an item, go Back", async () => {
   const eng = fakeEngine({ surfaces: ["desktop"] });
   await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });

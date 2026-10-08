@@ -17,11 +17,13 @@ export function runGit(cwd, args, { env = process.env } = {}) {
   return spawnSync("git", ["-C", cwd, ...args], {
     encoding: "utf8",
     env,
+    // A detached process (the dashboard) has no console; without this each git call opens a window.
+    windowsHide: true,
   });
 }
 
 export function gitAvailable() {
-  const r = spawnSync("git", ["--version"], { encoding: "utf8" });
+  const r = spawnSync("git", ["--version"], { encoding: "utf8", windowsHide: true });
   return !r.error && r.status === 0;
 }
 

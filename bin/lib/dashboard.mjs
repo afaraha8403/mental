@@ -790,14 +790,14 @@ export function openBrowser(url) {
   try {
     const platform = process.platform;
     if (platform === "darwin") {
-      spawn("open", [url], { detached: true, stdio: "ignore" }).unref();
+      spawn("open", [url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
       return true;
     }
     if (platform === "win32") {
-      spawn("cmd.exe", ["/d", "/s", "/c", "start", "", url], { detached: true, stdio: "ignore" }).unref();
+      spawn("cmd.exe", ["/d", "/s", "/c", "start", "", url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
       return true;
     }
-    spawn("xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
+    spawn("xdg-open", [url], { detached: true, stdio: "ignore", windowsHide: true }).unref();
     return true;
   } catch {
     return false;
