@@ -14,6 +14,7 @@ import { sigTokens } from "./jev-assist.mjs";
 const MAX_ITEMS = 8;
 const MAX_PAIRS = 8;
 const MAX_TAGS = 25;
+const MIN_TAG_FILES = 3;
 const BODY_CHARS = 400;
 const TITLES_IN_CONTEXT = 12;
 
@@ -176,7 +177,12 @@ async function untaggedTopics(jev, root) {
   const concepts = listConcepts(root).filter((c) => c.type !== "Journal");
   const counts = new Map();
   for (const c of concepts) for (const t of c.tags) counts.set(t, (counts.get(t) || 0) + 1);
-  const vocab = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, MAX_TAGS).map(([t]) => t);
+  // A topic needs a few files behind it; a one-off tag is noise Jev would be forced to pick.
+  const vocab = [...counts.entries()]
+    .filter(([, n]) => n >= MIN_TAG_FILES)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_TAGS)
+    .map(([t]) => t);
   const untagged = concepts.filter((c) => c.tags.length === 0).slice(0, MAX_ITEMS);
   if (vocab.length === 0 || untagged.length === 0) return { ran: false, checks: [] };
   const criteria = Object.fromEntries([...vocab.map((t) => [t, null]), ["none", "no listed topic fits"]]);
@@ -186,7 +192,7 @@ async function untaggedTopics(jev, root) {
   );
   const r = await ask(jev, state, questions);
   const hits = untagged
-    .map((c, i) => ({ c, tag: r.answers[`u${i}`] ? pick(r.answers[`u${i}`]) : null }))
+    .map((c, i) => ({ c, tag: r.answers[`u${i}`] ? pick(r.answers[`u${i}`], THRESHOLDS.similar) : null }))
     .filter((x) => x.tag && x.tag !== "none");
   const checks = hits.length
     ? [mk("jev-untagged", false, `topic suggestions: ${hits.slice(0, 3).map((h) => `${h.c.title} -> ${h.tag}`).join(", ")}${hits.length > 3 ? `, +${hits.length - 3}` : ""}. Add with --tag on an update.`)]
@@ -214,7 +220,7 @@ async function secretGuard(jev, root) {
   const r = await ask(jev, state, questions);
   const hits = cand.filter((_, i) => {
     const s = r.answers[`f${i}`]?.p;
-    return typeof s === "number" && s >= THRESHOLDS.link;
+    return typeof s === "number" && s >= THRESHOLDS.secret;
   });
   const checks = hits.length
     ? [mk("jev-secrets", false, `${hits.length} file(s) may hold a credential or private data (${hits.slice(0, 3).map((c) => c.path).join(", ")}${hits.length > 3 ? `, +${hits.length - 3}` : ""}). Remove it and rotate the key.`)]

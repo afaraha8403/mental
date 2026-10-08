@@ -25,8 +25,10 @@ export const THRESHOLDS = {
   relevant: 0.5,
   /** Write: flag as "similar to". */
   similar: 0.7,
-  /** Link: propose as a link. */
-  link: 0.9,
+  /** Link: propose as a link. Calibrated live: genuine links score ~0.75-0.8, unrelated files stay under 0.2. */
+  link: 0.75,
+  /** Secret guard: high bar so a mention of "password" never raises an alarm. */
+  secret: 0.9,
   /** Link: show as "maybe". Below this is silent. */
   linkMaybe: 0.5,
   /** Choice/Score: minimum model confidence before an answer is acted on or shown as a pick. */

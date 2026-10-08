@@ -53,6 +53,7 @@ const fixture = () =>
     "decisions/use-files-only.md": md({ title: "Search index storage lives in plain files", type: "Decision", status: "decided", tags: ["index"], description: "search index storage files" }, "No sqlite index."),
     "notes/untagged.md": md({ title: "Login flow notes", type: "Note" }, "How the auth login flow works."),
     "notes/auth.md": md({ title: "Auth overview", type: "Note", tags: ["auth"] }, "Auth overview."),
+    "notes/auth2.md": md({ title: "Auth tokens", type: "Note", tags: ["auth"] }, "Auth token lifetimes."),
     "notes/creds.md": md({ title: "Deploy credentials", type: "Note", tags: ["ops"] }, "The deploy password is hunter2hunter2hunter2hunter2hunter2."),
     "journal/2026-01-01.md": md({ type: "Journal" }, "# 2026-01-01\n\n## 10:00 — did a thing\nResume: keep going"),
   });
@@ -89,6 +90,22 @@ test("deepChecks: confident answers become warn findings; weak ones stay silent"
   const lowConf = fakeJev((id) => (id.startsWith("s") ? ch("resolved", 0.2) : id === "quality" ? ch("vague", 0.2) : nl(0.1)));
   const weak = await deepChecks({ jev: lowConf, home: null, root: fixture(), slice: true, days: 0 });
   assert.deepEqual(weak.map((c) => c.id), ["jev"]);
+});
+
+test("deepChecks: topic suggestions need a real vocabulary and confident answers", async () => {
+  const sparse = bundle({
+    "notes/a.md": md({ title: "A", type: "Note", tags: ["lone"] }, "a"),
+    "notes/b.md": md({ title: "B", type: "Note", tags: ["lone"] }, "b"),
+    "notes/c.md": md({ title: "C", type: "Note" }, "c"),
+  });
+  const jev = fakeJev(() => ch("lone"));
+  const out = await deepChecks({ jev, home: null, root: sparse, slice: true, days: 0 });
+  assert.ok(!out.some((c) => c.id === "jev-untagged"));
+  assert.ok(!jev.calls.some((c) => Object.keys(c.questions).some((id) => id.startsWith("u"))), "no vocabulary, no question");
+
+  const unsure = fakeJev((id) => (id.startsWith("u") ? ch("auth", 0.6) : nl(0.1)));
+  const weak = await deepChecks({ jev: unsure, home: null, root: fixture(), slice: true, days: 0 });
+  assert.ok(!weak.some((c) => c.id === "jev-untagged"), "0.6 confidence is not enough to suggest a topic");
 });
 
 test("deepChecks: credentials are redacted before they are sent", async () => {
@@ -149,6 +166,7 @@ test("mental doctor: runs Jev checks when keyed, skips with --offline, exit code
   try {
     mental(home, root, ["note", "--json", "--title", "A note", "--tag", "topic", "--body", "hello"]);
     mental(home, root, ["note", "--json", "--title", "Another", "--tag", "topic", "--body", "more"]);
+    mental(home, root, ["note", "--json", "--title", "Third", "--tag", "topic", "--body", "even more"]);
     const where = parse(mental(home, root, ["where", "--json"]));
     const bundleRoot = where.data.root;
     mkdirSync(join(bundleRoot, "notes"), { recursive: true });

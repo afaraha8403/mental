@@ -182,14 +182,16 @@ export async function suggestLinks({ jev, root, path }) {
   if (!target) return empty;
   const tTags = new Set(target.tags.map((t) => t.toLowerCase()));
   const tTokens = new Set(sigTokens(`${target.title} ${target.description}`));
+  const tBody = new Set(sigTokens(target.body.slice(0, BODY_CHARS)));
   const scored = [];
   for (const c of all) {
     if (c.path === target.path) continue;
     if (linked(target.body, c.body, target.path, c.path)) continue;
     const sharedTags = c.tags.filter((t) => tTags.has(t.toLowerCase())).length;
     const sharedWords = sigTokens(`${c.title} ${c.description}`).filter((t) => tTokens.has(t)).length;
+    const sharedBody = sigTokens(c.body.slice(0, BODY_CHARS)).filter((t) => tBody.has(t)).length;
     const sameAgainst = target.against && c.against === target.against ? 1 : 0;
-    const rank = sharedTags * 2 + sharedWords + sameAgainst;
+    const rank = sharedTags * 2 + sharedWords + sharedBody / 2 + sameAgainst;
     if (rank >= 2) scored.push({ c, rank });
   }
   scored.sort((a, b) => b.rank - a.rank || b.c.mtime - a.c.mtime);

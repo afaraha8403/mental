@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mental backup --out <dir>` packs this machine's OKF and identities into a portable directory (no sqlite, no hours, no machine paths). `mental restore --from` merges per UUID so dest-ahead work stays; `--replace --confirm REPLACE` is disaster-only for packed slices.
 
 ### Fixes
+- Jev, found in live testing: `mental doctor` no longer suggests a junk topic when the bundle has almost no tags (a topic needs at least 3 files and 0.7 confidence), and `relink` and `show` now find candidates from body text, not only titles, with a calibrated 0.75 link threshold. The secret guard keeps its own 0.9 bar.
 - Fixed "no file selected" message persisting after document selection by enforcing `[hidden] { display: none !important; }` across all components so specificity rules do not override hidden view states.
 - Fixed mind map node crowding, overlap, and cluster collisions by replacing force simulations with a deterministic, structured radial/columnar layout with 600px cluster separation, 100px column gutters, 38px row gutters, and edge-to-edge hierarchical connecting lines.
 - Fixed node dragging snapping back on mouse release by persisting drag coordinates in a pinned node store, disabling snap-back forces, and visually indicating pinned nodes with a dashed accent border.
