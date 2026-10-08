@@ -23,6 +23,7 @@ import {
 } from "./similar.mjs";
 import { cmdHandoffS as cmdHandoff } from "../lib/similar.mjs";
 import { cmdPulse } from "../commands/pulse.mjs";
+import { cmdBrief } from "../commands/brief.mjs";
 import { VERSION, CMD } from "./pkg.mjs";
 import { mcpToolsFromCatalog } from "./catalog.mjs";
 
@@ -90,6 +91,7 @@ function runTool(name, args, ctx) {
         tag: args.tag,
         kind: args.kind,
         any: args.any === true,
+        rank: args.rank === true,
       },
     });
   }
@@ -199,6 +201,9 @@ function runTool(name, args, ctx) {
     });
   }
   if (name === "pulse") return capture(cmdPulse, base);
+  if (name === "brief") {
+    return capture(cmdBrief, { ...base, flags: { hops: args.hops, find: args.find, "no-rank": args.no_rank === true } });
+  }
   if (name === "option") {
     const feat = String(args.feature || "").toLowerCase();
     if (feat === "jev" || feat === "decide") {

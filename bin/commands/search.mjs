@@ -7,6 +7,7 @@ import { mergeSearchResults, searchBundle, tokenizeQuery } from "../lib/index.mj
 import { printResult, EXIT_USAGE } from "../lib/output.mjs";
 import { getJev, jevHint, formatJevHint } from "../lib/jev.mjs";
 import { recoverSearch } from "../lib/jev-assist.mjs";
+import { rerankHits } from "../lib/rerank.mjs";
 
 function emptyFound(q, any) {
   const tokens = tokenizeQuery(String(q).trim().toLowerCase());
@@ -85,7 +86,17 @@ export function cmdSearch(args, io = {}) {
     return 0;
   };
 
-  if (found.hits.length > 0 || !root) return finish(found);
+  if (found.hits.length > 0 || !root) {
+    if (args.flags?.rank === true && root && found.hits.length > 1) {
+      const rj = getJev(home, env);
+      if (rj && !(resolved.data.mode === "personal" && !rj.personal)) {
+        return rerankHits({ jev: rj, queries, hits: found.hits })
+          .catch(() => null)
+          .then((r) => (r && r.ok ? finish({ ...found, hits: r.hits }, { ranked: true, via: "jev" }) : finish(found)));
+      }
+    }
+    return finish(found);
+  }
 
   const jev = getJev(home, env);
   if (!jev) {

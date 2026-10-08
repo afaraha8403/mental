@@ -169,6 +169,7 @@ export const CATALOG = {
     ],
     flags: FILTER_FLAGS.concat([
       b("any", { summary: "OR tokens instead of AND (union of words in one query)" }),
+      b("rank", { summary: "Re-order hits by relevance with a decision model (optional; needs a key; falls back to the normal order)" }),
     ]),
     effects: "read_only",
     rest: { name: "q", summary: "Search query", mcpName: "q", required: true },
@@ -234,6 +235,33 @@ export const CATALOG = {
     flags: [b("apply", { summary: "Append high-confidence links to the file as markdown (default: dry run)" })],
     effects: "non_idempotent",
     rest: { name: "path", summary: "Bundle-relative path (default: 5 most recent non-journal files)" },
+  },
+  brief: {
+    name: "brief",
+    group: "Daily",
+    summary: "One paste-ready continue packet for a new agent or chat: resume, last hop, git, capped residue and unsettled decisions, recent hops. Read-only; no transcript. With a decision model, residue is ordered by relevance to the current branch and changes.",
+    usage: `${CMD} brief [--hops N] [--find WORD]`,
+    examples: [`${CMD} brief`, `${CMD} brief --json`, `${CMD} brief --hops 6 --find catalog`],
+    flags: [
+      v("hops", { summary: "Recent hops to list (1-10, default 3)" }),
+      v("find", { summary: "Only hops whose title or resume contains this word" }),
+      b("no-rank", { mcpName: "no_rank", summary: "Skip decision-model relevance ordering" }),
+    ],
+    effects: "read_only",
+    mcp: true,
+  },
+  extract: {
+    name: "extract",
+    group: "Lookup",
+    summary: "Pull residue out of pasted meeting notes or a transcript with a decision model (optional; needs a key). Proposes actions, decisions and concerns; dry run by default; --apply writes them (needs --tag). The raw text is never stored.",
+    usage: `${CMD} extract <file|-> [--apply --tag <slug>]`,
+    examples: [`${CMD} extract standup.txt`, `cat notes.txt | ${CMD} extract - --json`, `${CMD} extract standup.txt --apply --tag planning`],
+    flags: [
+      b("apply", { summary: "Write each proposal as an attention or open decision (default: dry run)" }),
+      v("tag", { summary: "Topic slug for written files (required with --apply)" }),
+    ],
+    effects: "non_idempotent",
+    rest: { name: "file", summary: "Text file to read, or - for stdin" },
   },
   retag: {
     name: "retag",
