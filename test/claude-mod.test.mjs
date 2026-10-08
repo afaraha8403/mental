@@ -477,10 +477,12 @@ test("Claude Desktop: footer opener, rich card pane, silent /mental, remembered 
 
   const band = await eng.fire("ui.render", { component: "AbovePrompt", surface: "desktop", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } }, "PASSED");
   const bandKeys = assertValidTree(band);
-  assert.ok(!bandKeys.has("mental-toggle"), "the footer is the one opener; the band has no button");
+  assert.ok(!bandKeys.has("mental-toggle"), "the footer is the one opener; the band has no toggle");
+  assert.ok(bandKeys.has("band-needs"), "'N needs you' is a button");
+  assert.match(textOf(band), /Verify docked pane at 110 cols/, "band names what needs you");
   let bandButtons = 0;
   walk(band, (n) => n.type === "Button" && bandButtons++);
-  assert.equal(bandButtons, 0);
+  assert.equal(bandButtons, 1);
   const slim = await eng.fire("ui.render", { component: "SessionMode", surface: "desktop", props: { modes: [] } });
   assert.doesNotMatch(textOf(slim), /need/, "with the band showing, the footer is just the opener");
   const mobile = await eng.fire("ui.render", { component: "AbovePrompt", surface: "mobile", props: { hasSurvey: false, maxRows: 4, bodyColumns: 60 } }, "PASSED");

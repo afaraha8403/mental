@@ -425,15 +425,18 @@ export const register = (on) => {
     if (e.props.isWorking !== s.working) setWorking(!!e.props.isWorking);
     if (isRich) {
       bandSeen = true;
-      const { Box, Text, Svg } = await $.ui.resolve(e);
+      const { Box, Text, Button, Svg } = await $.ui.resolve(e);
       return bandDesktop(
-        { Box, Text, Svg },
+        { Box, Text, Button, Svg },
         {
           vm,
           s,
           now: nowOf(),
           columns: e.props.bodyColumns,
           maxRows: Math.min(2, e.props.maxRows || 2),
+          onNeeds: () => {
+            if (!isPaneOpen) void togglePane();
+          },
         },
       );
     }

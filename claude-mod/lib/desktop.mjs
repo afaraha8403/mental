@@ -828,7 +828,7 @@ export function logoSvg(size = 18) {
  * @param {{ Box: Function, Text: Function, Button: Function, Svg?: Function }} E
  */
 export function bandDesktop(E, ctx) {
-  const { Box, Text, Svg } = E;
+  const { Box, Text, Button, Svg } = E;
   const { vm, s, now, columns, maxRows = 2 } = ctx;
   const st = statusOf(vm, s, now);
   const cols = Math.max(40, Number(columns) || 100);
@@ -857,7 +857,11 @@ export function bandDesktop(E, ctx) {
         flexShrink: 1,
         children: [Text({ dimColor: true, wrap: "truncate-end", children: [clip(message, Math.max(8, cols - fixed))] })],
       }),
-      needs ? Text({ color: needsColor, bold: true, children: [needs] }) : null,
+      needs && Button && ctx.onNeeds
+        ? Button({ key: "band-needs", label: `${needs} ›`, onPress: ctx.onNeeds })
+        : needs
+          ? Text({ color: needsColor, bold: true, children: [needs] })
+          : null,
     ].filter(Boolean),
   });
   let second = "";
@@ -871,6 +875,9 @@ export function bandDesktop(E, ctx) {
   } else if (st.state === "compacting") {
     second = "Compacting context. The resume point is safe in Mental.";
     secondColor = T.violet2;
+  } else if (items.length) {
+    second = `${items[0].label} · ${items[0].title}${items.length > 1 ? `  +${items.length - 1} more` : ""}`;
+    secondColor = items[0].color;
   }
   const rows = [head];
   if (second && maxRows >= 2) {
