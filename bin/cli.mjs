@@ -33,6 +33,7 @@ import { cmdShow } from "./commands/show.mjs";
 import { cmdHeartbeat } from "./commands/heartbeat.mjs";
 import { cmdRemap } from "./commands/remap.mjs";
 import { cmdSplit } from "./commands/split.mjs";
+import { cmdMove } from "./commands/move.mjs";
 import { cmdLink } from "./commands/link.mjs";
 import { cmdBackup } from "./commands/backup.mjs";
 import { cmdRestore } from "./commands/restore.mjs";
@@ -77,6 +78,7 @@ export const COMMANDS = {
   attention: cmdAttentionS,
   remap: cmdRemap,
   split: cmdSplit,
+  move: cmdMove,
   new: cmdSplit,
   link: cmdLink,
   backup: cmdBackup,

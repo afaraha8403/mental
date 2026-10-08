@@ -1,7 +1,7 @@
 /**
  * `mental note` — scaffold a durable note (only if it will save future time).
  */
-import { resolveBundle } from "../lib/resolve.mjs";
+import { resolveWriteBundle } from "../lib/scope.mjs";
 import { bundleName, ensureSkeleton, missingCreateTag, tagsFromFlag, writeNote } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
@@ -35,13 +35,7 @@ export function cmdNote(args, io = {}) {
     printResult(stdout, args, false, undefined, missingCreateTag("note"));
     return EXIT_USAGE;
   }
-  const resolved = resolveBundle({
-    cwd: args.cwd ?? process.cwd(),
-    home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
-    env: args.env ?? process.env,
-    dir: args.dir ?? null,
-    write: true,
-  });
+  const resolved = resolveWriteBundle(args);
   if (!resolved.ok) {
     printResult(stdout, args, false, undefined, resolved.error);
     return 1;

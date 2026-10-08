@@ -33,6 +33,26 @@ export function tempHome(prefix = "mental-") {
 }
 
 /**
+ * `node:test` skip option: a reason string when this account cannot create symlinks
+ * (Windows without Developer Mode or elevation raises EPERM), otherwise false.
+ * @type {string | false}
+ */
+export const symlinkSkip = (() => {
+  const dir = mkdtempSync(join(tmpdir(), "mental-symprobe-"));
+  try {
+    writeFileSync(join(dir, "target"), "x");
+    symlinkSync(join(dir, "target"), join(dir, "link"));
+    return false;
+  } catch (err) {
+    return err && (err.code === "EPERM" || err.code === "EACCES")
+      ? `symlinks not permitted on this account (${err.code}); enable Developer Mode or run elevated`
+      : false;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+})();
+
+/**
  * Isolated git env so tests never read or write the machine gitconfig.
  * @param {string} home
  */

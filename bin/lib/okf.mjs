@@ -408,6 +408,33 @@ export function recentJournalSections(root, limit = 8) {
 }
 
 /**
+ * Markdown files under a bundle dir, recursively, as dir-relative posix paths,
+ * newest name first. Matches how `list` walks the bundle, so counts agree.
+ * @param {string} dir absolute
+ * @returns {string[]}
+ */
+export function listMarkdownRecursive(dir) {
+  /** @type {string[]} */
+  const out = [];
+  const walkDir = (abs, rel) => {
+    let entries;
+    try {
+      entries = readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith(".")) continue;
+      const next = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) walkDir(join(abs, e.name), next);
+      else if (e.name.endsWith(".md")) out.push(next);
+    }
+  };
+  walkDir(dir, "");
+  return out.sort().reverse();
+}
+
+/**
  * Decided constraints, newest filename first. Titles only on the pulse.
  * @param {string} root
  */
@@ -415,7 +442,7 @@ export function listDecidedGuardrails(root) {
   const dir = join(root, "decisions");
   if (!existsSync(dir)) return [];
   const out = [];
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md")).sort().reverse()) {
+  for (const file of listMarkdownRecursive(dir)) {
     const text = readFileSync(join(dir, file), "utf8");
     const { data } = parseFrontmatter(text);
     if (String(data.status || "") !== "decided") continue;
@@ -449,10 +476,10 @@ export function listOpenDecisions(root) {
   const dir = join(root, "decisions");
   if (!existsSync(dir)) return [];
   const out = [];
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md")).sort().reverse()) {
+  for (const file of listMarkdownRecursive(dir)) {
     const text = readFileSync(join(dir, file), "utf8");
     const { data } = parseFrontmatter(text);
-    const status = String(data.status || "");
+    const status = String(data.status || "open");
     if (status === "open" || status === "deferred") {
       out.push({
         path: `decisions/${file}`,
@@ -556,7 +583,7 @@ export function listOpenAttention(root) {
   const dir = join(root, "attention");
   if (!existsSync(dir)) return [];
   const out = [];
-  for (const file of readdirSync(dir).filter((f) => f.endsWith(".md")).sort().reverse()) {
+  for (const file of listMarkdownRecursive(dir)) {
     const text = readFileSync(join(dir, file), "utf8");
     const { data, body } = parseFrontmatter(text);
     const status = String(data.status || "open");

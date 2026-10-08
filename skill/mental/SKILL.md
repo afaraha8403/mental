@@ -187,6 +187,16 @@ Lists capped at 7; counts via `attentionCount` / `openDecisionCount` /
 decisions: `mental list --type Decision --status open --json`. Extra later:
 `mental list --type Attention --status later --json`. Use `mental status
 --json` when you also need notes.
+A `Stale (> 14d)` block lists open/deferred decisions and open/later attention
+that have sat untouched (`stale` in JSON). On orient, propose resolving,
+deciding, or superseding them; never delete without the user's say-so.
+`list` and `search` page (default 50): use `--limit`, `--offset`, `--all`; read
+`total` / `truncated` / `nextOffset`. `--since` / `--on YYYY-MM-DD` filter by
+timestamp. `--project <id|name>` reads one other project and `--all-projects`
+reads every bound project (rows/hits carry `project`; paging runs over the union).
+Filed something in the wrong project? `mental move <path> --to <project>` (or
+`attention --title … --move-to <project>`) re-files it with its timestamp;
+`attention`/`decide`/`note` also take `--project` to file elsewhere directly.
 `status` refreshes `status/current.md` as a disposable cache — not SoT. Never
 block work if Mental errors; mention it and continue.
 
@@ -244,6 +254,10 @@ working memory after a hop but is not a choice-fork and not a durable fact:
 - `status: later` — "note that for later", "come back to this", "let's do this
   later". Default kind `thread`. Not park (park is an interruption and needs
   `--resume`). Never use `note` for "for later".
+- Settled facts are not residue. Outcomes and corrections ("DONE …",
+  "CLOSED …", "CORRECTION …") go to `note` (durable) or the journal, or close
+  the original item with `--status resolved`. `attention` warns when a new open
+  item's title starts with one of those words.
 - `status: resolved` — **must resolve**; residue that cannot close is a
   graveyard. Cap ≤7 on the heartbeat. Merge duplicates.
 

@@ -75,6 +75,7 @@ const KIND_EMOJI = {
   attention: "🚦",
   decision: "🎯",
   note: "📝",
+  move: "📦",
   read: "🔍",
 };
 
@@ -83,6 +84,7 @@ const KIND_ASCII = {
   attention: "[attention]",
   decision: "[decision]",
   note: "[note]",
+  move: "[move]",
   read: "[read]",
 };
 

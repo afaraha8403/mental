@@ -55,6 +55,20 @@ const FILTER_FLAGS = [
   v("kind", { summary: "Attention kind", enum: ["direction", "concern", "thread", "verify"] }),
 ];
 
+const PAGE_FLAGS = [
+  v("limit", { mcpType: "integer", summary: "Page size (default 50; integer >= 1)" }),
+  v("offset", { mcpType: "integer", summary: "Skip this many rows (default 0)" }),
+  b("all", { summary: "Return every row (cannot combine with --limit/--offset)" }),
+  v("since", { summary: "Only items on/after YYYY-MM-DD (local day) or an ISO timestamp, by frontmatter timestamp else mtime" }),
+  v("on", { summary: "Only items on this local day (YYYY-MM-DD)" }),
+];
+
+const SCOPE_FLAGS = [
+  v("project", { summary: "Read one other project instead of the active one (id, id prefix, or name from bindings)" }),
+  b("all-projects", { mcpName: "all_projects", summary: "Read every bound project (rows carry `project`; paging applies to the union)" }),
+];
+
+const WRITE_PROJECT = v("project", { summary: "File into another project's bundle instead of the active one (id, id prefix, or name from bindings)" });
 const VIA = v("via", { summary: "Short client token (cursor, claude-code, copilot, codex, opencode, mcp, cli). Not a session id." });
 const AGAINST = v("against", { summary: "Repo-relative plan path (no ..)" });
 const TITLE = v("title", { summary: "OKF title (same title updates)" });
@@ -125,6 +139,7 @@ export const CATALOG = {
       v("body", { summary: "Why this choice (required when creating)" }),
       v("slug"),
       v("tag", { summary: "Required on create: 1–3 comma-separated topic slugs. Omit on update to keep existing tags." }),
+      WRITE_PROJECT,
       VIA,
     ],
     effects: "idempotent",
@@ -150,6 +165,8 @@ export const CATALOG = {
       BODY,
       v("slug"),
       v("tag", { summary: "Required on create: 1–3 comma-separated topic slugs. Omit on update to keep existing tags." }),
+      WRITE_PROJECT,
+      v("move-to", { mcpName: "move_to", summary: "Re-file this existing item into another project (id, prefix, or name), keeping timestamp and body. Same as `mental move`." }),
       AGAINST,
       VIA,
     ],
@@ -167,7 +184,7 @@ export const CATALOG = {
       `${CMD} search leftover overlay --any --json`,
       `${CMD} search -- -label`,
     ],
-    flags: FILTER_FLAGS.concat([
+    flags: FILTER_FLAGS.concat(PAGE_FLAGS, SCOPE_FLAGS, [
       b("any", { summary: "OR tokens instead of AND (union of words in one query)" }),
       b("rank", { summary: "Re-order hits by relevance with a decision model (optional; needs a key; falls back to the normal order)" }),
     ]),
@@ -208,10 +225,10 @@ export const CATALOG = {
   list: {
     name: "list",
     group: "Lookup",
-    summary: "List OKF concepts with typed frontmatter filters (no query). Default cap 50; JSON includes truncated and total.",
+    summary: "List OKF concepts with typed frontmatter filters (no query). Active bundle by default; --project <id|name> reads one other project, --all-projects reads every binding (rows carry `project`). Default page 50; page with --limit/--offset or --all; --since/--on filter by date. JSON includes total, returned, truncated, nextOffset; rows carry timestamp, updated, project.",
     usage: `${CMD} list`,
-    examples: [`${CMD} list --type Decision --status open`, `${CMD} list --json --kind verify`],
-    flags: FILTER_FLAGS,
+    examples: [`${CMD} list --type Decision --status open`, `${CMD} list --json --kind verify`, `${CMD} list --all --since 2026-09-01`, `${CMD} list --limit 20 --offset 20`, `${CMD} list --all-projects --status open --all`],
+    flags: FILTER_FLAGS.concat(PAGE_FLAGS, SCOPE_FLAGS),
     effects: "read_only",
     mcp: true,
   },
@@ -300,6 +317,20 @@ export const CATALOG = {
     effects: "non_idempotent",
     rest: { name: "file", summary: "Bundle-relative path of the stale note or decision", mcpName: "file", required: true },
   },
+  move: {
+    name: "move",
+    group: "Write",
+    summary: "Re-file one attention/decision/note into another project's bundle, keeping its timestamp, frontmatter and body. Source is removed after the target is written; a name clash gets a -2 suffix. Warns when other files still link to it.",
+    usage: `${CMD} move <path> --to <project>`,
+    examples: [
+      `${CMD} move attention/2026-09-01-wrong-bundle.md --to other-repo`,
+      `${CMD} move notes/some-fact.md --to <project-uuid> --json`,
+    ],
+    flags: [v("to", { required: true, summary: "Target project (id, id prefix, or name from bindings)" }), PATH],
+    effects: "non_idempotent",
+    rest: { name: "path", summary: "Bundle-relative path (attention/, decisions/ or notes/)", mcpName: "path", required: true },
+    mcp: true,
+  },
   schema: {
     name: "schema",
     group: "Lookup",
@@ -336,6 +367,7 @@ export const CATALOG = {
       BODY,
       v("slug"),
       v("tag", { summary: "Required: 1–3 comma-separated topic slugs." }),
+      WRITE_PROJECT,
     ],
     effects: "idempotent",
     mcp: true,
@@ -707,7 +739,7 @@ export function mcpInputSchema(c) {
     const key = f.mcpName || f.name.replace(/-/g, "_");
     if (properties[key]) continue;
     /** @type {Record<string, unknown>} */
-    const prop = { type: f.takesValue === false ? "boolean" : "string" };
+    const prop = { type: f.mcpType || (f.takesValue === false ? "boolean" : "string") };
     if (f.summary) prop.description = f.summary;
     if (f.enum) prop.enum = f.enum;
     properties[key] = prop;

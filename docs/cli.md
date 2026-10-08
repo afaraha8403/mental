@@ -35,8 +35,9 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental pulse` | Cross-project compact rows from `bindings.json` (id, name, resume, attentionCount, openDecisionCount). No journal bodies. Writes watermark for the active bundle |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only; does not create identity) |
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
-| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op` |
-| `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`) |
+| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`, `--project`, `--all-projects`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op` |
+| `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`, `--since`, `--on`; pages of 50 via `--limit`, `--offset`, `--all`; `--project <id\|name>` or `--all-projects` to cross projects) |
+| `mental move <path> --to <project>` | Re-file one attention/decision/note into another bound project, keeping timestamp, frontmatter and body; warns on dangling links |
 | `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`; with a decision-model key also `suggestedLinks` and, for agent-directed text, `flags`; writes may add advisory `data.guard`) |
 | `mental relink [path] [--apply]` | Optional (needs a Jev key). Suggest links for a file, or the 5 most recent non-journal files, each labelled with how it relates (`supports`, `supersedes`, `contradicts`, `depends_on`; plain `related` is unlabelled). Dry run by default; `--apply` appends only high-confidence links under `## Related` (`- supersedes: [Title](path)`) |
 | `mental retag [path] [--apply] [--limit N]` | Optional (needs a Jev key). Propose one topic tag for untagged files from existing tags plus frequent title words (bootstrap, `*` marks a new topic). Dry run by default; `--apply` writes only the `tags:` line of confident matches. Never runs on the personal bundle |
@@ -53,6 +54,8 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental attention --title --kind` | Create or update residue (`direction` \| `concern` \| `thread` \| `verify`; `--status later` is come-back-to-this, not a note; `--status resolved` closes). `--via` optional |
 | `mental decide --title --body` | Create or update a decision. Create requires `--body` (the why). Same `--title` without `--body` updates; `--status decided` closes by title; `--path` targets a file. `--via` optional |
 | `mental note --title` | Scaffold a durable fact (not "come back to this" — that is `attention --status later`) |
+| `mental move <path> --to <project>` | Re-file one attention/decision/note into another bound project's bundle, keeping timestamp and body. Same as `attention --title … --move-to <project>`. Warns about dangling links; a name clash gets `-2` |
+| (create commands) `--project <id\|name>` | `attention`, `decide` and `note` can file into another bound project from any cwd (never `journal`/`park`/`handoff`) |
 | `mental local [--import \| --move]` | Project `./.mental` after ignore check |
 | `mental remap [--to id]` | List or retarget this clone’s UUID |
 | `mental split [--copy]` | New UUID for this clone (`mental new` is an alias) |
@@ -138,6 +141,6 @@ Optional timers are default **off**. When on, agents generate private and custom
 
 Pulse watermark: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json` (`{ at: iso }` — rebuildable, not SoT). Written after delta by `pulse` / `park` / `handoff`; **heartbeat never writes it**.
 
-Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount` / `laterCount`. Extra later: `mental list --type Attention --status later`. Extra open decisions: `mental list --type Decision --status open`.
+Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount` / `laterCount`. Extra later: `mental list --type Attention --status later`. Extra open decisions: `mental list --type Decision --status open`. JSON `stale` (and a `Stale (> 14d)` text block) lists open/deferred decisions and open/later attention untouched for 14+ days, oldest first, capped at 5 per kind with a true `count`.
 
 See [identity](./identity.md) for UUID / local / leftover import, [agents](./agents.md) for the `--json` contract, and [optional time tracking](./track.md) for what hours can and cannot do.

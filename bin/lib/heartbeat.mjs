@@ -19,8 +19,42 @@ import { heartbeatDelta, countParkHopsSinceMs, localDayStartMs } from "./delta.m
 import { readWatermark } from "./watermark.mjs";
 import { isFeatureOn } from "./config.mjs";
 import { heartbeatTrack } from "./time.mjs";
+import { scanStale, STALE_DAYS_DEFAULT } from "./stale.mjs";
 
 export { ATTENTION_HEARTBEAT_CAP, DECISION_HEARTBEAT_CAP };
+
+/** Max stale rows listed per kind on the heartbeat; `count` carries the true total. */
+export const STALE_HEARTBEAT_CAP = 5;
+
+/**
+ * Open/deferred decisions and open/later attention older than `days`, oldest first.
+ * @param {string | null} root
+ * @param {Date} [now]
+ * @param {number} [days]
+ */
+export function collectStale(root, now = new Date(), days = STALE_DAYS_DEFAULT) {
+  const empty = { days, count: 0, decisions: [], attention: [] };
+  if (!root) return empty;
+  const scan = scanStale(root, { days, now });
+  const rows = (items) =>
+    items
+      .slice()
+      .sort((a, b) => a.ageMs - b.ageMs)
+      .map((i) => ({
+        path: i.path,
+        title: i.title,
+        status: i.status,
+        ageDays: Math.floor((now.getTime() - i.ageMs) / 86400000),
+      }));
+  const decisions = rows(scan.decisions);
+  const attention = rows(scan.attention);
+  return {
+    days,
+    count: decisions.length + attention.length,
+    decisions: decisions.slice(0, STALE_HEARTBEAT_CAP),
+    attention: attention.slice(0, STALE_HEARTBEAT_CAP),
+  };
+}
 
 /** JSON keys agents may pass to `--fields`. */
 export const HEARTBEAT_JSON_FIELDS = [
@@ -42,6 +76,7 @@ export const HEARTBEAT_JSON_FIELDS = [
   "guardrailCount",
   "hopsToday",
   "delta",
+  "stale",
   "track",
 ];
 
@@ -137,6 +172,7 @@ export function collectHeartbeat(args, { pingTrack = true, where: whereOverride 
     guardrailCount: guardrailsAll.length,
     hopsToday,
     delta,
+    stale: collectStale(root),
   };
 
   if (root && home && isBundleRoot(where) && isFeatureOn(home, "track", where.id || null)) {
@@ -224,9 +260,23 @@ export function formatHeartbeat(data, now = new Date(), env = process.env, args 
       ? []
       : ["Settled", shownGuard.map((g) => `  ${g.title}`).join("\n") + extraLine(shownGuard.length, guardTotal)];
   const parks = data.hopsToday ?? data.delta?.parks ?? 0;
+  const staleData = data.stale;
+  const staleBlock =
+    staleData && staleData.count > 0
+      ? [
+          `Stale (> ${staleData.days}d) — resolve, decide, or supersede`,
+          ...[...(staleData.decisions ?? []), ...(staleData.attention ?? [])].map(
+            (s) => `  [${s.status}] ${s.title} (${s.ageDays}d)`,
+          ),
+          ...(staleData.count >
+          (staleData.decisions?.length ?? 0) + (staleData.attention?.length ?? 0)
+            ? [`  (+${staleData.count - (staleData.decisions?.length ?? 0) - (staleData.attention?.length ?? 0)} more — mental doctor)`]
+            : []),
+        ]
+      : [];
 
   const lines = [`${brandMark(env, args)} ${resume}`];
   if (against) lines.push(`Against ${against}`);
-  lines.push("", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, `Hops    ${parks}`, ...eyesBlock, "In the air", air, ...laterBlock, "Unsettled", open, ...settled);
+  lines.push("", `Now     ${nowLine}`, `Git     ${gitLine}${recent}`, `Hops    ${parks}`, ...eyesBlock, "In the air", air, ...laterBlock, "Unsettled", open, ...settled, ...staleBlock);
   return lines.join("\n");
 }

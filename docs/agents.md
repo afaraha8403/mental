@@ -15,7 +15,7 @@ mental where --json
 mental heartbeat --json
 ```
 
-`heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue (Needs eyes / In the air / Later), unsettled + settled (lists capped at 7; counts via `attentionCount` / `openDecisionCount` / `needsEyesCount` / `laterCount` / `guardrailCount` / `hopsToday`). JSON also includes `id` and `mode`. Use `mental status --json` when you also need notes. Do not call `pulse` every turn. Flag grammar: `mental <cmd> --help` or `mental schema --json`. Unknown flags fail (`error.code` `unknown-flag`, `error.hint` lists legal flags). Journal requires `--resume` (same as park/handoff). Decide create requires `--body` (same `--title` without `--body` updates).
+`heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue (Needs eyes / In the air / Later), unsettled + settled (lists capped at 7; counts via `attentionCount` / `openDecisionCount` / `needsEyesCount` / `laterCount` / `guardrailCount` / `hopsToday`; `stale` lists decisions and attention untouched 14+ days). JSON also includes `id` and `mode`. Use `mental status --json` when you also need notes. Do not call `pulse` every turn. Flag grammar: `mental <cmd> --help` or `mental schema --json`. Unknown flags fail (`error.code` `unknown-flag`, `error.hint` lists legal flags). Journal requires `--resume` (same as park/handoff). Decide create requires `--body` (same `--title` without `--body` updates).
 
 If JSON includes `data.track.enabled`, follow the Mental Track skill. `track start --via <host>` if `runningCount` is 0 (start twice is ensure-running). If tracking is off, do not enable it. After `mental install` or `mental doctor`, ask about optionals (`needsConsent: true`) with a one-liner each: hooks (session-start status), MCP (`mental serve` for clients that cannot shell the CLI), time tracking (per-project sit-down clock). Check whether MCP is needed. Never run `mental option … on` or `install --hooks|--mcp|--track` until the user says yes **this turn**.
 
@@ -50,7 +50,7 @@ mental status --json
 Mid-chat, not just start/finish:
 
 - Before proposing a concrete approach, flag, crate, or env var: `mental search <that name> --json` as its own query (space-separated words are AND; `--any` is OR). Also `mental list --type Decision --json` (all statuses). If `id` is null, those catalogs are empty (unbound); use `pulse` for other repos.
-- Record attention the moment residue surfaces. "Come back to this" / "for later" is `--status later`, never `note`.
+- Record attention the moment residue surfaces. "Come back to this" / "for later" is `--status later`, never `note`. Settled facts ("DONE …", "CORRECTION …") are not residue: use `note`/journal or resolve the original item (`attention` warns on those titles).
 - Park when interrupted mid-hop; handoff only at a planned close
 - Re-call `mental heartbeat --json` whenever other agents may have written — it derives git live. On this repo’s bench machine a CLI heartbeat is **51 ms** p50; in-process (MCP) it is **11 ms**. See [benchmarks](./benchmarks.md).
 - Use `pulse` for multi-repo orchestration, not as a per-turn dump

@@ -2,7 +2,10 @@
  * `mental attention` — create or update residue still in the air after a hop.
  * Unlike decide/note, this command must close items (`--status resolved`).
  */
+import { resolveWriteBundle } from "../lib/scope.mjs";
 import { resolveBundle } from "../lib/resolve.mjs";
+import { catalogRoot } from "../lib/heartbeat.mjs";
+import { runMove } from "./move.mjs";
 import {
   ATTENTION_KINDS,
   ATTENTION_STATUSES,
@@ -19,6 +22,10 @@ import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
 
+const HISTORY_TITLE = /^\s*(DONE|CLOSED|COMPLETED?|CORRECTION|LEDGER CORRECTION)\b/i;
+const HISTORY_WARNING =
+  "this reads like a settled fact (outcome/correction), not residue. Record it with `mental note` or `mental journal`, or resolve the original item with `--status resolved`; otherwise it stays open indefinitely.";
+
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
 }
@@ -33,6 +40,35 @@ export function cmdAttention(args, io = {}) {
       message: "mental attention requires --title (or --path to update)",
     });
     return EXIT_USAGE;
+  }
+
+  const moveTo = flagString(args.flags, "move-to");
+  if (args.flags?.["move-to"] !== undefined && !moveTo) {
+    printResult(stdout, args, false, undefined, { code: "usage", message: "--move-to requires a project id or name" });
+    return EXIT_USAGE;
+  }
+  if (moveTo) {
+    if (flagString(args.flags, "project")) {
+      printResult(stdout, args, false, undefined, { code: "usage", message: "--move-to and --project cannot be combined" });
+      return EXIT_USAGE;
+    }
+    const src = resolveBundle({
+      cwd: args.cwd ?? process.cwd(),
+      home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
+      env: args.env ?? process.env,
+      dir: args.dir ?? null,
+      write: false,
+    });
+    const srcRoot = src.ok ? catalogRoot(src.data) : null;
+    const item = srcRoot ? findAttention(srcRoot, { path: path || undefined, title: title || undefined }) : null;
+    if (!item) {
+      printResult(stdout, args, false, undefined, {
+        code: "not-found",
+        message: path ? `no attention file at ${path}` : `no attention item titled "${title}" to move`,
+      });
+      return 1;
+    }
+    return runMove(args, item.path, moveTo, io);
   }
 
   const statusFlag = flagString(args.flags, "status");
@@ -64,13 +100,7 @@ export function cmdAttention(args, io = {}) {
     return EXIT_USAGE;
   }
 
-  const resolved = resolveBundle({
-    cwd: args.cwd ?? process.cwd(),
-    home: args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null,
-    env: args.env ?? process.env,
-    dir: args.dir ?? null,
-    write: true,
-  });
+  const resolved = resolveWriteBundle(args);
   if (!resolved.ok) {
     printResult(stdout, args, false, undefined, resolved.error);
     return 1;
@@ -144,13 +174,19 @@ export function cmdAttention(args, io = {}) {
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
     const verb = written.updated ? "updated" : "wrote";
+    const warning =
+      !existing && status !== "resolved" && HISTORY_TITLE.test(title || "")
+        ? HISTORY_WARNING
+        : undefined;
     printResult(
       stdout,
       args,
       true,
-      { ...resolved.data, ...written, indexed },
+      { ...resolved.data, ...written, indexed, ...(warning ? { warning } : {}) },
       undefined,
-      () => kindLine("attention", `${verb} ${written.path}`),
+      () =>
+        kindLine("attention", `${verb} ${written.path}`) +
+        (warning ? `\nwarning: ${warning}` : ""),
     );
     return 0;
   } catch (err) {
