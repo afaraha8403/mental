@@ -50,6 +50,8 @@ Passed to `joinSession({ hooks })`. Examples: `onUserPromptSubmitted`, `onPreToo
 
 Agent-side tools: `open_canvas({ canvasId, instanceId, input })`, `invoke_canvas_action({ instanceId, actionName, input })`, `list_canvas_capabilities({ canvasId })`. Built-in canvas types are `browser`, `editor` and `terminal`. Your own appear alongside them.
 
+Live-verified on 2026-10-08 in the Copilot desktop app: a session-scope scaffold (`extensions_manage scaffold`, `kind: canvas`, `location: session`) plus `extensions_reload` registered the canvas. `open_canvas` returned `{ instanceId, extensionId: "session:<name>", extensionName, canvasId, title, url }` with a `127.0.0.1` URL; `invoke_canvas_action` returned the handler's object under `result`; the URL served the HTML. The host also reported canvas support through `list_canvas_capabilities` (built-ins `browser`, `editor`, `terminal`). The API is still `@experimental`, so re-run this probe after app updates.
+
 Hosting pattern from the scaffold: one `http.createServer` per instance, `listen(0, "127.0.0.1")`, return its URL. Keep canvases free of external network requests so they work offline and leak nothing.
 
 ## Debugging
