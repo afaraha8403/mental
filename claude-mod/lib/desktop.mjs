@@ -2,9 +2,11 @@
  * Desktop views for the Claude Code panel: SVG cards in the dashboard's
  * palette (dark glass, violet glow, kind colors) plus native buttons.
  *
- * The Desktop app draws `Svg` (an image, or a script-less frame when
- * `isInteractive` so SMIL and `<title>` work). Builders here return markup
- * strings and are pure, so tests can check escaping, layout and size.
+ * The Desktop app draws `Svg` as an image (SMIL still animates; an
+ * `isInteractive` frame scrubs the embedded logo and sizes itself, so the
+ * pane never uses it). Every card gets the same explicit width and its own
+ * height. Builders here return markup strings and are pure, so tests can
+ * check escaping, layout and size.
  */
 
 import { ageOf, clip, clockOf, msOf, oneLine, plural, relPathOf, wrapLines } from "./format.mjs";
@@ -63,8 +65,8 @@ export function fitChars(px, size, mono = false) {
 /** Card width in CSS px from the pane's column count (the slot shrinks it further if needed). */
 export function widthOf(columns) {
   const c = Number(columns) || 0;
-  if (!c) return 420;
-  return Math.max(300, Math.min(640, Math.round(c * 7.4)));
+  if (!c) return 440;
+  return Math.max(340, Math.min(500, Math.round(c * 7.4)));
 }
 
 /** "just now" / "5m ago". */
@@ -187,7 +189,7 @@ function branchGlyph(x, y, color) {
  * Hero: logo, live status, the resume point, last outcome, git.
  * @returns {{ source: string, height: number, alt: string }}
  */
-export function heroSvg({ vm, s, now, width: W, error = "", trackMs = null }) {
+export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null }) {
   const id = "h";
   const inner = W - PAD * 2;
   const st = statusOf(vm, s, now);
@@ -263,9 +265,9 @@ export function heroSvg({ vm, s, now, width: W, error = "", trackMs = null }) {
     y += 10;
     body.push(`<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="#ffffff" stroke-opacity="0.07"/>`);
     y += 24;
-    // Git foot: branch · changed files · tracked time or last commit.
-    const right = trackMs != null ? `◷ ${clockOf(trackMs)}` : String(vm.recent?.[0] || "").split(" ")[0];
-    const rightW = right ? right.length * 7.2 + 8 : 0;
+    // Git foot: branch · changed files · when Mental last read the thread.
+    const right = updatedAt ? `↻ ${agoOf(now - updatedAt)}` : "";
+    const rightW = right ? right.length * 6.4 + 8 : 0;
     const dirtyText = vm.dirty ? `${vm.changed || ""} changed`.trim() : "clean";
     const dirtyW = dirtyText.length * 6.6 + 18;
     const branchChars = fitChars(inner - 18 - dirtyW - rightW - 12, 11.5, true);
@@ -278,9 +280,8 @@ export function heroSvg({ vm, s, now, width: W, error = "", trackMs = null }) {
       body.push(
         txt(W - PAD, y, esc(right), {
           size: 11.5,
-          fill: trackMs != null ? T.violet2 : T.ink3,
+          fill: T.ink3,
           anchor: "end",
-          mono: true,
         }),
       );
     }
@@ -567,29 +568,181 @@ export function guardrailsSvg({ vm, width: W }) {
   return { source: card({ id, width: W, height, body }), height, alt };
 }
 
+/** "14:05" in local time. */
+function hhmm(ms) {
+  const d = new Date(ms);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 /**
- * The docked Desktop pane.
+ * Time tracking (Mental Track), only when the project turned it on: the
+ * focused clock, where it sits in today, and whether it needs a hand.
+ * @returns {{ source: string, height: number, alt: string } | null}
+ */
+export function trackSvg({ vm, now, width: W }) {
+  const t = vm?.linked ? vm.track : null;
+  if (!t) return null;
+  const id = "t";
+  const inner = W - PAD * 2;
+  const running = t.startedAt != null && t.runningCount > 0;
+  const stale = running && (t.stale || t.staleCount > 0);
+  const st = stale
+    ? { label: "Looks stale", color: T.amber, pulse: false }
+    : running
+      ? { label: "Clock running", color: T.green, pulse: true }
+      : t.unclocked
+        ? { label: "Unclocked today", color: T.amber, pulse: false }
+        : { label: "No clock", color: T.ink3, pulse: false };
+  const body = [eyebrow(PAD, 30, "Time tracking"), pill(W - PAD, 26, st)];
+  const elapsed = running ? now - t.startedAt : 0;
+  const big = running ? clockOf(elapsed) : "0:00";
+  body.push(
+    txt(PAD, 84, esc(big), {
+      size: 38,
+      weight: 680,
+      fill: running ? `url(#${id}ink)` : T.ink3,
+      spacing: -1,
+    }),
+  );
+  const bigW = big.length * 38 * 0.56;
+  body.push(txt(PAD + bigW + 8, 84, running ? "h:mm" : "", { size: 11, weight: 600, fill: T.ink3, spacing: 0.6 }));
+  let sub = "";
+  if (stale) sub = "No activity for a while. Stop it and it closes at now.";
+  else if (running) sub = `Started ${hhmm(t.startedAt)} · billable equals wall when you stop`;
+  else if (t.unclocked) sub = "You worked here today without a clock. Mental won't guess the hours.";
+  else sub = "Start a clock to record this sit-down.";
+  if (t.runningCount > 1) sub = `${t.runningCount} clocks running · ${sub}`;
+  let y = 108;
+  for (const line of wrapLines(sub, fitChars(inner, 12), 2)) {
+    body.push(txt(PAD, y, esc(line), { size: 12, fill: stale || (!running && t.unclocked) ? T.amber : T.ink2 }));
+    y += 16;
+  }
+  // Today's timeline, 6:00 → 24:00, with this clock's slice and a live head.
+  y += 16;
+  const day = new Date(now);
+  day.setHours(0, 0, 0, 0);
+  const d0 = day.getTime() + 6 * 3600_000;
+  const d1 = day.getTime() + 24 * 3600_000;
+  const xOf = (ms) => PAD + ((Math.max(d0, Math.min(d1, ms)) - d0) / (d1 - d0)) * inner;
+  body.push(`<rect x="${PAD}" y="${y}" width="${inner}" height="8" rx="4" fill="#ffffff" fill-opacity="0.05"/>`);
+  for (const h of [9, 12, 15, 18, 21]) {
+    const x = xOf(day.getTime() + h * 3600_000);
+    body.push(`<line x1="${r1(x)}" y1="${y + 12}" x2="${r1(x)}" y2="${y + 16}" stroke="${T.ink3}" stroke-opacity="0.6"/>`);
+    body.push(txt(x, y + 28, String(h), { size: 9.5, fill: T.ink3, anchor: "middle" }));
+  }
+  if (running) {
+    const x0 = xOf(Math.max(t.startedAt, d0));
+    const x1 = Math.max(x0 + 6, xOf(now));
+    const color = stale ? T.amber : T.violet;
+    body.push(`<rect x="${r1(x0)}" y="${y}" width="${r1(x1 - x0)}" height="8" rx="4" fill="url(#${id}seg)"/>`);
+    body.push(`<circle cx="${r1(x1)}" cy="${y + 4}" r="5" fill="${color}" fill-opacity="0.25"><animate attributeName="r" values="5;10;5" dur="2.4s" repeatCount="indefinite"/><animate attributeName="fill-opacity" values="0.35;0;0.35" dur="2.4s" repeatCount="indefinite"/></circle>`);
+    body.push(`<circle cx="${r1(x1)}" cy="${y + 4}" r="4" fill="#ffffff"/>`);
+  } else {
+    const x = xOf(now);
+    body.push(`<line x1="${r1(x)}" y1="${y - 3}" x2="${r1(x)}" y2="${y + 11}" stroke="${T.ink3}" stroke-dasharray="2 2"/>`);
+  }
+  y += 28;
+  const defs = [
+    `<linearGradient id="${id}ink" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="${T.lilac}"/></linearGradient>`,
+    `<linearGradient id="${id}seg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${stale ? T.amber : T.violet}" stop-opacity="0.35"/><stop offset="1" stop-color="${stale ? T.amber : T.violet2}"/></linearGradient>`,
+  ];
+  const height = Math.round(y + PAD - 4);
+  const alt = running
+    ? `Time tracking: clock running ${clockOf(elapsed)} since ${hhmm(t.startedAt)}${stale ? ", looks stale" : ""}.`
+    : `Time tracking: no clock running${t.unclocked ? ", worked today without a clock" : ""}.`;
+  return { source: card({ id, width: W, height, body, defs }), height, alt };
+}
+
+/**
+ * The dashboard: what it is, and whether it is serving right now.
+ * @param {{ width: number, dash?: { state: "running" | "starting" | "stopped" | "other" | "unknown", url?: string } }} o
+ * @returns {{ source: string, height: number, alt: string }}
+ */
+export function dashSvg({ width: W, dash = { state: "unknown" } }) {
+  const id = "d";
+  const st =
+    dash.state === "running"
+      ? { label: "Serving", color: T.green, pulse: true }
+      : dash.state === "starting"
+        ? { label: "Starting", color: T.violet2, pulse: true }
+        : dash.state === "other"
+          ? { label: "Port in use", color: T.amber, pulse: false }
+          : { label: "Not running", color: T.ink3, pulse: false };
+  const H = 112;
+  const art = W - PAD - 92;
+  // A small living graph: journals, decisions, residue, as on the dashboard.
+  const nodes = [
+    [art + 14, 40, 5, T.violet2],
+    [art + 52, 28, 4, T.sky],
+    [art + 78, 54, 6, T.purple],
+    [art + 40, 72, 4, T.amber],
+    [art + 76, 88, 3.5, T.emerald],
+    [art + 12, 86, 3, T.violet2],
+  ];
+  const edges = [
+    [0, 1],
+    [1, 2],
+    [0, 3],
+    [3, 2],
+    [3, 4],
+    [3, 5],
+    [2, 4],
+  ];
+  const body = [eyebrow(PAD, 30, "Dashboard")];
+  for (const [a, b] of edges) {
+    const [x1, y1] = nodes[a];
+    const [x2, y2] = nodes[b];
+    body.push(`<line x1="${r1(x1)}" y1="${y1}" x2="${r1(x2)}" y2="${y2}" stroke="${T.lilac}" stroke-opacity="0.22"/>`);
+  }
+  nodes.forEach(([x, y, r, c], i) => {
+    body.push(
+      `<circle cx="${r1(x)}" cy="${y}" r="${r}" fill="${c}"><animate attributeName="fill-opacity" values="1;0.55;1" dur="${3 + i * 0.7}s" repeatCount="indefinite"/></circle>`,
+    );
+  });
+  body.push(txt(PAD, 58, "Explore every journal, decision", { size: 14, weight: 620, fill: T.ink }));
+  body.push(txt(PAD, 77, "and the project graph", { size: 14, weight: 620, fill: T.ink }));
+  const where =
+    dash.state === "running"
+      ? (dash.url || "localhost:3847").replace(/^https?:\/\//, "").replace(/\/$/, "")
+      : dash.state === "other"
+        ? "another project is on 3847"
+        : "opens in your browser";
+  body.push(`<circle cx="${PAD + 4}" cy="${96}" r="3.5" fill="${st.color}"/>`);
+  if (st.pulse) {
+    body.push(
+      `<circle cx="${PAD + 4}" cy="96" r="3.5" fill="none" stroke="${st.color}" stroke-width="1.5"><animate attributeName="r" values="3.5;9" dur="1.6s" repeatCount="indefinite"/><animate attributeName="stroke-opacity" values="0.9;0" dur="1.6s" repeatCount="indefinite"/></circle>`,
+    );
+  }
+  body.push(
+    txt(PAD + 14, 100, `<tspan fill="${st.color}" font-weight="600">${esc(st.label)}</tspan><tspan fill="${T.ink3}">  ·  ${esc(where)}</tspan>`, {
+      size: 11.5,
+    }),
+  );
+  const alt = `Dashboard: ${st.label.toLowerCase()}${dash.state === "running" ? ` at ${where}` : ""}.`;
+  return { source: card({ id, width: W, height: H, body }), height: H, alt };
+}
+
+/**
+ * The docked Desktop pane: a dark column of same-width cards, each with its
+ * own actions under it. Native buttons cannot be colored, so they sit in
+ * short rows right under the card they act on.
  * @param {{ Box: Function, Text: Function, Button: Function, Svg: Function }} E
  */
 export function paneDesktop(E, ctx) {
-  const { Box, Text, Button, Svg } = E;
-  const { vm, s, now, columns, updatedAt, cwd, log = [], error = "" } = ctx;
+  const { Box, Button, Svg } = E;
+  const { vm, s, now, columns, updatedAt, cwd, log = [], error = "", dash } = ctx;
   const width = widthOf(columns);
-  const trackMs = vm?.track?.startedAt != null ? now - vm.track.startedAt : null;
-  const svg = (built, interactive) =>
-    built
-      ? Svg({
-          source: built.source,
-          alt: built.alt,
-          ...(interactive ? { isInteractive: true } : {}),
-        })
-      : null;
+  const svg = (built) =>
+    built ? Svg({ source: built.source, alt: built.alt, width, height: built.height }) : null;
+  const row = (key, buttons) =>
+    buttons.length ? Box({ key, flexDirection: "row", gap: 1, children: buttons }) : null;
   const linked = !!vm?.linked;
-  const actions = Box({
-    key: "actions",
-    flexDirection: "row",
-    gap: 1,
-    children: [
+  const track = linked && vm.track ? vm.track : null;
+  const running = !!track && track.runningCount > 0;
+  const dashState = dash?.state || "unknown";
+  const children = [
+    svg(heroSvg({ vm, s, now, width, error, updatedAt })),
+    row("actions", [
       ...(linked
         ? [
             Button({ key: "park", label: "◆ Park", onPress: ctx.onPark }),
@@ -597,24 +750,40 @@ export function paneDesktop(E, ctx) {
           ]
         : []),
       Button({ key: "refresh", label: "↻ Refresh", onPress: ctx.onRefresh }),
-    ],
-  });
-  const updated = updatedAt ? `Updated ${agoOf(now - updatedAt)}` : "Reading…";
-  const children = [
-    svg(heroSvg({ vm, s, now, width, error, trackMs }), true),
-    actions,
-    svg(sessionSvg({ s, now, width }), !!s.working),
-    linked ? svg(needsSvg({ vm, now, width }), true) : null,
-    svg(filesSvg({ s, cwd, width }), true),
-    svg(activitySvg({ log, now, width }), false),
-    svg(guardrailsSvg({ vm, width }), true),
-    Text({
-      color: T.ink3,
-      wrap: "truncate-end",
-      children: [`${updated}  ·  Park and Hand off fill your prompt — the agent writes it`],
-    }),
+    ]),
+    linked ? svg(needsSvg({ vm, now, width })) : null,
+    svg(sessionSvg({ s, now, width })),
+    svg(trackSvg({ vm, now, width })),
+    track
+      ? row("track", [
+          running
+            ? Button({ key: "track-stop", label: "■ Stop clock", onPress: ctx.onTrackStop })
+            : Button({ key: "track-start", label: "▶ Start clock", onPress: ctx.onTrackStart }),
+        ])
+      : null,
+    svg(filesSvg({ s, cwd, width })),
+    svg(activitySvg({ log, now, width })),
+    svg(guardrailsSvg({ vm, width })),
+    svg(dashSvg({ width, dash })),
+    row("dash", [
+      Button({
+        key: "dashboard",
+        label: dashState === "running" ? "↗ Open dashboard" : dashState === "starting" ? "… Starting" : "▶ Start dashboard",
+        onPress: ctx.onDashboard,
+      }),
+    ]),
   ].filter(Boolean);
-  return Box({ flexDirection: "column", gap: 1, children });
+  return Box({
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 1,
+    paddingX: 2,
+    paddingY: 1,
+    backgroundColor: T.bg,
+    width: "100%",
+    flexGrow: 1,
+    children,
+  });
 }
 
 /**
@@ -626,16 +795,21 @@ export function paneDesktop(E, ctx) {
  */
 export function footerDesktop(E, ctx) {
   const { Box, Text, Button, Svg } = E;
-  const { vm, s, now, isOpen, modes = [] } = ctx;
+  const { vm, s, now, isOpen, modes = [], bandSeen = false } = ctx;
   const st = statusOf(vm, s, now);
   const { items } = needsOf(vm);
-  const parts = ["Mental", st.label];
-  if (items.length) parts.push(`${items.length} for you`);
+  // With the band above the prompt already showing status, the footer is just
+  // the opener; without it, the footer carries the status itself.
+  const parts = ["Mental"];
+  if (!bandSeen) {
+    parts.push(st.label);
+    if (items.length) parts.push(`${items.length} need${items.length === 1 ? "s" : ""} you`);
+  }
   const children = [
     Svg ? Svg({ source: logoSvg(16), alt: "Mental", width: 16, height: 16 }) : null,
     Button({
       key: "mental-toggle",
-      label: `${isOpen ? "◧" : "◨"} ${parts.join(" · ")}`,
+      label: `${parts.join(" · ")}  ${isOpen ? "◧" : "◨"}`,
       onPress: ctx.onToggle,
     }),
     modes.length ? Text({ dimColor: true, children: [modes.join(" & ")] }) : null,
@@ -654,49 +828,40 @@ export function logoSvg(size = 18) {
  * @param {{ Box: Function, Text: Function, Button: Function, Svg?: Function }} E
  */
 export function bandDesktop(E, ctx) {
-  const { Box, Text, Button, Svg } = E;
-  const { vm, s, now, columns, maxRows = 2, isOpen } = ctx;
+  const { Box, Text, Svg } = E;
+  const { vm, s, now, columns, maxRows = 2 } = ctx;
   const st = statusOf(vm, s, now);
   const cols = Math.max(40, Number(columns) || 100);
   const { items } = needsOf(vm);
-  const counts = [];
-  const eyes = items.filter((x) => x.kind === "eyes").length;
-  const att = items.filter((x) => x.color === T.amber).length;
-  const dec = items.filter((x) => x.kind === "decision").length;
-  if (eyes) counts.push({ text: `${eyes} need eyes`, color: T.rose });
-  if (att) counts.push({ text: `${att} open`, color: T.amber });
-  if (dec) counts.push({ text: plural(dec, "decision"), color: T.sky });
-  const button = Button({
-    key: "toggle",
-    label: isOpen ? "Hide panel" : "Open panel",
-    onPress: ctx.onToggle,
-  });
+  // The band sits on the host's own chrome (light or dark), so primary text
+  // takes the host's color and only accents carry a hex.
+  const needs = items.length ? `${items.length} need${items.length === 1 ? "s" : ""} you` : "";
+  const needsColor = items.some((x) => x.kind === "eyes") ? T.rose : T.amber;
   let message = "";
-  if (st.state === "absent") message = "Not linked — ask the agent to link this folder";
+  if (st.state === "absent") message = "Not linked here. Ask the agent to link this folder.";
   else if (st.state === "loading") message = "Reading the thread…";
-  else if (vm?.linked) message = vm.resume ? `Resume · ${vm.resume}` : "No resume point yet";
-  const fixed = 6 + 1 + st.label.length + 3 + counts.reduce((n, c) => n + c.text.length + 2, 0) + 14;
+  else if (vm?.linked) message = vm.resume ? vm.resume : "No resume point yet";
+  const fixed = 2 + 7 + 3 + st.label.length + (needs ? needs.length + 3 : 0) + 6;
   const head = Box({
     key: "head",
     flexDirection: "row",
     alignItems: "center",
     gap: 1,
     children: [
-      Svg ? Svg({ source: logoSvg(18), alt: "Mental", width: 18, height: 18 }) : Text({ children: ["🧠"] }),
-      Text({ bold: true, color: T.ink, children: ["Mental"] }),
+      Svg ? Svg({ source: logoSvg(16), alt: "Mental", width: 16, height: 16 }) : Text({ children: ["🧠"] }),
+      Text({ bold: true, children: ["Mental"] }),
       Text({ color: st.color, children: [`● ${st.label}`] }),
       Box({
         key: "msg",
         flexGrow: 1,
         flexShrink: 1,
-        children: [Text({ color: T.ink2, wrap: "truncate-end", children: [clip(message, Math.max(8, cols - fixed))] })],
+        children: [Text({ dimColor: true, wrap: "truncate-end", children: [clip(message, Math.max(8, cols - fixed))] })],
       }),
-      ...counts.map((c) => Text({ color: c.color, bold: true, children: [c.text] })),
-      button,
-    ],
+      needs ? Text({ color: needsColor, bold: true, children: [needs] }) : null,
+    ].filter(Boolean),
   });
   let second = "";
-  let secondColor = T.ink3;
+  let secondColor = "";
   if (st.state === "pressure") {
     second = `△ ${pressureReasonOf(s)}`;
     secondColor = T.amber;
@@ -704,7 +869,7 @@ export function bandDesktop(E, ctx) {
     second = `${s.receipt.glyph} ${s.receipt.label} · ${s.receipt.title}`;
     secondColor = st.color;
   } else if (st.state === "compacting") {
-    second = "Compacting context — the resume point is safe in Mental";
+    second = "Compacting context. The resume point is safe in Mental.";
     secondColor = T.violet2;
   }
   const rows = [head];

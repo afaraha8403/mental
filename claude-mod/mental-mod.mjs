@@ -45,6 +45,13 @@ const STORE_OPEN_KEY = "open";
 const REOPEN_MS = 800;
 const PARK_PROMPT = "Park this session in Mental";
 const HANDOFF_PROMPT = "Hand off this session in Mental";
+const TRACK_START_PROMPT = "Start the Mental time clock for this work";
+const TRACK_STOP_PROMPT = "Stop the Mental time clock";
+const DASH_PORT = 3847;
+const DASH_URL = `http://localhost:${DASH_PORT}/`;
+const DASH_TIMEOUT_MS = 8_000;
+const DASH_RECHECK_MS = 2_500;
+const DASH_STARTING_MS = 20_000;
 
 const COMMAND_SPEC = {
   name: "mental",
@@ -71,6 +78,30 @@ export function heartbeatArgvs(root) {
   if (root) out.push(["node", `${String(root).replace(/[\\/]+$/, "")}/bin/cli.mjs`, ...tail]);
   out.push(["mental", ...tail], ["mental.cmd", ...tail]);
   return out;
+}
+
+/**
+ * argv for the dashboard helper (`claude-mod/dash.mjs`), or null without a plugin root.
+ * @param {string} root
+ * @param {string[]} args
+ */
+export function dashArgv(root, args) {
+  if (!root) return null;
+  return ["node", `${String(root).replace(/[\\/]+$/, "")}/claude-mod/dash.mjs`, ...args];
+}
+
+/**
+ * What the probe says about port 3847 for this project.
+ * @param {{ exitCode: number, stdout: string } | null} r
+ * @param {string | null} projectId
+ * @returns {"running" | "other" | "stopped"}
+ */
+export function dashStateOf(r, projectId) {
+  if (!r || r.exitCode !== 0) return "stopped";
+  const got = heartbeatOf(r.stdout);
+  if (!got || got.serving !== true) return "stopped";
+  if (projectId && got.id && got.id !== projectId) return "other";
+  return "running";
 }
 
 /**
@@ -104,6 +135,11 @@ export const register = (on) => {
   let isPaneOpen = false;
   let isFullscreen = false;
   let isRich = false;
+  let bandSeen = false;
+  /** @type {string | null} */
+  let projectId = null;
+  /** @type {{ state: "running" | "starting" | "stopped" | "other" | "unknown", url: string, since: number }} */
+  let dash = { state: "unknown", url: DASH_URL, since: 0 };
   let frame = 0;
   let inFlight = false;
   let queued = false;
@@ -153,12 +189,14 @@ export const register = (on) => {
       const { hb, error: err } = await runHeartbeat();
       if (hb) {
         vm = viewModelOf(hb, nowOf());
+        projectId = typeof hb.data?.id === "string" ? hb.data.id : null;
         error = "";
         updatedAt = nowOf();
       } else {
         error = err;
         if (!vm) vm = { linked: false };
       }
+      if (isRich) await probeDash();
     } finally {
       inFlight = false;
       redraw();
@@ -167,6 +205,56 @@ export const register = (on) => {
       queued = false;
       void refresh();
     }
+  }
+
+  async function runDash(args) {
+    const argv = dashArgv(root, args);
+    if (!argv) return null;
+    try {
+      return await host.run(argv, cwd ? { cwd, timeoutMs: DASH_TIMEOUT_MS } : { timeoutMs: DASH_TIMEOUT_MS });
+    } catch {
+      return null;
+    }
+  }
+
+  async function probeDash() {
+    if (!root) return;
+    const next = dashStateOf(await runDash(["probe", String(DASH_PORT)]), projectId);
+    // While a launch is warming up, "stopped" just means "not yet".
+    if (dash.state === "starting" && next === "stopped" && nowOf() - dash.since < DASH_STARTING_MS) return;
+    dash = { state: next, url: DASH_URL, since: nowOf() };
+  }
+
+  /** Open the dashboard if this project's is serving; otherwise start one (it opens the browser). */
+  async function onDashboard() {
+    if (!host) return;
+    if (!root) {
+      host.toast("Run `mental dashboard` in a terminal to open it");
+      return;
+    }
+    if (dash.state === "starting") return;
+    await probeDash();
+    if (dash.state === "running") {
+      const r = await runDash(["open", dash.url]);
+      if (!r || r.exitCode !== 0) host.toast(`Open ${dash.url} in your browser`);
+      redraw();
+      return;
+    }
+    const r = await runDash(["start"]);
+    if (!r || r.exitCode !== 0) {
+      host.toast("Couldn't start the dashboard — run `mental dashboard` in a terminal");
+      return;
+    }
+    dash = { state: "starting", url: DASH_URL, since: nowOf() };
+    host.toast("Starting the Mental dashboard — it opens in your browser");
+    redraw();
+    const recheck = () =>
+      host.after(DASH_RECHECK_MS, async () => {
+        await probeDash();
+        redraw();
+        if (dash.state === "starting") recheck();
+      });
+    recheck();
   }
 
   function refreshSoon(delay = DEBOUNCE_MS) {
@@ -324,6 +412,7 @@ export const register = (on) => {
         s,
         now: nowOf(),
         isOpen: isPaneOpen,
+        bandSeen,
         modes: Array.isArray(e.props.modes) ? e.props.modes : [],
         onToggle: () => void togglePane(),
       },
@@ -335,17 +424,16 @@ export const register = (on) => {
     noteSurface(e.surface);
     if (e.props.isWorking !== s.working) setWorking(!!e.props.isWorking);
     if (isRich) {
-      const { Box, Text, Button, Svg } = await $.ui.resolve(e);
+      bandSeen = true;
+      const { Box, Text, Svg } = await $.ui.resolve(e);
       return bandDesktop(
-        { Box, Text, Button, Svg },
+        { Box, Text, Svg },
         {
           vm,
           s,
           now: nowOf(),
           columns: e.props.bodyColumns,
           maxRows: Math.min(2, e.props.maxRows || 2),
-          isOpen: isPaneOpen,
-          onToggle: () => void togglePane(),
         },
       );
     }
@@ -379,9 +467,13 @@ export const register = (on) => {
           cwd,
           log: s.log,
           error,
+          dash,
           onPark: () => void fill(PARK_PROMPT),
           onHandoff: () => void fill(HANDOFF_PROMPT),
           onRefresh: () => void refresh(),
+          onTrackStart: () => void fill(TRACK_START_PROMPT),
+          onTrackStop: () => void fill(TRACK_STOP_PROMPT),
+          onDashboard: () => void onDashboard(),
         },
       );
     }

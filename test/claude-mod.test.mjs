@@ -40,7 +40,7 @@ const el = {
 
 // Mirrors BoxProps / TextProps / ButtonProps / SvgProps in the Mods types: Text and Svg take no `key`.
 const ALLOWED = {
-  Box: new Set(["key", "flexDirection", "justifyContent", "alignItems", "width", "gap", "flexGrow", "flexShrink", "children"]),
+  Box: new Set(["key", "flexDirection", "justifyContent", "alignItems", "width", "gap", "flexGrow", "flexShrink", "paddingX", "paddingY", "backgroundColor", "children"]),
   Text: new Set(["color", "bold", "italic", "dimColor", "wrap", "children"]),
   Button: new Set(["key", "label", "hotkey", "plain", "dimColor", "onPress"]),
   Svg: new Set(["source", "alt", "width", "height", "isInteractive"]),
@@ -346,7 +346,7 @@ test("heartbeat argv and stdout parsing", () => {
 });
 
 /** A fake engine: collects hooks, records `$` calls, runs timers by hand. */
-function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {} } = {}) {
+function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dashId = null } = {}) {
   const hooks = [];
   const calls = [];
   const timers = [];
@@ -371,6 +371,13 @@ function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {} } = {
       run: async (argv, init) => {
         calls.push(["run", argv, init]);
         if (fail) throw new Error("ENOENT");
+        if (String(argv[1]).endsWith("dash.mjs")) {
+          if (argv[2] === "probe") {
+            const serving = dashId != null;
+            return { exitCode: 0, stdout: JSON.stringify({ serving, id: dashId, url: "http://localhost:3847/" }), stderr: "" };
+          }
+          return { exitCode: 0, stdout: "{}", stderr: "" };
+        }
         return { exitCode: 0, stdout: JSON.stringify(hb), stderr: "" };
       },
     },
@@ -469,7 +476,13 @@ test("Claude Desktop: footer opener, rich card pane, silent /mental, remembered 
   assert.equal(termFooter, "PASSED", "terminal footer untouched");
 
   const band = await eng.fire("ui.render", { component: "AbovePrompt", surface: "desktop", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } }, "PASSED");
-  assertValidTree(band);
+  const bandKeys = assertValidTree(band);
+  assert.ok(!bandKeys.has("mental-toggle"), "the footer is the one opener; the band has no button");
+  let bandButtons = 0;
+  walk(band, (n) => n.type === "Button" && bandButtons++);
+  assert.equal(bandButtons, 0);
+  const slim = await eng.fire("ui.render", { component: "SessionMode", surface: "desktop", props: { modes: [] } });
+  assert.doesNotMatch(textOf(slim), /need/, "with the band showing, the footer is just the opener");
   const mobile = await eng.fire("ui.render", { component: "AbovePrompt", surface: "mobile", props: { hasSurvey: false, maxRows: 4, bodyColumns: 60 } }, "PASSED");
   assert.equal(mobile, "PASSED");
 
@@ -495,6 +508,33 @@ test("Claude Desktop: footer opener, rich card pane, silent /mental, remembered 
   assert.ok(svgs.length >= 4, "hero, session, needs, files cards");
   assert.match(textOf(pane), /Wire the band/, "resume point in the hero");
   assert.match(svgs.map((x) => x.props.source).join(""), /a\.mjs/, "touched file shows up");
+  assert.ok(paneKeys.has("dashboard"), "dashboard button lives in the pane");
+  assert.ok(!paneKeys.has("track-start"), "no clock buttons when tracking is off");
+  assert.match(svgs.map((x) => x.props.source).join(""), /Not running/, "dashboard probe reads stopped");
+  for (const x of svgs) {
+    assert.equal(x.props.isInteractive, undefined, "image mode keeps the logo");
+    assert.equal(typeof x.props.width, "number");
+    assert.equal(typeof x.props.height, "number");
+  }
+
+  // Start dashboard: launches the helper detached, then re-probes.
+  let startDash;
+  walk(pane, (n) => {
+    if (n.type === "Button" && n.props.key === "dashboard") startDash = n.props.onPress;
+  });
+  startDash();
+  await eng.flush();
+  await eng.flush();
+  const started = eng.calls.find((c) => c[0] === "run" && c[1][2] === "start");
+  assert.deepEqual(started[1], ["node", "/plugins/mental/claude-mod/dash.mjs", "start"]);
+  assert.equal(started[2].cwd, "/repo");
+  assert.ok(eng.timers.some((t) => t.once && t.ms === 2500), "re-probes while it starts");
+  const starting = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
+  let label = "";
+  walk(starting, (n) => {
+    if (n.type === "Button" && n.props.key === "dashboard") label = n.props.label;
+  });
+  assert.match(label, /Starting/);
 
   // /mental on Desktop toggles silently (no chat text).
   const hidden = await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
@@ -516,8 +556,49 @@ test("Claude Desktop: reopens the pane when it was left open", async () => {
   assert.ok(eng.calls.some((c) => c[0] === "open"));
 });
 
+test("Claude Desktop: clock buttons and an already-serving dashboard", async () => {
+  const tracked = heartbeat({
+    track: { enabled: true, runningCount: 1, focusedId: "t", running: [{ id: "t", started: new Date(Date.now() - 3600_000).toISOString() }] },
+  });
+  const eng = fakeEngine({ surfaces: ["desktop"], hb: tracked, dashId: "mental" });
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
+  await eng.flush();
+  await eng.flush();
+  const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
+  const keys = assertValidTree(pane);
+  assert.ok(keys.has("track-stop") && !keys.has("track-start"), "running clock offers stop");
+  const sources = [];
+  walk(pane, (n) => n.type === "Svg" && sources.push(n.props.source));
+  assert.match(sources.join(""), /Clock running/);
+  assert.match(sources.join(""), /Serving/);
+  const presses = {};
+  walk(pane, (n) => n.type === "Button" && (presses[n.props.key] = n.props));
+  assert.match(presses.dashboard.label, /Open dashboard/);
+  presses.dashboard.onPress();
+  await eng.flush();
+  await eng.flush();
+  const opened = eng.calls.find((c) => c[0] === "run" && c[1][2] === "open");
+  assert.deepEqual(opened[1].slice(1), ["/plugins/mental/claude-mod/dash.mjs", "open", "http://localhost:3847/"]);
+  assert.ok(!eng.calls.some((c) => c[0] === "run" && c[1][2] === "start"), "never starts a second server");
+  presses["track-stop"].onPress();
+  await eng.flush();
+  assert.ok(eng.calls.some((c) => c[0] === "fill" && /Stop the Mental time clock/.test(c[1].text)));
+});
+
+test("dashStateOf tells this project's dashboard from another's", async () => {
+  const { dashStateOf } = await import("../claude-mod/mental-mod.mjs");
+  const ok = (body) => ({ exitCode: 0, stdout: JSON.stringify(body) });
+  assert.equal(dashStateOf(null, "a"), "stopped");
+  assert.equal(dashStateOf({ exitCode: 1, stdout: "" }, "a"), "stopped");
+  assert.equal(dashStateOf(ok({ serving: false }), "a"), "stopped");
+  assert.equal(dashStateOf(ok({ serving: true, id: "a" }), "a"), "running");
+  assert.equal(dashStateOf(ok({ serving: true, id: "b" }), "a"), "other");
+});
+
 test("desktop cards escape text and stay under the Svg cap", async () => {
-  const { esc, heroSvg, sessionSvg, filesSvg, activitySvg, guardrailsSvg, needsSvg, SVG_MAX } = await import("../claude-mod/lib/desktop.mjs");
+  const { esc, heroSvg, sessionSvg, filesSvg, activitySvg, guardrailsSvg, needsSvg, trackSvg, dashSvg, SVG_MAX } = await import("../claude-mod/lib/desktop.mjs");
   const { noteReceipt, newSession } = await import("../claude-mod/lib/model.mjs");
   assert.equal(esc(`<a href="x">&'`), "&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
   const s = newSession(0);
@@ -533,7 +614,12 @@ test("desktop cards escape text and stay under the Svg cap", async () => {
     activitySvg({ log: s.log, now: 10, width }),
     guardrailsSvg({ vm, width }),
     needsSvg({ vm, now: 10, width }),
+    trackSvg({ vm: { ...vm, track: { runningCount: 3, staleCount: 1, unclocked: false, startedAt: 0, stale: false } }, now: 7_200_000, width }),
+    dashSvg({ width, dash: { state: "running", url: "http://localhost:3847/<x>" } }),
+    dashSvg({ width, dash: { state: "other" } }),
   ].filter(Boolean);
+  assert.ok(cards.some((c) => /3 clocks running/.test(c.source)), "track card renders");
+  assert.ok(cards.some((c) => /&lt;x&gt;/.test(c.source)), "dashboard url escaped");
   for (const c of cards) {
     assert.ok(c.source.length <= SVG_MAX);
     assert.doesNotMatch(c.source, /<script/);
