@@ -18,6 +18,10 @@ const SKILLS = [
   "codex-desktop-extensions",
   "codex-desktop-plugins",
   "codex-desktop-skills",
+  "copilot-desktop-extensions",
+  "cursor-canvas-and-plugins",
+  "opencode-plugins",
+  "publishing-mental-to-stores",
 ];
 const NAME_RE = /^(?!-)(?!.*--)[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
