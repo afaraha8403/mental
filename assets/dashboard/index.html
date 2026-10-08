@@ -76,8 +76,13 @@
       </div>
 
       <div class="scrim" id="scrim" hidden></div>
+      <div class="insp-deck" id="insp-deck" data-depth="0">
+        <button type="button" class="insp-ghost" data-n="2" tabindex="-1" aria-hidden="true"></button>
+        <button type="button" class="insp-ghost" data-n="1" tabindex="-1" aria-hidden="true"></button>
+      </div>
       <aside class="inspector" id="inspector" aria-label="Item details" hidden>
         <header class="insp-head">
+          <button type="button" class="icon-btn insp-back" id="insp-back" title="Back" aria-label="Back" hidden></button>
           <div class="insp-kind" id="insp-kind"></div>
           <div class="insp-actions">
             <button type="button" class="icon-btn" id="insp-copy-path" title="Copy path" aria-label="Copy path"></button>
@@ -86,6 +91,7 @@
             <button type="button" class="icon-btn" id="insp-close" title="Close (Esc)" aria-label="Close"></button>
           </div>
         </header>
+        <nav class="insp-trail" id="insp-trail" aria-label="Drawer history" hidden></nav>
         <div class="insp-scroll" id="insp-scroll">
           <h2 class="insp-title" id="insp-title"></h2>
           <p class="insp-path" id="insp-path"></p>

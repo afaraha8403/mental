@@ -103,7 +103,7 @@ function go(view, params = {}) {
 }
 
 /** Update params of the current route. Re-renders the view only with `render: true`. */
-function setParams(patch, { push = false, render = false } = {}) {
+function setParams(patch, { push = false, render = false, state } = {}) {
   const p = new URLSearchParams(ctx.route.params);
   for (const [k, v] of Object.entries(patch)) {
     if (v == null || v === "") p.delete(k);
@@ -111,8 +111,8 @@ function setParams(patch, { push = false, render = false } = {}) {
   }
   ctx.route.params = p;
   const next = buildHash(ctx.route.view, p);
-  if (push) history.pushState(null, "", next);
-  else history.replaceState(null, "", next);
+  if (push) history.pushState(state ?? null, "", next);
+  else history.replaceState(state === undefined ? history.state : state, "", next);
   lastRouteKey = routeKey(ctx.route.view, p);
   if (render) return renderView();
 }
@@ -412,6 +412,7 @@ const palette = createPalette(ctx, { commands, pickProject: (id) => pickProject(
 const SHORTCUTS = [
   ["Navigation", [["⌘ K", "Search & commands"], ["g t", "Today"], ["g a", "Attention"], ["g l", "Library"], ["g d", "Decisions"], ["g m", "Map"], ["g p", "All projects"]]],
   ["Anywhere", [["/", "Focus search"], ["Esc", "Close drawer / dialog"], ["r", "Refresh data"], ["?", "This sheet"]]],
+  ["Drawer", [["⌫", "Back to previous item"], ["Alt ←", "Browser back (same history)"]]],
   ["Library", [["↑ ↓", "Move selection"], ["⏎", "Open in drawer"], ["[ ]", "Previous / next type"]]],
 ];
 
@@ -456,6 +457,11 @@ function wireKeys() {
       return;
     }
     if (isTyping(e.target)) return;
+    if (e.key === "Backspace" && inspector.canGoBack()) {
+      e.preventDefault();
+      inspector.back();
+      return;
+    }
     if (chord === "g") {
       chord = "";
       clearTimeout(chordTimer);
