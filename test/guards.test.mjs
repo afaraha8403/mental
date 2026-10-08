@@ -105,6 +105,20 @@ test("journal: low-probability secret answer leaves no guard", async () => {
   }
 });
 
+test("journal: a credential-shaped token is flagged locally even when the model says no", async () => {
+  const m = await mock(0.0);
+  try {
+    const { home, root } = await setup(m);
+    const r = parse(
+      await mentalAsync(home, root, ["journal", "--json", "--title", "Pasted", "--body", `Token ${SECRET} here`, "--resume", "Edit bin/cli.mjs and run the tests"]),
+    );
+    assert.equal(r.data.guard.secret, true);
+    assert.ok(!m.calls.join("").includes(SECRET));
+  } finally {
+    m.close();
+  }
+});
+
 test("journal: vague resume graded, and a decision-like entry suggests decide", async () => {
   const m = await mock(0.95, { choose: (id) => (id === "resume" ? "vague" : null) });
   try {

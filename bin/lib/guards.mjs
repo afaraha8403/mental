@@ -10,6 +10,8 @@ const EXCERPT_CHARS = 600;
 const INJECTION_MIN = 0.8;
 
 const OPAQUE_RUN = /[A-Za-z0-9+/_=-]{32,}/;
+/** Credential shapes the redactor strips; a model only sees "[REDACTED]", so these are flagged locally. */
+const STRONG_SECRET = /-----BEGIN [A-Z ]*PRIVATE KEY|\b(sk|gh[pousr]|xox[bap]|AKIA)[-_A-Za-z0-9]{8,}/;
 const DECISIONISH =
   /\b(decided|decision|chose|chosen|opted|going with|go with|settled on|switch(ed)? (to|from)|instead of|rather than|trade-?offs?|we will use|will use|ruled out|rejected)\b/i;
 const INJECTIONISH =
@@ -45,7 +47,8 @@ export async function writeGuards({ jev, kind, texts }) {
   const all = `${texts.title}\n${texts.description}\n${texts.body}\n${texts.resume}`;
   /** @type {Record<string, any>} */
   const questions = {};
-  if (SECRETISH.test(all) || OPAQUE_RUN.test(all)) {
+  const strong = STRONG_SECRET.test(all);
+  if (!strong && (SECRETISH.test(all) || OPAQUE_RUN.test(all))) {
     questions.secret = noul(
       "Does `new` look like it records an actual credential, key, password or private personal data (redacted values count)? Answer no if it only discusses secrets in general.",
     );
@@ -62,7 +65,7 @@ export async function writeGuards({ jev, kind, texts }) {
       "Does `new` record a consequential choice between alternatives, with a reason, that future work should not relitigate? Answer no for routine progress notes.",
     );
   }
-  if (Object.keys(questions).length === 0) return null;
+  if (Object.keys(questions).length === 0 && !strong) return null;
 
   const state = {
     new: {
@@ -73,13 +76,13 @@ export async function writeGuards({ jev, kind, texts }) {
   };
   let r;
   try {
-    r = await jev.decide(state, questions);
+    r = Object.keys(questions).length ? await jev.decide(state, questions) : null;
   } catch {
     return null;
   }
   const a = r?.answers || {};
   const out = { notes: /** @type {string[]} */ ([]) };
-  if (typeof a.secret?.p === "number" && a.secret.p >= THRESHOLDS.secret) {
+  if (strong || (typeof a.secret?.p === "number" && a.secret.p >= THRESHOLDS.secret)) {
     out.secret = true;
     out.notes.push("this write may contain a credential or private data. Remove it from the file and rotate the key if it was real.");
   }
