@@ -5,8 +5,9 @@ description: >-
   Plugin Extensions: MCP Apps tools carrying openai/ui metadata for sidebar,
   thread, file and settings entrypoints, display modes, settings, deep links,
   model context, file handlers, composer mentions and rich forms. Use when the
-  user wants a mod-like UI, panel, viewer or editor inside the ChatGPT or Codex
-  desktop app, or asks how it differs from Claude mods. Not for packaging only.
+  user wants a panel, viewer or editor inside the ChatGPT or Codex desktop app,
+  or asks how it differs from Claude mods. This is not a mod mechanism: it
+  requires MCP. Not for packaging only.
 license: MIT
 compatibility: Needs Node 20+ and the @openai/mcp-extensions and @modelcontextprotocol/ext-apps packages (or the Python SDK), plus a ChatGPT desktop app with plugins enabled to try it. Desktop supports every extension; web and mobile support fewer.
 metadata:
@@ -29,6 +30,8 @@ when_to_use: |
 ---
 
 # ChatGPT / Codex desktop extensions (the "UI" mechanism)
+
+**Not a mod.** Per project scope, a mod is a mechanism that changes the desktop app's own UI without MCP, like Claude Desktop mods. Plugin Extensions need an MCP server, so they do not count. This skill is reference for MCP-backed UI only; do not offer it as the Codex answer to "build a mod". For a mod request, say Codex has no mod mechanism.
 
 The ChatGPT desktop app has **no JS-injection mod system**. Its official, supported way to add UI is **Plugin Extensions**: an MCP server whose tools return **MCP Apps** (sandboxed iframes served as `ui://` resources). The host reads `_meta["openai/ui"]` on tools and resources to decide where the UI appears. Extensions are `@openai/mcp-extensions` plus the MCP Apps SDK, packaged inside a plugin (`codex-desktop-plugins`).
 

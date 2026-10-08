@@ -4,11 +4,11 @@ When the task is to create or debug something for the ChatGPT desktop app (forme
 
 | Build a... | Skill |
 | --- | --- |
-| UI ("mod"-like): sidebar/thread/file/settings apps, MCP Apps, mentions, forms | `.claude/skills/codex-desktop-extensions/SKILL.md` |
+| MCP-backed UI (not a mod): sidebar/thread/file/settings apps, MCP Apps, mentions, forms | `.claude/skills/codex-desktop-extensions/SKILL.md` |
 | Plugin (manifest, marketplace, hooks, workspace publish, submission) | `.claude/skills/codex-desktop-plugins/SKILL.md` |
 | Skill (SKILL.md, `agents/openai.yaml`, activation tests) | `.claude/skills/codex-desktop-skills/SKILL.md` |
 
-There is no JS-injection mod system; the official UI path is Plugin Extensions (MCP Apps). Explodex injection is unofficial and macOS-only.
+Codex has no mod mechanism: there is no JS-injection mod system, and the official UI path needs MCP, so it is not a mod. The official UI path is Plugin Extensions (MCP Apps). Explodex injection is unofficial and macOS-only.
 
 ## Maintaining them
 
