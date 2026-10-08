@@ -148,12 +148,12 @@ claude plugin install mental@mental
 
 After a release: `claude plugin marketplace update mental` then `claude plugin update mental@mental`, then restart.
 
-**In-session panel (Claude Code 2.1.287+).** The Claude plugin also ships a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods) that shows Mental inside the session:
+**In-session panel (Claude Desktop and Claude Code 2.1.287+).** The Claude plugin also ships a [Claude Code mod](https://code.claude.com/docs/en/plugins/mods) that shows Mental inside the session. In the Claude Desktop app it works in the **Code** tab for local sessions (not WSL or cloud sessions); check the version with `/status`.
 
 - **Band** — two rows above the prompt: the resume point, a live pulse while the agent works, open attention and decision counts, and a short receipt each time Mental writes (park, handoff, decision, attention). It steps aside while a survey is showing and drops to one row when the prompt area is short.
-- **`/mental`** — toggles a pane with **Now**, **Residue**, **Decisions**, **Session** (files touched, turns, context), and **Time** (Track sit-downs, when Track is on) tabs (`n` `r` `d` `s` `t`). **Park** (`p`) and **Handoff** (`h`) put the request in the prompt so the agent records it through the skill. The panel itself never writes. It docks beside the transcript in fullscreen at 110+ columns and opens as a dialog otherwise.
+- **`/mental`** — toggles a pane with **Now**, **Residue**, **Decisions**, **Session** (files touched, turns, context), and **Time** (Track sit-downs, when Track is on) tabs (`n` `r` `d` `s` `t`). **Park** (`p`) and **Handoff** (`h`) put the request in the prompt so the agent records it through the skill. The panel itself never writes. In Claude Desktop it docks as a side panel beside the chat. In a terminal it docks in fullscreen at 110+ columns and opens as a dialog otherwise.
 
-The panel reads `mental heartbeat --json --passive`. `--passive` does not ping a running Track timer. Older Claude Code builds ignore the mod and the rest of the plugin works. `mental doctor` reports `claude-panel` with the Claude Code version it found. To try it from a checkout: `claude --plugin-dir /path/to/mental`, then `/mental`.
+The panel reads `mental heartbeat --json --passive`. `--passive` does not ping a running Track timer. Older Claude builds ignore the mod and the rest of the plugin works. `mental doctor` reports `claude-panel` with the Claude Code version it found on PATH (Claude Desktop bundles its own; use `/status` there). To try it from a checkout: in a terminal, `claude --plugin-dir /path/to/mental`; in Claude Desktop, add `"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/mental" }` to `~/.claude/settings.json` and restart the app. Then type `/mental`.
 
 **VS Code** — Command Palette → **Chat: Install Plugin From Source**, then `https://github.com/afaraha8403/mental`.
 

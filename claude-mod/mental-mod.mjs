@@ -27,6 +27,8 @@ import { bandView, paneView, TABS } from "./lib/views.mjs";
 const PANE_ID = "mental";
 const PANE_TITLE = "Mental";
 const DOCK_MIN_COLUMNS = 110;
+// Sites where the AbovePrompt band draws; the Desktop app's Code tab renders it too.
+const BAND_SURFACES = ["terminal", "desktop"];
 const DEBOUNCE_MS = 15_000;
 const POLL_MS = 60_000;
 const FRAME_MS = 600;
@@ -255,7 +257,7 @@ export const register = (on) => {
   });
 
   on("ui.render", { component: "AbovePrompt" }, async ($, e, next) => {
-    if (!host || e.surface !== "terminal" || e.props.hasSurvey) return next(e);
+    if (!host || !BAND_SURFACES.includes(e.surface) || e.props.hasSurvey) return next(e);
     if (e.props.isWorking !== s.working) setWorking(!!e.props.isWorking);
     const { Box, Text, Button } = await $.ui.resolve(e);
     return bandView(
@@ -300,8 +302,19 @@ export const register = (on) => {
 
   on("command.run", { command: "mental" }, async ($, e, next) => {
     if (!host) return next(e);
-    isFullscreen = !!e.presentation?.isFullscreen;
-    const columns = Number(e.presentation?.columns) || 0;
+    /** @type {string[]} */
+    let surfaces = [];
+    try {
+      const got = await $.session.surfaces();
+      if (Array.isArray(got)) surfaces = got;
+    } catch {
+      /* older build: treat as terminal */
+    }
+    // The Desktop app always docks a pane beside the transcript; `presentation`
+    // describes a terminal there, so its width is not the app's.
+    const inDesktop = surfaces.includes("desktop");
+    isFullscreen = inDesktop || !!e.presentation?.isFullscreen;
+    const columns = inDesktop ? 0 : Number(e.presentation?.columns) || 0;
     if (isPaneOpen) {
       await closePane();
       return isFullscreen ? { text: "Mental panel hidden" } : {};
@@ -310,7 +323,13 @@ export const register = (on) => {
       return { text: `Widen the terminal to ${DOCK_MIN_COLUMNS}+ columns to dock the Mental panel` };
     }
     const ok = await openPane();
-    if (!ok) return { text: `Widen the terminal to ${DOCK_MIN_COLUMNS}+ columns to dock the Mental panel` };
+    if (!ok) {
+      return {
+        text: inDesktop
+          ? "Claude couldn't place the Mental panel — widen the window and try /mental again"
+          : `Widen the terminal to ${DOCK_MIN_COLUMNS}+ columns to dock the Mental panel`,
+      };
+    }
     return isFullscreen ? { text: "Mental panel shown" } : {};
   });
 

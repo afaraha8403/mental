@@ -334,7 +334,7 @@ test("heartbeat argv and stdout parsing", () => {
 });
 
 /** A fake engine: collects hooks, records `$` calls, runs timers by hand. */
-function fakeEngine({ hb = heartbeat(), fail = false } = {}) {
+function fakeEngine({ hb = heartbeat(), fail = false, surfaces } = {}) {
   const hooks = [];
   const calls = [];
   const timers = [];
@@ -342,6 +342,7 @@ function fakeEngine({ hb = heartbeat(), fail = false } = {}) {
   register(on);
   const $ = {
     plugin: { root: "/plugins/mental" },
+    ...(surfaces ? { session: { surfaces: async () => surfaces } } : {}),
     clock: {
       after: (ms, fn) => {
         const t = { ms, fn, once: true, cancelled: false, cancel: () => (t.cancelled = true) };
@@ -435,6 +436,31 @@ test("register wires session.start, band, pane, receipts and cleanup", async () 
 
   await eng.fire("session.end", {});
   assert.ok(eng.timers.filter((t) => !t.once).every((t) => t.cancelled), "intervals cancelled at session end");
+});
+
+test("Claude Desktop: band draws and /mental docks a side pane", async () => {
+  const eng = fakeEngine({ surfaces: ["desktop"] });
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const band = await eng.fire("ui.render", { component: "AbovePrompt", surface: "desktop", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } }, "PASSED");
+  assert.notEqual(band, "PASSED", "band renders on the desktop surface");
+  assertValidTree(band);
+  const mobile = await eng.fire("ui.render", { component: "AbovePrompt", surface: "mobile", props: { hasSurvey: false, maxRows: 4, bodyColumns: 60 } }, "PASSED");
+  assert.equal(mobile, "PASSED");
+
+  // Desktop sends a terminal-shaped presentation; the mod must still dock.
+  const cmd = await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
+  assert.equal(cmd.text, "Mental panel shown");
+  const open = eng.calls.find((c) => c[0] === "open");
+  assert.equal(open[1].id, "mental");
+  assert.equal(open[1].rows, undefined, "docked, not a dialog");
+  assert.equal(open[1].closeOnEscape, undefined);
+
+  await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48, scroll: { bodyRows: 40 } } });
+  await eng.fire("tool.call", { tool: "Edit", file_path: "/repo/a.mjs" }, { text: "ok" });
+  const hidden = await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
+  assert.equal(hidden.text, "Mental panel hidden");
+  assert.doesNotMatch(JSON.stringify(eng.calls), /Widen the terminal/);
 });
 
 test("register degrades when heartbeat cannot run", async () => {
