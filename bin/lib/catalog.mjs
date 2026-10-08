@@ -92,7 +92,10 @@ export const CATALOG = {
     summary: "Cheap in-repo reload: resume, last outcome, git, hops, residue (Needs eyes / In the air / Later), unsettled + settled. No notes. Does not write the pulse watermark.",
     usage: `${CMD} heartbeat`,
     examples: [`${CMD} heartbeat`, `${CMD} heartbeat --json`, `${CMD} heartbeat --json --fields resume,attention`],
-    flags: [v("fields", { takesValue: "optional", summary: "JSON field mask (comma-separated). Omit the value to list legal names." })],
+    flags: [
+      v("fields", { takesValue: "optional", summary: "JSON field mask (comma-separated). Omit the value to list legal names." }),
+      b("passive", { summary: "Do not refresh the Mental Track last_seen ping (for panels that poll)" }),
+    ],
     effects: "read_only",
     mcp: true,
   },

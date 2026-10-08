@@ -279,8 +279,10 @@ test("track glance is 404 when tracking is off", async (t) => {
   const html = await fetch(dash.url);
   assert.equal(html.status, 200);
   const page = await html.text();
-  assert.match(page, /Mental CLI Dashboard/);
-  assert.match(page, /id="air-list"/);
+  assert.match(page, /<title>Mental<\/title>/);
+  assert.match(page, /id="view-today"/);
+  assert.match(page, /id="inspector"/);
+  assert.match(page, /id="palette"/);
   assert.match(page, /id="view-map"/);
   assert.match(page, /id="map-wrap"/);
   const vendor = await fetch(`${dash.url}vendor/mind-map.js`);
@@ -325,6 +327,49 @@ test("session timeline lists the hop written during that sit-down", async (t) =>
   const timeline = await detail.json();
   assert.equal(detail.status, 200);
   assert.ok(timeline.data.events.some((event) => event.type === "Journal" && event.title === "During sit"));
+});
+
+test("activity lists journal hops newest first and caps days", async (t) => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const first = mental(home, root, ["journal", "--json", "--title", "First hop", "--resume", "Do first"]);
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+  const second = mental(home, root, ["journal", "--json", "--title", "Second hop", "--resume", "Do second"]);
+  assert.equal(second.status, 0, second.stderr || second.stdout);
+  const dash = await listenDashboard({ cwd: root, home, env: gitEnv(home), port: 0, open: false });
+  t.after(() => dash.close());
+  const res = await fetch(`${dash.url}api/activity?days=9999`);
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.data.days, 90);
+  assert.equal(body.data.truncated, false);
+  const titles = body.data.hops.map((hop) => hop.title);
+  assert.ok(titles.indexOf("Second hop") >= 0);
+  assert.ok(titles.indexOf("Second hop") < titles.indexOf("First hop"));
+  const hop = body.data.hops.find((row) => row.title === "Second hop");
+  assert.equal(hop.resume, "Do second");
+  assert.match(hop.path, /^journal\/\d{4}-\d{2}-\d{2}\.md#/);
+  const fallback = await (await fetch(`${dash.url}api/activity?days=nope`)).json();
+  assert.equal(fallback.data.days, 14);
+});
+
+test("projects carry lastTouched and outcome", async (t) => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const seeded = mental(home, root, ["journal", "--json", "--title", "Seed", "--resume", "Continue"]);
+  assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
+  const id = JSON.parse(seeded.stdout).data.id;
+  const dash = await listenDashboard({ cwd: root, home, env: gitEnv(home), port: 0, open: false });
+  t.after(() => dash.close());
+  const res = await fetch(`${dash.url}api/projects`);
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  const rows = Array.isArray(body.data) ? body.data : body.data.projects;
+  const row = rows.find((p) => p.id === id) || rows[0];
+  assert.ok(row);
+  assert.equal(typeof row.outcome, "string");
+  assert.ok(row.lastTouched === null || !Number.isNaN(Date.parse(row.lastTouched)));
 });
 
 test("dashboard --help lists the command", async () => {

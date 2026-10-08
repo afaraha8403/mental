@@ -1,0 +1,4 @@
+{
+  "description": "Mental in-session panel: a live band above the prompt and a /mental pane, with rich cards on Claude Desktop (Claude Code mods, 2.1.287+).",
+  "modules": ["./mental-mod.mjs"]
+}

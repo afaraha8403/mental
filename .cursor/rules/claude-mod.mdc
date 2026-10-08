@@ -1,0 +1,41 @@
+---
+description: Editing the Claude Desktop/Code mod in claude-mod/. Host limits, test and validate steps.
+globs: claude-mod/**,test/claude-mod.test.mjs
+alwaysApply: false
+---
+
+# Claude mod (`claude-mod/`)
+
+Keep in sync with `.claude/rules/claude-mod.md`.
+
+A mod is a host UI module (not MCP). It runs in a sandbox: web globals only, no Node, no timers but `$.clock`. It reads Mental through the CLI (`process.run`) and never writes Mental data itself.
+
+## Surfaces
+
+`$.session.surfaces` picks the look: `desktop` = rich cards (`lib/desktop.mjs`), terminal = text pane (`lib/views.mjs`), `mobile` = leave alone. There is no left-nav slot and no web embed; the Dashboard card opens the browser.
+
+## Host limits (learned the hard way)
+
+- Never alias `$`. Spell `$.noun.verb(...)` at each call.
+- `Svg` with `isInteractive` becomes an iframe and drops the logo. Use plain `Svg` (SMIL animation works). Svg regions are not clickable: use `Button` rows for clicks.
+- `Button` is native and cannot be coloured. Text is monospace.
+- `Text` and `Svg` take no `key`. `Button` needs a unique string `key`.
+- `Box` has no `flexWrap`, `columnGap` or `rowGap`. `gap` is fine. Omit `wrap:"wrap"` (the default). Never pass `undefined` props.
+- Width is in cells or a percent string. A tree that fails validation draws the original, silently.
+- `$.prompt.submit({ text, asUser: true })` sends a turn. Do not await it in a hook.
+
+## Behaviour rules
+
+- Redraw only when `signatureOf()` changes. A redraw every tick makes the pane fight scrolling.
+- Park and Hand off send a prompt; the agent records through the skill. Hide is footer-only and stored in `store.dismissed`; the panel still lists everything.
+- Heartbeat is always `--passive` (no clock ping, no write).
+- Show data that helps in-session (resume point, needs you, decisions, time). Not stat dumps.
+
+## Check before you commit
+
+```bash
+node --test test/claude-mod.test.mjs test/host-plugins.test.mjs
+claude plugin validate . --strict
+```
+
+`desktop.mjs` is CRLF, `mental-mod.mjs` is LF; keep each as is. Types (git-ignored) live in `.claude-plugin/types/`. The "gating hook without .catch" validator warnings are expected. User-visible change: add a CHANGELOG line. Next hosts (Codex, then DeepSeek) get their own folder; do not bend this one.

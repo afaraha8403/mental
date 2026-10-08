@@ -1,1016 +1,537 @@
-import { renderFrontmatter, renderMarkdown } from "./markdown.js";
-import { startMap } from "./map.js";
-import { tagColor } from "./map-data.js";
+import { $, $$, api, badge, debounce, fuzzyScore, h, icon, relTime, fill } from "./ui.js";
+import { createInspector } from "./inspector.js";
+import { createPalette, renderShortcutSheet } from "./palette.js";
+import { renderToday } from "./today.js";
+import { renderAttention, renderDecisions } from "./boards.js";
+import { renderLibrary } from "./library.js";
+import { renderMapView, renderProjects, renderSitdowns, stopMap } from "./explore.js";
 
-const state = {
+const THEME_KEY = "mental-dashboard-theme";
+const RAIL_KEY = "mental-dashboard-rail";
+
+/** View registry. `key` is the second key of the `g <key>` chord. */
+const VIEWS = [
+  { id: "today", label: "Today", icon: "today", key: "t", render: renderToday },
+  { id: "attention", label: "Attention", icon: "attention", key: "a", render: renderAttention, badge: "attention" },
+  { id: "library", label: "Library", icon: "library", key: "l", render: renderLibrary },
+  { id: "decisions", label: "Decisions", icon: "decisions", key: "d", render: renderDecisions, badge: "decisions" },
+  { id: "map", label: "Map", icon: "map", key: "m", render: renderMapView },
+  { id: "sitdowns", label: "Sit-downs", icon: "sitdowns", key: "s", render: renderSitdowns, trackOnly: true },
+  { id: "projects", label: "All projects", icon: "projects", key: "p", render: renderProjects },
+];
+const VIEW_BY_ID = Object.fromEntries(VIEWS.map((v) => [v.id, v]));
+
+/** Shared app context handed to every view module. */
+const ctx = {
   id: "",
-  type: "",
-  status: "",
-  kind: "",
-  q: "",
-  offset: 0,
-  limit: 50,
-  total: 0,
-  path: "",
-  currentBody: "",
-  view: "list",
-  sessionId: "",
-  track: null,
-};
-
-const TYPES = ["", "Decision", "Attention", "Note", "Journal"];
-
-/** Same marks as CLI `kindMark` (journal, attention, decision, note). */
-const KIND = {
-  Decision: { emoji: "🎯", label: "Decision" },
-  Attention: { emoji: "🚦", label: "Attention" },
-  Note: { emoji: "📝", label: "Note" },
-  Journal: { emoji: "📓", label: "Journal" },
-};
-
-function kindChip(type) {
-  const spec = KIND[type];
-  const chip = document.createElement("span");
-  chip.className = spec ? `kind kind-${type.toLowerCase()}` : "kind";
-  if (!spec) {
-    chip.textContent = type || "";
-    return chip;
-  }
-  const mark = document.createElement("span");
-  mark.className = "mark";
-  mark.setAttribute("aria-hidden", "true");
-  mark.textContent = spec.emoji;
-  chip.append(mark, document.createTextNode(spec.label));
-  return chip;
-}
-
-function qs(extra = {}) {
-  const p = new URLSearchParams();
-  if (state.id) p.set("id", state.id);
-  for (const [k, v] of Object.entries(extra)) {
-    if (v != null && v !== "") p.set(k, String(v));
-  }
-  const s = p.toString();
-  return s ? `?${s}` : "";
-}
-
-async function api(path) {
-  const res = await fetch(path);
-  const body = await res.json().catch(() => ({}));
-  return { status: res.status, body };
-}
-
-function setText(id, value) {
-  const el = document.getElementById(id);
-  if (el) el.textContent = value;
-}
-
-// Theme handling (Dark / Light / Auto)
-function initTheme() {
-  const saved = localStorage.getItem("mental-dashboard-theme");
-  if (saved === "light" || saved === "dark") {
-    document.documentElement.dataset.theme = saved;
-  } else {
-    delete document.documentElement.dataset.theme;
-  }
-
-  const btn = document.getElementById("theme-toggle");
-  if (!btn) return;
-
-  btn.addEventListener("click", () => {
-    const current = document.documentElement.dataset.theme;
-    let next;
-    if (!current) {
-      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-      next = prefersDark ? "light" : "dark";
-    } else if (current === "dark") {
-      next = "light";
-    } else {
-      next = "dark";
+  activeId: "",
+  projects: [],
+  trackEnabled: false,
+  heartbeat: null,
+  route: { view: "today", params: new URLSearchParams() },
+  cache: new Map(),
+  api,
+  /** Query string with the selected project id. */
+  qs(extra = {}) {
+    const p = new URLSearchParams();
+    if (ctx.id) p.set("id", ctx.id);
+    for (const [k, v] of Object.entries(extra)) if (v != null && v !== "") p.set(k, String(v));
+    const s = p.toString();
+    return s ? `?${s}` : "";
+  },
+  /** Cached `data` payload for an API path (scoped to the current project). Null on error. */
+  async get(path, extra = {}) {
+    const url = `${path}${ctx.qs(extra)}`;
+    if (!ctx.cache.has(url)) {
+      ctx.cache.set(
+        url,
+        api(url).then(({ body }) => {
+          if (!body?.ok) {
+            ctx.cache.delete(url);
+            return null;
+          }
+          return body.data;
+        }),
+      );
     }
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem("mental-dashboard-theme", next);
-  });
+    return ctx.cache.get(url);
+  },
+  invalidate() {
+    ctx.cache.clear();
+  },
+  open: (path) => inspector.open(path),
+  close: () => inspector.close(),
+  go,
+  setParams,
+  projectName() {
+    const p = ctx.projects.find((x) => x.id === ctx.id);
+    return p?.name || "This folder";
+  },
+};
+
+const inspector = createInspector(ctx);
+
+// ─── Routing ────────────────────────────────────────────────────────────────
+
+function parseHash() {
+  const raw = location.hash.replace(/^#\/?/, "");
+  const [pathPart, query = ""] = raw.split("?");
+  const params = new URLSearchParams(query);
+  let [view, ...rest] = pathPart.split("/");
+  if (view === "item" && rest.length) {
+    params.set("open", decodeURIComponent(rest.join("/")));
+    view = "today";
+  }
+  if (!VIEW_BY_ID[view]) view = "today";
+  return { view, params };
 }
+
+function buildHash(view, params) {
+  const p = new URLSearchParams(params);
+  if (ctx.id && ctx.id !== ctx.activeId) p.set("p", ctx.id);
+  else p.delete("p");
+  for (const [k, v] of [...p.entries()]) if (v === "") p.delete(k);
+  const s = p.toString();
+  return `#/${view}${s ? `?${s}` : ""}`;
+}
+
+/** Navigate to a view. Params replace the current ones (project is kept). */
+function go(view, params = {}) {
+  const next = buildHash(view, params);
+  if (next === location.hash) onRoute();
+  else location.hash = next;
+}
+
+/** Update params of the current route. Re-renders the view only with `render: true`. */
+function setParams(patch, { push = false, render = false, state } = {}) {
+  const p = new URLSearchParams(ctx.route.params);
+  for (const [k, v] of Object.entries(patch)) {
+    if (v == null || v === "") p.delete(k);
+    else p.set(k, String(v));
+  }
+  ctx.route.params = p;
+  const next = buildHash(ctx.route.view, p);
+  if (push) history.pushState(state ?? null, "", next);
+  else history.replaceState(state === undefined ? history.state : state, "", next);
+  lastRouteKey = routeKey(ctx.route.view, p);
+  if (render) return renderView();
+}
+
+function routeKey(view, params) {
+  const p = new URLSearchParams(params);
+  p.delete("open");
+  return `${view}?${p}`;
+}
+
+let lastRouteKey = "";
+let renderToken = 0;
+
+async function onRoute() {
+  const { view, params } = parseHash();
+  const wantedId = params.get("p") || ctx.activeId || "";
+  if (wantedId !== ctx.id && (ctx.projects.some((p) => p.id === wantedId) || !wantedId)) {
+    await switchProject(wantedId, { fromRoute: true });
+  }
+  const spec = VIEW_BY_ID[view];
+  if (spec.trackOnly && !ctx.trackEnabled) {
+    go("today");
+    return;
+  }
+  const key = routeKey(view, params);
+  const viewChanged = view !== ctx.route.view;
+  ctx.route = { view, params };
+  if (key !== lastRouteKey) {
+    lastRouteKey = key;
+    await renderView({ fresh: viewChanged });
+  }
+  const open = params.get("open");
+  if (open) inspector.open(open, { fromRoute: true });
+  else if (inspector.isOpen() && !inspector.isPinned()) inspector.close({ fromRoute: true });
+}
+
+async function renderView({ fresh = false } = {}) {
+  const { view } = ctx.route;
+  const spec = VIEW_BY_ID[view];
+  for (const v of VIEWS) {
+    const section = document.getElementById(`view-${v.id}`);
+    if (section) section.hidden = v.id !== view;
+  }
+  if (view !== "map") stopMap();
+  document.body.dataset.view = view;
+  $("#crumb-view").textContent = spec.label;
+  document.title = `${spec.label} · ${ctx.projectName()} · Mental`;
+  for (const link of $$("[data-nav]")) {
+    const on = link.dataset.nav === view;
+    link.classList.toggle("active", on);
+    if (on) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  }
+  const el = document.getElementById(`view-${view}`);
+  if (fresh) el.scrollTop = 0;
+  const token = ++renderToken;
+  el.classList.toggle("is-loading", true);
+  try {
+    await spec.render(el, ctx, ctx.route.params, () => token === renderToken);
+  } catch (err) {
+    console.error(err);
+    fill(el, h("div.empty", null, h("p.empty-title", null, "Something went wrong rendering this view."), h("p.empty-body", null, String(err?.message || err))));
+  } finally {
+    if (token === renderToken) el.classList.remove("is-loading");
+  }
+}
+
+// ─── Projects ───────────────────────────────────────────────────────────────
 
 async function loadProjects() {
   const { body } = await api("/api/projects");
-  const sel = document.getElementById("project");
-  sel.replaceChildren();
-  const projects = body?.ok ? body.data.projects || [] : [];
-  const active = body?.ok ? body.data.activeId : null;
-  const blank = document.createElement("option");
-  blank.value = "";
-  blank.textContent = "This folder";
-  sel.append(blank);
-  for (const p of projects) {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = p.name;
-    sel.append(opt);
-  }
-  if (!state.id && active) {
-    state.id = active;
-  }
-  sel.value = state.id;
+  ctx.projects = body?.ok ? body.data.projects || [] : [];
+  ctx.activeId = body?.ok ? body.data.activeId || "" : "";
+  const sel = $("#project");
+  fill(sel, h("option", { value: "" }, "This folder"), ...ctx.projects.map((p) => h("option", { value: p.id }, p.name)));
 }
 
-function fillFacts(rows) {
-  const box = document.getElementById("facts");
-  box.replaceChildren();
-  for (const [label, value, isGit] of rows) {
-    if (!value) continue;
-    const row = document.createElement("p");
-    const name = document.createElement("span");
-    name.className = "fact-label";
-    name.textContent = label;
-    row.append(name);
+async function switchProject(id, { fromRoute = false } = {}) {
+  ctx.id = id || "";
+  $("#project").value = ctx.id;
+  $("#project-name").textContent = ctx.projectName();
+  ctx.invalidate();
+  inspector.close({ fromRoute: true, force: true });
+  lastRouteKey = "";
+  await loadHeartbeat();
+  if (!fromRoute) go(ctx.route.view === "projects" ? "today" : ctx.route.view);
+}
 
-    if (isGit) {
-      const isDirty = value.includes("dirty");
-      const dot = document.createElement("span");
-      dot.className = isDirty ? "git-pill-dirty" : "git-pill-clean";
-      dot.title = isDirty ? "Working tree dirty" : "Working tree clean";
-      row.append(dot);
+function renderProjectOptions(filter = "") {
+  const ul = $("#project-options");
+  const ranked = ctx.projects
+    .map((p) => ({ p, score: filter ? fuzzyScore(filter, p.name) : 0 }))
+    .filter((x) => x.score >= 0)
+    .sort((a, b) => b.score - a.score || String(b.p.lastTouched || "").localeCompare(String(a.p.lastTouched || "")));
+  fill(ul, 
+    ...ranked.map(({ p }, i) =>
+      h(
+        "li",
+        {
+          role: "option",
+          id: `proj-opt-${i}`,
+          "aria-selected": String(p.id === ctx.id),
+          class: i === 0 ? "hot" : "",
+          dataset: { id: p.id },
+          onclick: () => pickProject(p.id),
+        },
+        h("span.opt-name", null, p.name),
+        p.id === ctx.activeId ? h("span.opt-tag", null, "here") : null,
+        h("span.opt-meta", null, p.lastTouched ? relTime(p.lastTouched) : ""),
+      ),
+    ),
+  );
+  if (!ranked.length) ul.append(h("li.opt-empty", null, "No matching project"));
+}
+
+function openProjectPop() {
+  const pop = $("#project-pop");
+  pop.hidden = false;
+  $("#project-btn").setAttribute("aria-expanded", "true");
+  $("#project-filter").value = "";
+  renderProjectOptions();
+  $("#project-filter").focus();
+}
+
+function closeProjectPop() {
+  $("#project-pop").hidden = true;
+  $("#project-btn").setAttribute("aria-expanded", "false");
+}
+
+function pickProject(id) {
+  closeProjectPop();
+  if (id === ctx.id) return;
+  switchProject(id);
+}
+
+function wireProjectSwitch() {
+  $("#project-btn").addEventListener("click", () => ($("#project-pop").hidden ? openProjectPop() : closeProjectPop()));
+  $("#project-filter").addEventListener("input", (e) => renderProjectOptions(e.target.value));
+  $("#project-filter").addEventListener("keydown", (e) => {
+    const items = $$("#project-options li[role=option]");
+    let i = items.findIndex((li) => li.classList.contains("hot"));
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      i = Math.max(0, Math.min(items.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
+      items.forEach((li, j) => li.classList.toggle("hot", j === i));
+      items[i]?.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (items[i]) pickProject(items[i].dataset.id);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      closeProjectPop();
+      $("#project-btn").focus();
     }
-
-    row.append(document.createTextNode(value));
-    box.append(row);
-  }
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (!$("#project-pop").hidden && !$("#project-switch").contains(e.target)) closeProjectPop();
+  });
 }
 
-function relWhen(when) {
-  if (!when?.date) return "";
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const d = String(now.getDate()).padStart(2, "0");
-  if (when.date === `${y}-${m}-${d}`) return when.time ? `today ${when.time}` : "today";
-  return when.time ? `${when.date} ${when.time}` : when.date;
-}
-
-/**
- * @param {string} listId
- * @param {Array<{ title?: string, path?: string }>} items
- * @param {number} total
- * @param {(() => void) | null} onMore
- */
-function fillBoard(listId, items, total, onMore, emptyText = "All clear") {
-  const ul = document.getElementById(listId);
-  ul.replaceChildren();
-  const shown = items || [];
-  if (shown.length === 0) {
-    const li = document.createElement("li");
-    li.className = "pulse-empty";
-    li.textContent = emptyText;
-    ul.append(li);
-    return;
-  }
-  for (const item of shown) {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "pulse-item";
-    btn.textContent = item.title || "Untitled";
-    btn.title = item.title || "Untitled";
-    if (item.path) btn.addEventListener("click", () => peek(item.path));
-    li.append(btn);
-    ul.append(li);
-  }
-  const extra = Math.max(0, (total || shown.length) - shown.length);
-  if (extra > 0 && onMore) {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "pulse-more";
-    btn.textContent = `+${extra} more`;
-    btn.addEventListener("click", onMore);
-    li.append(btn);
-    ul.append(li);
-  } else if (extra > 0) {
-    const li = document.createElement("li");
-    li.className = "pulse-empty";
-    li.textContent = `+${extra} more`;
-    ul.append(li);
-  }
-}
-
-function showCatalog({ type = "", status = "", kind = "" } = {}) {
-  state.type = type;
-  state.status = status;
-  state.kind = kind;
-  state.offset = 0;
-  state.q = "";
-  const q = document.getElementById("q");
-  if (q) q.value = "";
-  updateSearchClear();
-  renderChips();
-  showView("list");
-  loadList();
-}
+// ─── Heartbeat (badges, track gate) ─────────────────────────────────────────
 
 async function loadHeartbeat() {
-  const { body } = await api(`/api/heartbeat${qs()}`);
-  const d = body?.ok ? body.data : null;
-  if (!d) {
-    setText("strip", "No bundle yet.");
-    syncResumeClamp();
-    fillFacts([]);
-    document.getElementById("board-eyes").hidden = true;
-    document.getElementById("board-later").hidden = true;
-    fillBoard("air-list", [], 0, null);
-    fillBoard("open-list", [], 0, null);
-    document.getElementById("track").hidden = true;
-    setText("eyes-count", "");
-    setText("air-count", "");
-    setText("later-count", "");
-    setText("open-count", "");
-    return;
+  const data = await ctx.get("/api/heartbeat");
+  ctx.heartbeat = data;
+  ctx.trackEnabled = Boolean(data?.track?.enabled);
+  for (const v of VIEWS) {
+    if (!v.trackOnly) continue;
+    for (const el of $$(`[data-nav="${v.id}"]`)) el.closest("li, a").hidden = !ctx.trackEnabled;
   }
-
-  setText("strip", d.handoff?.resume || "No journal yet.");
-  syncResumeClamp();
-  const when = relWhen(d.handoff?.when);
-  const last = d.handoff?.outcome ? `${d.handoff.outcome}${when ? ` (${when})` : ""}` : "";
-  const branch = d.git?.branch ? `${d.git.branch} · ${d.git.dirty ? "dirty" : "clean"}` : "";
-  const recent = d.git?.recent?.[0] || "";
-  const git = [branch, recent].filter(Boolean).join(" — ");
-
-  fillFacts([
-    ["Last", last, false],
-    ["Git", git, true],
-    ["Against", d.against || "", false],
-    ["Hops", d.hopsToday ? String(d.hopsToday) : "", false],
-  ]);
-
-  const air = (d.attention || []).filter((a) => a.kind !== "verify" && a.status !== "later");
-  const airTotal = Math.max(0, (d.attentionCount || 0) - (d.laterCount || 0) - (d.needsEyesCount || 0));
-
-  document.getElementById("board-eyes").hidden = !(d.needsEyesCount > 0);
-  document.getElementById("board-later").hidden = !(d.laterCount > 0);
-
-  setText("eyes-count", d.needsEyesCount ? String(d.needsEyesCount) : "");
-  setText("air-count", airTotal ? String(airTotal) : "");
-  setText("later-count", d.laterCount ? String(d.laterCount) : "");
-  setText("open-count", d.openDecisionCount ? String(d.openDecisionCount) : "");
-
-  fillBoard("eyes-list", d.needsEyes || [], d.needsEyesCount || 0, () => showCatalog({ type: "Attention", kind: "verify" }));
-  fillBoard("air-list", air, airTotal, () => showCatalog({ type: "Attention", status: "open" }), "Nothing in the air");
-  fillBoard("later-list", d.later || [], d.laterCount || 0, () => showCatalog({ type: "Attention", status: "later" }));
-  fillBoard("open-list", d.openDecisions || [], d.openDecisionCount || 0, null, "No open decisions");
-
-  state.track = d.track || null;
-  document.getElementById("view-sessions").hidden = !state.track;
-  if (!state.track && state.view === "sessions") showView("list");
-  if (state.track) await loadTrack();
-  else document.getElementById("track").hidden = true;
+  const counts = {
+    attention: data?.attentionCount || 0,
+    decisions: data?.openDecisionCount || 0,
+  };
+  for (const el of $$("[data-badge]")) {
+    const n = counts[el.dataset.badge] || 0;
+    el.hidden = !n;
+    el.textContent = n > 99 ? "99+" : String(n);
+  }
+  const eyes = data?.needsEyesCount || 0;
+  for (const el of $$('[data-nav="today"] .nav-dot')) el.hidden = !eyes;
+  $("#live").classList.toggle("is-clock", Boolean(data?.track?.runningCount));
+  $("#live .live-text").textContent = data?.track?.runningCount ? "Clock running" : "Read-only";
+  $("#project-name").textContent = ctx.projectName();
 }
 
-function clockRow(title, detail) {
-  const li = document.createElement("li");
-  li.className = "clock";
-  const name = document.createElement("span");
-  name.textContent = title || "Untitled";
-  const time = document.createElement("span");
-  time.textContent = detail;
-  li.append(name, time);
-  return li;
+// ─── Shell chrome ───────────────────────────────────────────────────────────
+
+function buildNav() {
+  const rail = $("#rail-nav");
+  const tabs = $("#tabbar");
+  fill(rail);
+  fill(tabs);
+  for (const v of VIEWS) {
+    const b = v.badge ? badge(0) : null;
+    if (b) b.dataset.badge = v.badge;
+    rail.append(
+      h(
+        "li",
+        { hidden: v.trackOnly ? true : null },
+        h(
+          "a.rail-link",
+          { href: `#/${v.id}`, dataset: { nav: v.id }, title: `${v.label}  (g ${v.key})`, onclick: navClick(v.id) },
+          icon(v.icon, 19),
+          h("span.rail-label", null, v.label),
+          b,
+          v.id === "today" ? h("span.nav-dot", { hidden: true, title: "Something needs your eyes" }) : null,
+        ),
+      ),
+    );
+    if (["today", "attention", "library", "decisions", "map"].includes(v.id)) {
+      const tb = v.badge ? badge(0) : null;
+      if (tb) tb.dataset.badge = v.badge;
+      tabs.append(h("a.tab-link", { href: `#/${v.id}`, dataset: { nav: v.id }, onclick: navClick(v.id) }, icon(v.icon, 20), h("span", null, v.label), tb));
+    }
+  }
+  $("#rail-help").append(icon("keyboard", 18));
+  $("#rail-help").addEventListener("click", () => openShortcuts());
+  const expand = $("#rail-expand");
+  expand.append(icon("chevron", 16));
+  const setRail = (on) => {
+    document.body.classList.toggle("rail-open", on);
+    expand.setAttribute("aria-expanded", String(on));
+    expand.title = on ? "Collapse sidebar" : "Expand sidebar";
+    localStorage.setItem(RAIL_KEY, on ? "1" : "0");
+  };
+  setRail(localStorage.getItem(RAIL_KEY) === "1");
+  expand.addEventListener("click", () => setRail(!document.body.classList.contains("rail-open")));
 }
 
-async function loadTrack() {
-  const trackEl = document.getElementById("track");
-  const glance = await api(`/api/track/glance${qs()}`);
-  if (glance.status !== 200 || !glance.body.ok) {
-    trackEl.hidden = true;
-    return;
-  }
-  const g = glance.body.data;
-  trackEl.hidden = false;
-  const note = [];
-  if (state.track?.unclocked) note.push("A hop today has no clock.");
-  if (g.truncated) note.push("List is capped.");
-  setText("track-note", note.join(" "));
-  document.getElementById("track-note").hidden = note.length === 0;
+function navClick(view) {
+  return (e) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    const keep = view === ctx.route.view ? ctx.route.params : {};
+    const p = new URLSearchParams(keep);
+    p.delete("open");
+    go(view, p);
+  };
+}
 
-  const running = document.getElementById("track-running");
-  running.replaceChildren();
-  const runningRows = g.running || [];
-  const summary = document.getElementById("clock-summary");
-  if (runningRows.length === 0) {
-    summary.textContent = "No clock running";
+function currentTheme() {
+  const set = document.documentElement.dataset.theme;
+  if (set) return set;
+  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function paintThemeButton() {
+  const btn = $("#theme-toggle");
+  const dark = currentTheme() === "dark";
+  fill(btn, icon(dark ? "sun" : "moon", 17));
+  btn.title = dark ? "Switch to light" : "Switch to dark";
+}
+
+function setTheme(next) {
+  if (next === "system") {
+    delete document.documentElement.dataset.theme;
+    localStorage.removeItem(THEME_KEY);
   } else {
-    const row = runningRows.find((item) => item.focused) || runningRows[0];
-    const extra = runningRows.length > 1 ? ` · ${runningRows.length} running` : "";
-    summary.textContent = `${row.live_wall || "0:00"} · ${row.title_internal || "Untitled"}${extra}`;
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem(THEME_KEY, next);
   }
-  if (runningRows.length === 0) running.append(clockRow("None running", ""));
-  for (const row of runningRows) {
-    const flags = [row.focused ? "focused" : "", row.stale ? "stale" : ""].filter(Boolean).join(", ");
-    const hours = row.live_wall || "0:00";
-    running.append(clockRow(row.title_internal, flags ? `${hours} · ${flags}` : hours));
-  }
-  const stopped = document.getElementById("track-stopped");
-  stopped.replaceChildren();
-  const stoppedRows = g.stoppedToday || [];
-  if (stoppedRows.length === 0) stopped.append(clockRow("Nothing stopped today", ""));
-  for (const row of stoppedRows) {
-    stopped.append(clockRow(row.title_internal, `${row.wall || "0:00"} wall · ${row.billable || "0:00"} billable`));
-  }
+  paintThemeButton();
 }
 
-function metaLine(row) {
-  const meta = document.createElement("span");
-  meta.className = "row-meta";
-  const spec = KIND[row.type];
-  const label = document.createElement("span");
-  label.className = "row-kind";
-  label.textContent = spec ? spec.label : row.type || "";
-  meta.append(label);
-  if (row.status) {
-    const status = document.createElement("span");
-    status.className = `row-status status-${String(row.status).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-    status.textContent = row.status;
-    meta.append(status);
-  }
-  const tags = Array.isArray(row.tags) ? row.tags.slice(0, 2) : [];
-  for (const tag of tags) {
-    const t = document.createElement("span");
-    t.className = "row-tag";
-    t.textContent = `#${tag}`;
-    meta.append(t);
-  }
-  return meta;
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
+  paintThemeButton();
+  $("#theme-toggle").addEventListener("click", () => setTheme(currentTheme() === "dark" ? "light" : "dark"));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintThemeButton);
 }
 
-function catalogRow(row) {
-  const li = document.createElement("li");
-  if (row.path === state.path) li.className = "active";
-  const btn = document.createElement("button");
-  btn.type = "button";
-  const spec = KIND[row.type];
-  btn.className = `row row-rich${spec ? ` kind-${row.type.toLowerCase()}` : ""}`;
-  btn.dataset.path = row.path;
-  if (row.status) btn.dataset.status = String(row.status).toLowerCase();
-  if (row.path === state.path) btn.setAttribute("aria-current", "true");
-  const mark = document.createElement("span");
-  mark.className = "row-mark";
-  mark.setAttribute("aria-hidden", "true");
-  mark.textContent = spec ? spec.emoji : "•";
-  const body = document.createElement("span");
-  body.className = "row-body";
-  const title = document.createElement("span");
-  title.className = "row-title";
-  title.textContent = row.title;
-  title.title = row.title;
-  body.append(title, metaLine(row));
-  btn.append(mark, body);
-  btn.addEventListener("click", () => peek(row.path));
-  li.append(btn);
-  return li;
+// ─── Palette, shortcuts ─────────────────────────────────────────────────────
+
+const commands = () => [
+  ...VIEWS.filter((v) => !v.trackOnly || ctx.trackEnabled).map((v) => ({
+    id: `view:${v.id}`,
+    label: `Go to ${v.label}`,
+    hint: `g ${v.key}`,
+    icon: v.icon,
+    run: () => go(v.id),
+  })),
+  { id: "theme:dark", label: "Theme: Dark", icon: "moon", run: () => setTheme("dark") },
+  { id: "theme:light", label: "Theme: Light", icon: "sun", run: () => setTheme("light") },
+  { id: "theme:system", label: "Theme: Match system", icon: "sparkle", run: () => setTheme("system") },
+  { id: "refresh", label: "Refresh data", hint: "r", icon: "refresh", run: () => refresh() },
+  { id: "shortcuts", label: "Keyboard shortcuts", hint: "?", icon: "keyboard", run: () => openShortcuts() },
+  ...(ctx.heartbeat?.handoff?.resume
+    ? [{ id: "copy-resume", label: "Copy resume line", icon: "copy", run: () => navigator.clipboard.writeText(ctx.heartbeat.handoff.resume) }]
+    : []),
+];
+
+const palette = createPalette(ctx, { commands, pickProject: (id) => pickProject(id), views: VIEWS });
+
+const SHORTCUTS = [
+  ["Navigation", [["⌘ K", "Search & commands"], ["g t", "Today"], ["g a", "Attention"], ["g l", "Library"], ["g d", "Decisions"], ["g m", "Map"], ["g p", "All projects"]]],
+  ["Anywhere", [["/", "Focus search"], ["Esc", "Close drawer / dialog"], ["r", "Refresh data"], ["?", "This sheet"]]],
+  ["Drawer", [["⌫", "Back to previous item"], ["Alt ←", "Browser back (same history)"]]],
+  ["Library", [["↑ ↓", "Move selection"], ["⏎", "Open in drawer"], ["[ ]", "Previous / next type"]]],
+];
+
+function openShortcuts() {
+  const dlg = $("#shortcuts");
+  renderShortcutSheet($("#shortcut-grid"), SHORTCUTS);
+  if (!dlg.open) dlg.showModal();
 }
 
-async function loadList() {
-  const extra = {
-    offset: state.offset,
-    limit: state.limit,
-    type: state.type,
-    status: state.status,
-    kind: state.kind,
-  };
-  const path = state.q
-    ? `/api/search${qs({ ...extra, q: state.q })}`
-    : `/api/list${qs(extra)}`;
-  const { body } = await api(path);
-  const data = body?.ok ? body.data : { items: [], hits: [], total: 0, offset: 0, limit: 50 };
-  const rows = data.items || data.hits || [];
-  state.total = data.total || 0;
-  const start = state.total === 0 ? 0 : state.offset + 1;
-  const end = state.offset + rows.length;
-  const filters = [state.status, state.kind].filter(Boolean).join(" · ");
-  const range = state.total ? `${start}–${end} of ${state.total}` : "0 of 0";
-  setText("page", filters ? `${range} · ${filters}` : range);
-
-  const ul = document.getElementById("list");
-  ul.replaceChildren();
-
-  if (rows.length === 0) {
-    const li = document.createElement("li");
-    li.className = "pulse-empty";
-    li.textContent = state.q ? `No matches for “${state.q}”.` : "No items in this category.";
-    ul.append(li);
-  }
-
-  for (const row of rows) ul.append(catalogRow(row));
-  document.getElementById("prev").disabled = state.offset <= 0;
-  document.getElementById("next").disabled = end >= state.total;
+function isTyping(target) {
+  const el = target instanceof Element ? target : null;
+  return Boolean(el && (el.closest("input, textarea, select, [contenteditable=true]")));
 }
 
-function clearPeek(title, meta) {
-  state.currentBody = "";
-  document.getElementById("peek-container").classList.add("is-empty");
-  setText("peek-title", title);
-  setText("peek-meta", meta);
-  const fm = document.getElementById("peek-fm");
-  fm.hidden = true;
-  fm.replaceChildren();
-  document.getElementById("peek-body").replaceChildren();
-  document.getElementById("backlinks-label").hidden = true;
-  document.getElementById("backlinks").replaceChildren();
-  const backlinksSec = document.getElementById("backlinks-section");
-  if (backlinksSec) backlinksSec.hidden = true;
+let chord = "";
+let chordTimer = 0;
 
-  const emptyState = document.getElementById("peek-empty");
-  if (emptyState) emptyState.hidden = false;
+function wireKeys() {
+  $("#shortcuts-close").append(icon("close", 16));
+  $("#shortcuts-close").addEventListener("click", () => $("#shortcuts").close());
+  $("#shortcuts").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget) e.currentTarget.close();
+  });
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+  $("#search-kbd").textContent = isMac ? "⌘K" : "Ctrl K";
+  $(".search-trigger-icon").append(icon("search", 15));
+  $("#search-trigger").addEventListener("click", () => palette.open());
 
-  const docActions = document.getElementById("doc-actions");
-  if (docActions) docActions.hidden = true;
-}
-
-async function peek(path) {
-  state.path = path;
-  const { body } = await api(`/api/show${qs({ path })}`);
-  if (!body?.ok) {
-    clearPeek("Not found", "");
-    document.getElementById("peek-body").textContent = body?.error?.message || "not found";
-    return;
-  }
-  const d = body.data;
-  state.currentBody = d.body || "";
-  const title = d.frontmatter?.title || d.path;
-  const type = d.frontmatter?.type || "";
-  const status = d.frontmatter?.status || "";
-
-  setText("peek-title", title);
-
-  const emptyState = document.getElementById("peek-empty");
-  if (emptyState) emptyState.hidden = true;
-  document.getElementById("peek-container").classList.remove("is-empty");
-
-  const docActions = document.getElementById("doc-actions");
-  if (docActions) docActions.hidden = false;
-
-  // Sync active row in catalog
-  document.querySelectorAll("#list li").forEach((li) => {
-    const btn = li.querySelector("button.row");
-    const active = btn && btn.dataset.path === path;
-    li.classList.toggle("active", active);
-    if (btn) {
-      if (active) btn.setAttribute("aria-current", "true");
-      else btn.removeAttribute("aria-current");
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      palette.toggle();
+      return;
+    }
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
+    if ($("#palette").open || $("#shortcuts").open) return;
+    if (e.key === "Escape") {
+      if (!$("#project-pop").hidden) return closeProjectPop();
+      const wrap = $("#map-wrap");
+      if (wrap?.classList.contains("expanded")) return wrap.classList.remove("expanded");
+      if (inspector.isOpen()) return inspector.close();
+      return;
+    }
+    if (isTyping(e.target)) return;
+    if (e.key === "Backspace" && inspector.canGoBack()) {
+      e.preventDefault();
+      inspector.back();
+      return;
+    }
+    if (chord === "g") {
+      chord = "";
+      clearTimeout(chordTimer);
+      const v = VIEWS.find((x) => x.key === e.key.toLowerCase() && (!x.trackOnly || ctx.trackEnabled));
+      if (v) {
+        e.preventDefault();
+        go(v.id);
+      }
+      return;
+    }
+    if (e.key === "g") {
+      chord = "g";
+      chordTimer = window.setTimeout(() => (chord = ""), 1200);
+      return;
+    }
+    if (e.key === "?") {
+      e.preventDefault();
+      openShortcuts();
+    } else if (e.key === "/") {
+      const field = $(`#view-${ctx.route.view} [data-search]`);
+      e.preventDefault();
+      if (field) field.focus();
+      else palette.open();
+    } else if (e.key === "r") {
+      refresh();
     }
   });
-
-  const meta = document.getElementById("peek-meta");
-  meta.replaceChildren(document.createTextNode(d.path));
-  if (type) meta.append(document.createTextNode(" · "), kindChip(type));
-  if (status) meta.append(document.createTextNode(` · ${status}`));
-
-  const fm = document.getElementById("peek-fm");
-  const fmHtml = renderFrontmatter(d.frontmatter);
-  fm.hidden = !fmHtml;
-  fm.innerHTML = fmHtml;
-
-  const preview = document.getElementById("peek-body");
-  const rendered = renderMarkdown(d.body || "");
-  preview.innerHTML = rendered || "<p class=\"muted\">No body.</p>";
-
-  // Enhance code blocks with copy buttons
-  preview.querySelectorAll(".md-code").forEach((codeBlock) => {
-    const copyBtn = document.createElement("button");
-    copyBtn.type = "button";
-    copyBtn.className = "doc-btn";
-    copyBtn.style.position = "absolute";
-    copyBtn.style.top = "0.4rem";
-    copyBtn.style.right = "0.4rem";
-    copyBtn.style.padding = "0.15rem 0.45rem";
-    copyBtn.style.fontSize = "0.6875rem";
-    copyBtn.textContent = "Copy";
-    copyBtn.addEventListener("click", () => {
-      const codeText = codeBlock.querySelector("code")?.textContent || "";
-      navigator.clipboard.writeText(codeText).then(() => {
-        copyBtn.textContent = "Copied!";
-        copyBtn.classList.add("copied");
-        setTimeout(() => {
-          copyBtn.textContent = "Copy";
-          copyBtn.classList.remove("copied");
-        }, 1500);
-      });
-    });
-    codeBlock.append(copyBtn);
-  });
-
-  map.select(path);
-
-  const links = d.backlinks || [];
-  const backlinksLabel = document.getElementById("backlinks-label");
-  const backlinksSec = document.getElementById("backlinks-section");
-  if (backlinksLabel) backlinksLabel.hidden = links.length === 0;
-  if (backlinksSec) backlinksSec.hidden = links.length === 0;
-
-  const ul = document.getElementById("backlinks");
-  ul.replaceChildren();
-  for (const b of links) {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "row";
-    const bTitle = document.createElement("span");
-    bTitle.className = "row-title";
-    bTitle.textContent = b.title;
-    btn.append(document.createTextNode("from "), kindChip(b.type), bTitle);
-    btn.addEventListener("click", () => peek(b.path));
-    li.append(btn);
-    ul.append(li);
-  }
-  await loadList();
 }
 
-function renderChips() {
-  const box = document.getElementById("chips");
-  box.replaceChildren();
-  for (const t of TYPES) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    const spec = KIND[t];
-    btn.className = spec ? `kind kind-${t.toLowerCase()}` : "kind kind-all";
-    btn.textContent = spec ? `${spec.emoji} ${spec.label}` : "🧠 All";
-    btn.setAttribute("aria-pressed", String(state.type === t));
-    btn.addEventListener("click", () => {
-      state.type = t;
-      state.status = "";
-      state.kind = "";
-      state.offset = 0;
-      renderChips();
-      loadList();
-      map.setFilter({ type: state.type, query: state.q });
-    });
-    box.append(btn);
-  }
+// ─── Refresh on focus (no polling) ──────────────────────────────────────────
+
+let lastRefresh = Date.now();
+
+async function refresh() {
+  lastRefresh = Date.now();
+  ctx.invalidate();
+  const { body } = await api("/api/projects");
+  if (body?.ok) ctx.projects = body.data.projects || ctx.projects;
+  await loadHeartbeat();
+  lastRouteKey = "";
+  await renderView();
+  if (inspector.isOpen()) inspector.reload();
+  $("#live").classList.add("pulse");
+  setTimeout(() => $("#live").classList.remove("pulse"), 900);
 }
 
-function updateSearchClear() {
-  const clearBtn = document.getElementById("q-clear");
-  const q = document.getElementById("q");
-  if (clearBtn && q) {
-    clearBtn.hidden = !q.value.trim();
-  }
+const refreshSoon = debounce(() => {
+  if (document.visibilityState !== "visible") return;
+  if (Date.now() - lastRefresh < 4000) return;
+  refresh();
+}, 120);
+
+// ─── Boot ───────────────────────────────────────────────────────────────────
+
+async function boot() {
+  initTheme();
+  buildNav();
+  wireProjectSwitch();
+  wireKeys();
+  await loadProjects();
+  const first = parseHash();
+  ctx.id = first.params.get("p") || ctx.activeId || "";
+  $("#project").value = ctx.id;
+  await loadHeartbeat();
+  window.addEventListener("hashchange", onRoute);
+  window.addEventListener("focus", refreshSoon);
+  document.addEventListener("visibilitychange", refreshSoon);
+  if (!location.hash) history.replaceState(null, "", buildHash("today", {}));
+  await onRoute();
+  document.body.classList.add("ready");
 }
 
-document.getElementById("project").addEventListener("change", (ev) => {
-  state.id = ev.target.value;
-  state.offset = 0;
-  state.path = "";
-  state.sessionId = "";
-  document.getElementById("timeline").replaceChildren();
-  clearPeek("No file open", "Select a file.");
-  loadHeartbeat();
-  loadList();
-  if (state.view === "map") loadGraph();
-  if (state.view === "sessions") loadSessions();
-});
-
-const searchInput = document.getElementById("q");
-searchInput.addEventListener("input", () => {
-  state.q = searchInput.value.trim();
-  state.offset = 0;
-  updateSearchClear();
-  loadList();
-  map.setFilter({ type: state.type, query: state.q });
-});
-
-const clearBtn = document.getElementById("q-clear");
-if (clearBtn) {
-  clearBtn.addEventListener("click", () => {
-    searchInput.value = "";
-    state.q = "";
-    state.offset = 0;
-    updateSearchClear();
-    searchInput.focus();
-    loadList();
-    map.setFilter({ type: state.type, query: state.q });
-  });
-}
-
-// Global keyboard shortcut '/' to focus search, and 'Escape' to clear/blur
-window.addEventListener("keydown", (ev) => {
-  const activeEl = document.activeElement;
-  const inInput = activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.tagName === "SELECT");
-
-  if (ev.key === "/" && !inInput) {
-    ev.preventDefault();
-    searchInput.focus();
-    searchInput.select();
-  } else if (ev.key === "Escape" && inInput && activeEl === searchInput) {
-    if (searchInput.value) {
-      searchInput.value = "";
-      state.q = "";
-      state.offset = 0;
-      updateSearchClear();
-      loadList();
-      map.setFilter({ type: state.type, query: state.q });
-    } else {
-      searchInput.blur();
-    }
-  }
-});
-
-// Copy path & copy markdown buttons
-const copyPathBtn = document.getElementById("copy-path-btn");
-if (copyPathBtn) {
-  copyPathBtn.addEventListener("click", () => {
-    if (!state.path) return;
-    navigator.clipboard.writeText(state.path).then(() => {
-      const textSpan = copyPathBtn.querySelector(".btn-text");
-      if (textSpan) textSpan.textContent = "Copied!";
-      copyPathBtn.classList.add("copied");
-      setTimeout(() => {
-        if (textSpan) textSpan.textContent = "Copy path";
-        copyPathBtn.classList.remove("copied");
-      }, 1500);
-    });
-  });
-}
-
-const copyBodyBtn = document.getElementById("copy-body-btn");
-if (copyBodyBtn) {
-  copyBodyBtn.addEventListener("click", () => {
-    if (!state.currentBody) return;
-    navigator.clipboard.writeText(state.currentBody).then(() => {
-      const textSpan = copyBodyBtn.querySelector(".btn-text");
-      if (textSpan) textSpan.textContent = "Copied!";
-      copyBodyBtn.classList.add("copied");
-      setTimeout(() => {
-        if (textSpan) textSpan.textContent = "Copy markdown";
-        copyBodyBtn.classList.remove("copied");
-      }, 1500);
-    });
-  });
-}
-
-document.getElementById("prev").addEventListener("click", () => {
-  state.offset = Math.max(0, state.offset - state.limit);
-  loadList();
-});
-document.getElementById("next").addEventListener("click", () => {
-  state.offset += state.limit;
-  loadList();
-});
-
-const map = startMap(document.getElementById("map"), (path) => peek(path));
-
-let mapFilterTag = "";
-const mapQ = document.getElementById("map-q");
-if (mapQ) {
-  mapQ.addEventListener("input", () => {
-    map.setFilter({ tag: mapFilterTag, query: mapQ.value.trim() });
-  });
-}
-
-const mapChipHost = document.getElementById("map-chips");
-if (mapChipHost) {
-  mapChipHost.addEventListener("click", (event) => {
-    const btn = event.target.closest("button");
-    if (!btn || !mapChipHost.contains(btn)) return;
-    mapFilterTag = btn.dataset.tag || "";
-    mapChipHost.querySelectorAll("button").forEach((b) => {
-      b.classList.toggle("active", (b.dataset.tag || "") === mapFilterTag);
-    });
-    map.setFilter({ tag: mapFilterTag, query: mapQ ? mapQ.value.trim() : "" });
-  });
-}
-
-function renderMapChips(nodes) {
-  if (!mapChipHost) return;
-  const counts = new Map();
-  for (const node of nodes || []) {
-    const raw = Array.isArray(node.tags) ? node.tags : [];
-    for (const part of raw) {
-      const slug = String(part).trim().toLowerCase();
-      if (!slug) continue;
-      counts.set(slug, (counts.get(slug) || 0) + 1);
-    }
-  }
-  mapChipHost.replaceChildren();
-  const ordered = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  const make = (slug, label) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `kind${slug ? "" : " kind-all"}${slug === mapFilterTag ? " active" : ""}`;
-    btn.dataset.tag = slug;
-    btn.textContent = label;
-    if (slug) {
-      btn.style.background = tagColor(slug);
-      btn.style.color = "#0f172a";
-    }
-    return btn;
-  };
-  mapChipHost.append(make("", "All"));
-  for (const [slug, count] of ordered) mapChipHost.append(make(slug, `${slug} ${count}`));
-  mapChipRow?.classList.remove("expanded");
-  requestAnimationFrame(syncChipToggle);
-}
-
-const mapChipRow = document.getElementById("map-chip-row");
-const mapChipToggle = document.getElementById("map-chip-toggle");
-
-function syncChipToggle() {
-  if (!mapChipToggle || !mapChipRow || !mapChipHost) return;
-  const expanded = mapChipRow.classList.contains("expanded");
-  const overflowing = mapChipHost.scrollHeight > mapChipHost.clientHeight + 2;
-  mapChipToggle.hidden = !(expanded || overflowing);
-  const total = Math.max(0, mapChipHost.children.length - 1);
-  mapChipToggle.textContent = expanded ? "Fewer tags" : `Show all ${total} tags`;
-  mapChipToggle.setAttribute("aria-expanded", String(expanded));
-}
-
-if (mapChipToggle && mapChipRow) {
-  mapChipToggle.addEventListener("click", () => {
-    mapChipRow.classList.toggle("expanded");
-    syncChipToggle();
-  });
-  window.addEventListener("resize", syncChipToggle);
-}
-
-const btnLayoutGraph = document.getElementById("btn-layout-graph");
-const btnLayoutOrganic = document.getElementById("btn-layout-organic");
-const btnLayoutTree = document.getElementById("btn-layout-tree");
-const layoutButtons = [btnLayoutGraph, btnLayoutOrganic, btnLayoutTree].filter(Boolean);
-
-let lastMapCap = "";
-function layoutHelp(cap = lastMapCap) {
-  lastMapCap = cap;
-  const graphOn = btnLayoutGraph?.classList.contains("active");
-  const help = document.getElementById("map-help");
-  if (!help) return;
-  help.textContent = graphOn
-    ? `Bubbles are topics (untagged files group by type). Hover to focus, click a bubble to zoom in, click a file to peek.${cap}`
-    : `Scroll to zoom. Drag empty space to pan. Click a tag to fold or unfold. Click a file to peek.${cap}`;
-}
-
-if (layoutButtons.length === 3) {
-  const modes = [
-    [btnLayoutGraph, "graph"],
-    [btnLayoutOrganic, "organic"],
-    [btnLayoutTree, "tree"],
-  ];
-  for (const [btn, mode] of modes) {
-    btn.addEventListener("click", () => {
-      for (const other of layoutButtons) other.classList.toggle("active", other === btn);
-      map.setLayoutMode(mode);
-      layoutHelp();
-    });
-  }
-}
-
-function showView(view) {
-  state.view = view;
-  const mapMode = view === "map";
-  const sessions = view === "sessions";
-  document.body.classList.toggle("view-map", mapMode);
-  document.getElementById("main").classList.toggle("map-mode", mapMode);
-  document.getElementById("catalog").hidden = view !== "list";
-  document.getElementById("map-wrap").hidden = !mapMode;
-  document.getElementById("map-hint").hidden = !mapMode;
-  if (mapMode) requestAnimationFrame(syncChipToggle);
-  document.getElementById("sessions").hidden = !sessions;
-  document.getElementById("timeline").hidden = !sessions;
-  document.getElementById("timeline-heading").hidden = !sessions;
-  const timelineWrap = document.getElementById("timeline-wrap");
-  if (timelineWrap) timelineWrap.hidden = !sessions;
-
-  document.getElementById("view-list").setAttribute("aria-pressed", String(view === "list"));
-  document.getElementById("view-map").setAttribute("aria-pressed", String(mapMode));
-  document.getElementById("view-sessions").setAttribute("aria-pressed", String(sessions));
-  if (mapMode) {
-    map.start();
-    map.setFilter({ type: state.type, query: state.q });
-    loadGraph();
-  } else {
-    map.stop();
-  }
-  if (sessions) loadSessions();
-}
-
-function formatWhen(iso) {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-async function loadSessions() {
-  const { body } = await api(`/api/sessions${qs()}`);
-  const sessions = body?.ok ? body.data.sessions || [] : [];
-  const ul = document.getElementById("session-list");
-  const empty = document.getElementById("session-empty");
-  ul.replaceChildren();
-  empty.hidden = sessions.length > 0;
-  for (const row of sessions) {
-    const li = document.createElement("li");
-    li.dataset.id = row.id;
-    if (row.id === state.sessionId) li.className = "active";
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "row";
-    if (row.id === state.sessionId) btn.setAttribute("aria-current", "true");
-    const title = document.createElement("span");
-    title.className = "row-title";
-    title.textContent = row.title;
-    const when = document.createElement("span");
-    when.className = "session-when";
-    const hours = row.status === "running" ? `${row.wall} running` : `${row.wall} wall`;
-    when.textContent = `${formatWhen(row.started)} · ${hours}`;
-    btn.append(title, when);
-    btn.addEventListener("click", () => openSession(row.id));
-    li.append(btn);
-    ul.append(li);
-  }
-  if (!state.sessionId && sessions[0]) openSession(sessions[0].id);
-}
-
-async function openSession(id) {
-  state.sessionId = id;
-  const { body } = await api(`/api/sessions${qs({ session: id })}`);
-  const ol = document.getElementById("timeline");
-  ol.replaceChildren();
-  if (!body?.ok) {
-    const li = document.createElement("li");
-    li.textContent = body?.error?.message || "Session not found";
-    ol.append(li);
-    return;
-  }
-  const events = body.data.events || [];
-  if (events.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = "Nothing recorded during this sit-down.";
-    ol.append(li);
-  }
-  for (const event of events) {
-    const li = document.createElement("li");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "row";
-    const time = document.createElement("time");
-    time.dateTime = event.at;
-    time.textContent = formatWhen(event.at);
-    btn.append(time, kindChip(event.type), document.createTextNode(event.title));
-    btn.addEventListener("click", () => peek(event.path));
-    li.append(btn);
-    ol.append(li);
-  }
-  for (const li of document.querySelectorAll("#session-list li")) {
-    li.classList.toggle("active", li.dataset.id === id);
-  }
-}
-
-async function loadGraph() {
-  const { body } = await api(`/api/graph${qs()}`);
-  const data = body?.ok ? body.data : { nodes: [], edges: [] };
-  map.setGraph(data);
-  renderMapChips(data.nodes);
-  const cap = data.truncated ? ` Showing ${data.nodes.length} of ${data.total}.` : "";
-  layoutHelp(cap);
-}
-
-document.getElementById("view-list").addEventListener("click", () => showView("list"));
-document.getElementById("view-map").addEventListener("click", () => showView("map"));
-document.getElementById("view-sessions").addEventListener("click", () => showView("sessions"));
-
-document.getElementById("peek-body").addEventListener("click", (ev) => {
-  const link = ev.target.closest("a[data-path]");
-  if (!link) return;
-  ev.preventDefault();
-  peek(link.dataset.path.split("#")[0]);
-});
-
-function syncResumeClamp() {
-  const strip = document.getElementById("strip");
-  const more = document.getElementById("resume-more");
-  if (!strip || !more) return;
-  strip.dataset.clamped = "true";
-  more.setAttribute("aria-expanded", "false");
-  more.textContent = "Show more";
-  requestAnimationFrame(() => {
-    more.hidden = !(strip.scrollHeight > strip.clientHeight + 1);
-  });
-}
-
-function initResume() {
-  const strip = document.getElementById("strip");
-  const more = document.getElementById("resume-more");
-  more.addEventListener("click", () => {
-    const open = strip.dataset.clamped === "true";
-    strip.dataset.clamped = open ? "false" : "true";
-    more.setAttribute("aria-expanded", String(open));
-    more.textContent = open ? "Show less" : "Show more";
-  });
-  window.addEventListener("resize", () => {
-    if (strip.dataset.clamped === "true") more.hidden = !(strip.scrollHeight > strip.clientHeight + 1);
-  });
-}
-
-function initPulseToggle() {
-  const pulse = document.getElementById("pulse");
-  const btn = document.getElementById("pulse-toggle");
-  const label = btn.querySelector(".pulse-toggle-text");
-  const apply = (collapsed) => {
-    pulse.classList.toggle("collapsed", collapsed);
-    btn.setAttribute("aria-expanded", String(!collapsed));
-    btn.title = collapsed ? "Expand overview" : "Collapse overview";
-    label.textContent = collapsed ? "Show overview" : "Hide overview";
-    syncResumeClamp();
-  };
-  apply(localStorage.getItem("mental-dashboard-pulse") === "collapsed");
-  btn.addEventListener("click", () => {
-    const collapsed = !pulse.classList.contains("collapsed");
-    localStorage.setItem("mental-dashboard-pulse", collapsed ? "collapsed" : "open");
-    apply(collapsed);
-  });
-}
-
-function initResizer() {
-  const main = document.getElementById("main");
-  const bar = document.getElementById("resizer");
-  const MIN = 280;
-  const MAX = 640;
-  const set = (px, persist) => {
-    const w = Math.min(MAX, Math.max(MIN, Math.round(px)));
-    main.style.setProperty("--aside-w", `${w}px`);
-    bar.setAttribute("aria-valuenow", String(w));
-    if (persist) localStorage.setItem("mental-dashboard-aside", String(w));
-  };
-  const saved = Number(localStorage.getItem("mental-dashboard-aside"));
-  if (saved) set(saved, false);
-
-  bar.addEventListener("pointerdown", (ev) => {
-    ev.preventDefault();
-    bar.setPointerCapture(ev.pointerId);
-    bar.classList.add("dragging");
-    document.body.classList.add("resizing");
-  });
-  bar.addEventListener("pointermove", (ev) => {
-    if (!bar.hasPointerCapture(ev.pointerId)) return;
-    set(ev.clientX - main.getBoundingClientRect().left, false);
-  });
-  const end = (ev) => {
-    if (!bar.hasPointerCapture(ev.pointerId)) return;
-    bar.releasePointerCapture(ev.pointerId);
-    bar.classList.remove("dragging");
-    document.body.classList.remove("resizing");
-    set(ev.clientX - main.getBoundingClientRect().left, true);
-  };
-  bar.addEventListener("pointerup", end);
-  bar.addEventListener("pointercancel", end);
-  bar.addEventListener("dblclick", () => {
-    main.style.removeProperty("--aside-w");
-    bar.removeAttribute("aria-valuenow");
-    localStorage.removeItem("mental-dashboard-aside");
-  });
-  bar.addEventListener("keydown", (ev) => {
-    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
-    ev.preventDefault();
-    const current = document.querySelector("#main > aside").getBoundingClientRect().width;
-    set(current + (ev.key === "ArrowRight" ? 24 : -24), true);
-  });
-}
-
-// Arrow keys walk the catalog; Enter/Space open via the native button click.
-document.getElementById("list").addEventListener("keydown", (ev) => {
-  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
-  const rows = [...document.querySelectorAll("#list button.row")];
-  const at = rows.indexOf(document.activeElement);
-  if (at < 0) return;
-  ev.preventDefault();
-  const next = rows[at + (ev.key === "ArrowDown" ? 1 : -1)];
-  if (next) next.focus();
-  else if (ev.key === "ArrowUp") searchInput.focus();
-});
-searchInput.addEventListener("keydown", (ev) => {
-  if (ev.key !== "ArrowDown") return;
-  const first = document.querySelector("#list button.row");
-  if (first) {
-    ev.preventDefault();
-    first.focus();
-  }
-});
-
-document.getElementById("peek-empty").addEventListener("click", (ev) => {
-  const btn = ev.target.closest("[data-jump]");
-  if (!btn) return;
-  const jump = btn.dataset.jump;
-  if (jump === "map") showView("map");
-  else showCatalog({ type: jump });
-});
-
-state.view = "list";
-initTheme();
-initResume();
-initPulseToggle();
-initResizer();
-renderChips();
-loadProjects().then(() => {
-  loadHeartbeat();
-  loadList();
-});
-setInterval(() => {
-  if (!document.getElementById("track").hidden) loadTrack();
-}, 20000);
+boot();

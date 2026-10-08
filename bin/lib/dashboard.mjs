@@ -2,7 +2,7 @@
  * Optional localhost explorer. Loopback only. GET/HEAD. No writes.
  */
 import { createServer } from "node:http";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { PKG_ROOT } from "./pkg.mjs";
@@ -11,7 +11,7 @@ import { catalogRoot, collectHeartbeat } from "./heartbeat.mjs";
 import { loadBindings } from "./bindings.mjs";
 import { collectPulseProjects, pulseRootForBinding } from "./pulse.mjs";
 import { extractLinks, filterConcepts, listConcepts, listBacklinks, searchBundle } from "./index.mjs";
-import { journalHops, readBundleFile } from "./okf.mjs";
+import { journalHops, latestJournalHandoff, parseFrontmatter, readBundleFile } from "./okf.mjs";
 import { isFeatureOn } from "./config.mjs";
 import { glanceTime, listSessions } from "./time.mjs";
 
@@ -23,11 +23,21 @@ export const DASHBOARD_PORT = 3847;
 const PAGE_CAP = 50;
 const PAGE_MAX = 100;
 const GRAPH_CAP = 400;
+const ACTIVITY_DAYS = 14;
+const ACTIVITY_DAYS_MAX = 90;
+const ACTIVITY_CAP = 200;
 
 const STATIC_FILES = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
   "/index.html": { file: "index.html", type: "text/html; charset=utf-8" },
   "/app.js": { file: "app.js", type: "application/javascript; charset=utf-8" },
+  "/ui.js": { file: "ui.js", type: "application/javascript; charset=utf-8" },
+  "/inspector.js": { file: "inspector.js", type: "application/javascript; charset=utf-8" },
+  "/palette.js": { file: "palette.js", type: "application/javascript; charset=utf-8" },
+  "/today.js": { file: "today.js", type: "application/javascript; charset=utf-8" },
+  "/boards.js": { file: "boards.js", type: "application/javascript; charset=utf-8" },
+  "/library.js": { file: "library.js", type: "application/javascript; charset=utf-8" },
+  "/explore.js": { file: "explore.js", type: "application/javascript; charset=utf-8" },
   "/markdown.js": { file: "markdown.js", type: "application/javascript; charset=utf-8" },
   "/map.js": { file: "map.js", type: "application/javascript; charset=utf-8" },
   "/map-data.js": { file: "map-data.js", type: "application/javascript; charset=utf-8" },
@@ -280,6 +290,93 @@ function summarize(c) {
 }
 
 /**
+ * Journal hops in the last `days` calendar days, newest first.
+ * Each hop keeps its handoff lines (Via, Against, Resume) and a short summary.
+ * @param {string | null} root
+ * @param {number} days
+ */
+export function collectActivity(root, days) {
+  /** @type {Array<{ at: string | null, date: string, time: string | null, title: string, kind: string, summary: string, via: string | null, against: string | null, resume: string | null, path: string }>} */
+  const hops = [];
+  if (!root) return { hops, days, truncated: false };
+  const dir = join(root, "journal");
+  if (!existsSync(dir)) return { hops, days, truncated: false };
+  const now = new Date();
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+  const pad = (n) => String(n).padStart(2, "0");
+  const floor = `${cutoff.getFullYear()}-${pad(cutoff.getMonth() + 1)}-${pad(cutoff.getDate())}`;
+  const files = readdirSync(dir)
+    .filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f) && f.slice(0, 10) >= floor)
+    .sort()
+    .reverse();
+  for (const file of files) {
+    const day = file.slice(0, 10);
+    let body;
+    try {
+      body = parseFrontmatter(readFileSync(join(dir, file), "utf8")).body;
+    } catch {
+      continue;
+    }
+    const inDay = [];
+    for (const hop of journalHops(body)) {
+      const line = (re) => hop.body.match(re)?.[1]?.trim() || null;
+      const time = hop.heading.match(/^(\d{1,2}:\d{2})/)?.[1] ?? null;
+      const ms = hopInstant(day, hop.heading);
+      const kind = line(/^Hop:\s*(.+)$/m);
+      const summary = hop.body
+        .split(/\r?\n/)
+        .filter((l) => l.trim() && !/^(Hop|Via|Against|Plan|Resume|Files|Outcome):/i.test(l.trim()))
+        .join(" ")
+        .trim()
+        .slice(0, 400);
+      inDay.push({
+        at: ms == null ? null : new Date(ms).toISOString(),
+        date: day,
+        time,
+        title: hop.title,
+        kind: kind || "journal",
+        summary,
+        via: line(/^Via:\s*(.+)$/m),
+        against: line(/^Against:\s*(.+)$/m) || line(/^Plan:\s*(.+)$/m),
+        resume: line(/^Resume:\s*(.+)$/m),
+        path: `journal/${file}#${hop.fragment}`,
+      });
+    }
+    hops.push(...inDay.reverse());
+    if (hops.length >= ACTIVITY_CAP) break;
+  }
+  const truncated = hops.length > ACTIVITY_CAP;
+  return { hops: hops.slice(0, ACTIVITY_CAP), days, truncated };
+}
+
+/**
+ * Pulse rows plus when each project last handed off. Dashboard-only; `mental pulse` stays compact.
+ * @param {string | null} home
+ */
+function dashboardProjects(home) {
+  const projects = collectPulseProjects(home);
+  if (!home || projects.length === 0) return projects;
+  let bindings = [];
+  try {
+    bindings = loadBindings(home).bindings;
+  } catch {
+    return projects;
+  }
+  const byId = new Map(bindings.map((b) => [b.id, b]));
+  return projects.map((p) => {
+    const binding = byId.get(p.id);
+    const root = binding ? pulseRootForBinding(home, binding) : null;
+    const handoff = root ? latestJournalHandoff(root) : null;
+    let lastTouched = null;
+    if (handoff?.when?.date) {
+      const ms = hopInstant(handoff.when.date, handoff.when.time || "00:00");
+      lastTouched = ms == null ? null : new Date(ms).toISOString();
+    }
+    return { ...p, outcome: handoff?.outcome || "", lastTouched };
+  });
+}
+
+/**
  * @param {{ cwd?: string, home?: string | null, env?: NodeJS.ProcessEnv, dir?: string | null }} ctx
  * @param {string | null} projectId
  */
@@ -426,7 +523,7 @@ function routeApi(method, url, res, base, id) {
   const path = url.pathname;
 
   if (path === "/api/projects") {
-    const projects = collectPulseProjects(base.home);
+    const projects = dashboardProjects(base.home);
     const resolved = resolveBundle({ ...base, write: false });
     const activeId = resolved.ok ? resolved.data.id : null;
     sendJson(res, method, 200, { ok: true, data: { projects, activeId } });
@@ -579,6 +676,12 @@ function routeApi(method, url, res, base, id) {
       ? hideForeignSlices(session.where, listConcepts(session.root))
       : [];
     sendJson(res, method, 200, { ok: true, data: catalogGraph(concepts) });
+    return;
+  }
+
+  if (path === "/api/activity") {
+    const days = Math.max(1, intParam(url.searchParams.get("days"), ACTIVITY_DAYS, ACTIVITY_DAYS_MAX) || ACTIVITY_DAYS);
+    sendJson(res, method, 200, { ok: true, data: collectActivity(session.root, days) });
     return;
   }
 

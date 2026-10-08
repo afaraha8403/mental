@@ -102,6 +102,12 @@ Compatible clients (Cursor, VS Code, GitHub Copilot, ChatGPT/Codex, OpenCode, Ki
 
 When **releasing this repo**, git tag `vX.Y.Z`, `package.json`, and `npm view @balacode/mental version` must be the same string. Follow [`.cursor/rules/release.mdc`](../.cursor/rules/release.mdc). [README](../README.md#releasing-this-repo) restates that; the agent install paste does not.
 
+## In-session panel (Claude Desktop)
+
+The plugin ships `claude-mod/`, a Claude Code **mod**: an ES module that draws UI inside the host. It is a host UI API, not MCP, and it only reads: `mental heartbeat --json --passive`, `mental list --json`, `mental show <path> --json`. The surface decides the look: `desktop` gets rich cards and a footer button, the terminal gets the plain text pane, `mobile` is left alone. Park and Hand off send a prompt so the agent writes through the skill. Hide dismisses a concern from the footer only.
+
+Details for editing it live in [`.cursor/rules/claude-mod.mdc`](../.cursor/rules/claude-mod.mdc). Validate with `claude plugin validate . --strict`. Codex and DeepSeek panels are separate, later work, one host at a time.
+
 ## Optional MCP
 
 Default **off**. Skill + rule are enough for agents that can shell.
