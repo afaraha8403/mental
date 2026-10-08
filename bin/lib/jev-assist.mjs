@@ -7,7 +7,7 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { listConcepts, searchBundle, tokenizeQuery, extractLinks } from "./index.mjs";
-import { THRESHOLDS } from "./jev.mjs";
+import { THRESHOLDS, choice, pick } from "./jev.mjs";
 
 const STOP = new Set([
   "the", "and", "for", "with", "that", "this", "from", "into", "are", "was", "not", "but", "you", "all", "can",
@@ -17,6 +17,19 @@ const SEARCH_CANDIDATES = 12;
 const SIMILAR_CANDIDATES = 8;
 const LINK_CANDIDATES = 10;
 const BODY_CHARS = 500;
+
+/** @param {string} s */
+export function oneLine(s) {
+  return String(s || "").replace(/\s+/g, " ").trim();
+}
+
+/** Long opaque runs are what a credential looks like. They never leave the machine. */
+export function redact(s) {
+  return oneLine(s)
+    .replace(/-----BEGIN[\s\S]*?(-----END[^-]*-----|$)/g, "[REDACTED]")
+    .replace(/\b(sk|gh[pousr]|xox[bap]|AKIA)[-_A-Za-z0-9]{8,}/g, "[REDACTED]")
+    .replace(/[A-Za-z0-9+/_=-]{24,}/g, "[REDACTED]");
+}
 
 /** @param {string} s */
 export function sigTokens(s) {
@@ -73,12 +86,12 @@ export function queryVariants(concepts, tokens) {
   return [...out];
 }
 
-/** @param {{ title: string, description: string, body: string }} c */
+/** @param {{ title: string, description?: string, body: string }} c */
 function brief(c) {
   return {
     title: c.title,
     description: c.description || undefined,
-    excerpt: c.body.replace(/\s+/g, " ").trim().slice(0, BODY_CHARS) || undefined,
+    excerpt: oneLine(c.body).slice(0, BODY_CHARS) || undefined,
   };
 }
 
@@ -147,25 +160,65 @@ export async function findSimilar({ jev, root, title, body = "" }) {
   const cand = scored.slice(0, SIMILAR_CANDIDATES).map((s) => s.c);
   if (cand.length === 0) return [];
   const state = {
-    new: { title, excerpt: body.replace(/\s+/g, " ").trim().slice(0, BODY_CHARS) || undefined },
+    new: { title, excerpt: oneLine(body).slice(0, BODY_CHARS) || undefined },
     candidates: Object.fromEntries(cand.map((c, i) => [`c${i}`, brief(c)])),
   };
-  const questions = Object.fromEntries(
-    cand.map((_, i) => [
-      `c${i}`,
-      `Is \`candidates.c${i}\` already recording essentially the same thing as \`new\`, so the author should update it instead of adding another?`,
-    ]),
-  );
-  const r = await jev.gate(state, questions);
-  return cand
-    .map((c, i) => ({ path: c.path, type: c.type, title: c.title, score: r.scores[`c${i}`] }))
-    .filter((s) => typeof s.score === "number" && s.score >= THRESHOLDS.similar)
-    .sort((a, b) => b.score - a.score);
+  const criteria = Object.fromEntries([
+    ...cand.map((_, i) => [`c${i}`, null]),
+    ["none", "none of the candidates records the same thing"],
+  ]);
+  const r = await jev.decide(state, {
+    dup: choice(
+      "Which candidate already records essentially the same thing as `new`, so the author should update it instead of adding another? Answer none if no candidate is the same.",
+      criteria,
+    ),
+  });
+  const a = r.answers?.dup;
+  const picked = a ? pick(a, THRESHOLDS.similar) : null;
+  const m = picked && /^c(\d+)$/.exec(picked);
+  const c = m ? cand[Number(m[1])] : null;
+  if (!c) return [];
+  return [{ path: c.path, type: c.type, title: c.title, score: a.confidence }];
 }
 
 /** @param {string} a @param {string} b */
 function linked(a, b, srcA, srcB) {
   return extractLinks(srcA, a).some((l) => l.dest === srcB) || extractLinks(srcB, b).some((l) => l.dest === srcA);
+}
+
+export const RELATIONS = {
+  related: "same thread of work or topic, no stronger relationship",
+  supports: "gives evidence or reasoning that backs the file",
+  supersedes: "replaces or overrules the file, which is now out of date",
+  contradicts: "conflicts with the file without replacing it",
+  depends_on: "the file builds on it or cannot work without it",
+};
+
+/**
+ * Label each kept row with how the candidate relates to the file. Advisory: any failure or low
+ * confidence leaves the row as plain `related`, so this never drops a link.
+ * @param {{ decide?: Function }} jev
+ */
+async function typeLinks(jev, state, cand, rows) {
+  for (const row of rows) row.relation = "related";
+  if (rows.length === 0 || typeof jev.decide !== "function") return;
+  const idx = new Map(cand.map((c, i) => [c.path, i]));
+  const questions = Object.fromEntries(
+    rows.map((row) => [
+      `r${idx.get(row.path)}`,
+      choice(`How does \`candidates.c${idx.get(row.path)}\` relate to \`file\`?`, RELATIONS),
+    ]),
+  );
+  try {
+    const r = await jev.decide(state, questions);
+    for (const row of rows) {
+      const a = r.answers?.[`r${idx.get(row.path)}`];
+      const rel = a ? pick(a, THRESHOLDS.pick) : null;
+      if (rel && Object.hasOwn(RELATIONS, rel)) row.relation = rel;
+    }
+  } catch {
+    /* labels are optional */
+  }
 }
 
 /**
@@ -213,6 +266,7 @@ export async function suggestLinks({ jev, root, path }) {
     .map((c, i) => ({ path: c.path, type: c.type, title: c.title, score: r.scores[`c${i}`] }))
     .filter((s) => typeof s.score === "number" && s.score >= THRESHOLDS.linkMaybe)
     .sort((a, b) => b.score - a.score);
+  await typeLinks(jev, state, cand, rows);
   return {
     ok: r.ok,
     reason: r.reason,
@@ -224,13 +278,18 @@ export async function suggestLinks({ jev, root, path }) {
 /**
  * Append accepted links as ordinary markdown. Caller reindexes.
  * @param {string} abs file to edit
- * @param {Array<{ path: string, title: string }>} links
+ * @param {Array<{ path: string, title: string, relation?: string }>} links
  */
 export function applyLinks(abs, links) {
   let text = readFileSync(abs, "utf8");
   const fresh = links.filter((l) => !text.includes(`(${l.path})`));
   if (fresh.length === 0) return 0;
-  const bullets = fresh.map((l) => `- [${l.title.replace(/[[\]]/g, "")}](${l.path})`).join("\n");
+  const bullets = fresh
+    .map((l) => {
+      const rel = l.relation && l.relation !== "related" && Object.hasOwn(RELATIONS, l.relation) ? `${l.relation}: ` : "";
+      return `- ${rel}[${l.title.replace(/[[\]]/g, "")}](${l.path})`;
+    })
+    .join("\n");
   const headings = [...text.matchAll(/^## .*$/gm)];
   const idx = headings.findIndex((h) => /^## Related\b/.test(h[0]));
   if (idx >= 0) {

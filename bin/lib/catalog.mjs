@@ -235,6 +235,19 @@ export const CATALOG = {
     effects: "non_idempotent",
     rest: { name: "path", summary: "Bundle-relative path (default: 5 most recent non-journal files)" },
   },
+  retag: {
+    name: "retag",
+    group: "Lookup",
+    summary: "Jev-suggested topic tags for untagged files (optional; needs a Jev key). Dry run by default; --apply adds one tag to files that have none.",
+    usage: `${CMD} retag [path] [--apply] [--limit N]`,
+    examples: [`${CMD} retag`, `${CMD} retag --apply --limit 20 --json`],
+    flags: [
+      b("apply", { summary: "Write the suggested tag into each file's frontmatter (default: dry run)" }),
+      v("limit", { summary: "Max untagged files to consider (default 40)" }),
+    ],
+    effects: "non_idempotent",
+    rest: { name: "path", summary: "Bundle-relative path (default: all untagged non-journal files, up to --limit)" },
+  },
   schema: {
     name: "schema",
     group: "Lookup",

@@ -19,6 +19,7 @@ import { cmdWhere } from "./commands/where.mjs";
 import { cmdStatus } from "./commands/status.mjs";
 import { cmdJournalS, cmdDecideS, cmdNoteS, cmdAttentionS, cmdParkS } from "./lib/similar.mjs";
 import { cmdRelink } from "./commands/relink.mjs";
+import { cmdRetag } from "./commands/retag.mjs";
 import { cmdInstall } from "./commands/install.mjs";
 import { cmdDoctor } from "./commands/doctor.mjs";
 import { cmdLocal } from "./commands/local.mjs";
@@ -65,6 +66,7 @@ export const COMMANDS = {
   list: cmdList,
   show: cmdShow,
   relink: cmdRelink,
+  retag: cmdRetag,
   heartbeat: cmdHeartbeat,
   attention: cmdAttentionS,
   remap: cmdRemap,

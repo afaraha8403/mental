@@ -30,7 +30,7 @@ function mentalAsync(home, cwd, args, extraEnv = {}) {
 }
 
 /** Mock System One: every noul question gets `score`. */
-async function mockServer(score, { status = 200 } = {}) {
+async function mockServer(score, { status = 200, choose = null } = {}) {
   const calls = [];
   const server = createServer((req, res) => {
     let body = "";
@@ -43,7 +43,13 @@ async function mockServer(score, { status = 200 } = {}) {
         res.end("{}");
         return;
       }
-      const answers = Object.fromEntries(Object.keys(parsed.questions || {}).map((id) => [id, { noul: score }]));
+      const answer = (id, q) => {
+        if (q.type !== "choice") return { noul: score };
+        const keys = Object.keys(q.criteria || {});
+        const pickKey = (choose && choose(id, q)) || keys.find((k) => k !== "none") || "none";
+        return { choice: pickKey, probabilities: { [pickKey]: score }, confidence: score };
+      };
+      const answers = Object.fromEntries(Object.entries(parsed.questions || {}).map(([id, q]) => [id, answer(id, q)]));
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ answers }));
     });
@@ -278,6 +284,89 @@ test("search recovery, similar-to, show and relink with a mock Jev", async () =>
     assert.equal(again.data.applied, 0, "idempotent");
   } finally {
     mock.close();
+  }
+});
+
+test("retag: dry run writes nothing, --apply adds one tag, idempotent, jev-off and personal refused", async () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  seedBundle(home, root);
+  const made = ["Cache warm start", "Cache eviction order", "Cache sizing"].map((t) =>
+    parse(mental(home, root, ["note", "--json", "--title", t, "--tag", "temp", "--description", t, "--body", "Notes about the cache."])),
+  );
+  const bundle = made[0].data.root;
+  for (const m of made) {
+    const abs = join(bundle, m.data.path);
+    writeFileSync(abs, readFileSync(abs, "utf8").replace(/^tags:.*\r?\n/m, ""));
+  }
+  parse(mental(home, root, ["reindex", "--json"]));
+  const mock = await mockServer(0.95, { choose: (id, q) => (q.criteria.cache !== undefined ? "cache" : null) });
+  const env = { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: mock.url };
+  try {
+    const dry = parse(await mentalAsync(home, root, ["retag", "--json"], env));
+    assert.equal(dry.data.applied, 0);
+    assert.equal(dry.data.proposals.length, 3);
+    assert.ok(dry.data.proposals.every((p) => p.tag === "cache" && p.isNew));
+    assert.ok(!/tags:.*cache/.test(readFileSync(join(bundle, made[0].data.path), "utf8")));
+
+    const done = parse(await mentalAsync(home, root, ["retag", "--apply", "--json"], env));
+    assert.equal(done.data.applied, 3);
+    const text = readFileSync(join(bundle, made[0].data.path), "utf8");
+    assert.match(text, /^tags: \[cache\]$/m);
+    assert.match(text, /^title: Cache warm start$/m);
+
+    const again = parse(await mentalAsync(home, root, ["retag", "--apply", "--json"], env));
+    assert.equal(again.data.applied, 0);
+  } finally {
+    mock.close();
+  }
+  assert.notEqual(mental(home, root, ["retag", "--json"]).status, 0, "no key refuses");
+  const personal = await mentalAsync(home, join(home, ".mental"), ["retag", "--json"], { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: "http://127.0.0.1:9/x" });
+  assert.notEqual(personal.status, 0);
+});
+
+test("typed links: relation label written as a prefix and parsed as a normal link", async () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  seedBundle(home, root);
+  const mock = await mockServer(0.95, { choose: (id, q) => (q.criteria.supersedes !== undefined ? "supersedes" : null) });
+  const env = { MENTAL_JEV_KEY: KEY, MENTAL_JEV_URL: mock.url };
+  try {
+    const dry = parse(await mentalAsync(home, root, ["relink", "--json", "notes/postgres-connection-pool-sizing.md"], env));
+    const rows = dry.data.results[0].proposed;
+    assert.ok(rows.length > 0 && rows.every((r) => r.relation === "supersedes"));
+    parse(await mentalAsync(home, root, ["relink", "--apply", "--json", "notes/postgres-connection-pool-sizing.md"], env));
+    const shown = parse(await mentalAsync(home, root, ["show", "--json", "notes/postgres-connection-pool-sizing.md"], env));
+    const file = readFileSync(join(shown.data.root, "notes/postgres-connection-pool-sizing.md"), "utf8");
+    assert.match(file, /^- supersedes: \[.+\]\(notes\/.+\.md\)$/m);
+  } finally {
+    mock.close();
+  }
+  const abs = join(home, "n.md");
+  writeFileSync(abs, "---\ntitle: N\n---\n\nBody.\n");
+  assert.equal(applyLinks(abs, [{ path: "notes/a.md", title: "A", relation: "related" }, { path: "notes/b.md", title: "B", relation: "contradicts" }, { path: "notes/c.md", title: "C", relation: "bogus" }]), 3);
+  const out = readFileSync(abs, "utf8");
+  assert.match(out, /^- \[A\]\(notes\/a\.md\)$/m);
+  assert.match(out, /^- contradicts: \[B\]\(notes\/b\.md\)$/m);
+  assert.match(out, /^- \[C\]\(notes\/c\.md\)$/m);
+});
+
+test("applyTag edits only the tags line and refuses when tags exist", async () => {
+  const { applyTag } = await import("../bin/lib/retag.mjs");
+  const home = tempHome();
+  const f = join(home, "t.md");
+  const cases = [
+    ["---\ntitle: A\ntags: []\n---\nBody\n", true, /^tags: \[xx\]$/m],
+    ["---\r\ntitle: A\r\n---\r\nBody\r\n", true, /tags: \[xx\]/],
+    ["---\ntitle: A\ntags: [y]\n---\nBody\n", false, /tags: \[y\]/],
+    ["No frontmatter\n", false, /^No frontmatter/],
+  ];
+  for (const [src, ok, re] of cases) {
+    writeFileSync(f, src);
+    assert.equal(applyTag(f, "xx"), ok);
+    const out = readFileSync(f, "utf8");
+    assert.match(out, re);
+    assert.match(out, /Body|No frontmatter/);
   }
 });
 

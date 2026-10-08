@@ -9,7 +9,7 @@ import { listConcepts } from "./index.mjs";
 import { latestJournalHandoff } from "./okf.mjs";
 import { scanStale } from "./stale.mjs";
 import { THRESHOLDS, choice, noul, pick, usageToday } from "./jev.mjs";
-import { sigTokens } from "./jev-assist.mjs";
+import { sigTokens, oneLine, redact } from "./jev-assist.mjs";
 
 const MAX_ITEMS = 8;
 const MAX_PAIRS = 8;
@@ -20,19 +20,6 @@ const TITLES_IN_CONTEXT = 12;
 
 /** Loose pre-filter only. A hit means "worth asking", never "is a secret". */
 const SECRETISH = /(api[_ -]?key|secret|token|passw(or)?d|bearer|credential|private key|BEGIN [A-Z ]*KEY|\bsk-[A-Za-z0-9]|\bgh[pousr]_|AKIA[0-9A-Z]{8})/i;
-
-/** @param {string} s */
-function oneLine(s) {
-  return String(s || "").replace(/\s+/g, " ").trim();
-}
-
-/** Long opaque runs are what a credential looks like. They never leave the machine. */
-function redact(s) {
-  return oneLine(s)
-    .replace(/-----BEGIN[\s\S]*?(-----END[^-]*-----|$)/g, "[REDACTED]")
-    .replace(/\b(sk|gh[pousr]|xox[bap]|AKIA)[-_A-Za-z0-9]{8,}/g, "[REDACTED]")
-    .replace(/[A-Za-z0-9+/_=-]{24,}/g, "[REDACTED]");
-}
 
 /** @param {{ title: string, description?: string, body: string }} c */
 function brief(c) {

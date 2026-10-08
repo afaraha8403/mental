@@ -73,7 +73,7 @@ export function cmdShow(args, io = {}) {
           : `\n\nLinked from:\n${d.backlinks.map((b) => `  [${b.type}] ${b.title} (${b.path})`).join("\n")}`;
       const sug = d.suggestedLinks
         ? `\n\nSuggested links (jev; \`${CMD} relink ${d.path} --apply\` writes them):\n${[...d.suggestedLinks.proposed, ...d.suggestedLinks.maybe]
-            .map((s) => `  [${s.type}] ${s.title} (${s.path}) ${Math.round(s.score * 100)}%`)
+            .map((s) => `  [${s.type}] ${s.relation && s.relation !== "related" ? `${s.relation}: ` : ""}${s.title} (${s.path}) ${Math.round(s.score * 100)}%`)
             .join("\n")}`
         : "";
       return `${kindLine("read", head)}\n${d.path}\n\n${d.body.trim() || "(empty)"}${linked}${sug}`;

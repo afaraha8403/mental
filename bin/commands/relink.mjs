@@ -71,8 +71,9 @@ export async function cmdRelink(args, io = {}) {
     for (const r of d.results) {
       if (!r.proposed.length && !r.maybe.length) continue;
       lines.push(`${r.title} (${r.path})`);
-      for (const p of r.proposed) lines.push(`  ${d.apply ? "linked" : "link   "} [${p.type}] ${p.title} (${p.path}) ${Math.round(p.score * 100)}%`);
-      for (const p of r.maybe) lines.push(`  maybe   [${p.type}] ${p.title} (${p.path}) ${Math.round(p.score * 100)}%`);
+      const rel = (p) => (p.relation && p.relation !== "related" ? `${p.relation}: ` : "");
+      for (const p of r.proposed) lines.push(`  ${d.apply ? "linked" : "link   "} [${p.type}] ${rel(p)}${p.title} (${p.path}) ${Math.round(p.score * 100)}%`);
+      for (const p of r.maybe) lines.push(`  maybe   [${p.type}] ${rel(p)}${p.title} (${p.path}) ${Math.round(p.score * 100)}%`);
     }
     if (lines.length === 0) lines.push(d.jevReason ? `no suggestions (jev unavailable: ${d.jevReason})` : "no link suggestions");
     else if (!d.apply) lines.push(`dry run. Add --apply to write the "link" rows into the files.`);

@@ -38,7 +38,8 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op` |
 | `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`) |
 | `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`; with a Jev key also `suggestedLinks`) |
-| `mental relink [path] [--apply]` | Optional (needs a Jev key). Suggest links for a file, or the 5 most recent non-journal files. Dry run by default; `--apply` appends only high-confidence links under `## Related` |
+| `mental relink [path] [--apply]` | Optional (needs a Jev key). Suggest links for a file, or the 5 most recent non-journal files, each labelled with how it relates (`supports`, `supersedes`, `contradicts`, `depends_on`; plain `related` is unlabelled). Dry run by default; `--apply` appends only high-confidence links under `## Related` (`- supersedes: [Title](path)`) |
+| `mental retag [path] [--apply] [--limit N]` | Optional (needs a Jev key). Propose one topic tag for untagged files from existing tags plus frequent title words (bootstrap, `*` marks a new topic). Dry run by default; `--apply` writes only the `tags:` line of confident matches. Never runs on the personal bundle |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
 | `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`, `--via`). Requires `--resume`. Then heartbeat; writes watermark |
 | `mental handoff --title --resume` | Planned boundary: journal then heartbeat. Both flags required. JSON `{ path, heartbeat }`. Writes watermark. `--via` optional |

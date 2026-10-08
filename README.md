@@ -237,7 +237,7 @@ Optional: `mental install --mcp` · `mental hooks on` · `mental option track on
 
 ### Jev (optional)
 
-[Jev](https://typesafe.ai) (TypeSafe AI System One) is a fast, cheap yes/no relevance judge. Mental never needs it. With a key it can recover a zero-hit `mental search`, hint "similar to existing" before a write, suggest links on `mental show`, and propose them with `mental relink`. It fails open and only `relink --apply` writes, high-confidence links only.
+[Jev](https://typesafe.ai) (TypeSafe AI System One) is a fast, cheap yes/no relevance judge. Mental never needs it. With a key it can recover a zero-hit `mental search`, hint "similar to existing" before a write, suggest links on `mental show`, and propose them with `mental relink` (typed: supports, supersedes, contradicts, depends_on). `mental retag` proposes topics for untagged files. It fails open and only `relink --apply` and `retag --apply` write, high-confidence results only.
 
 Add a key either way (config wins when both are set):
 
