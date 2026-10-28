@@ -298,7 +298,7 @@ function applyHeartbeat(data) {
     el.hidden = !n;
     el.textContent = n > 99 ? "99+" : String(n);
   }
-  const eyes = data?.needsEyesCount || 0;
+  const eyes = data?.freshEyesCount ?? data?.needsEyesCount ?? 0;
   for (const el of $$('[data-nav="today"] .nav-dot')) el.hidden = !eyes;
   $("#live").classList.toggle("is-clock", Boolean(data?.track?.runningCount));
   $("#live .live-text").textContent = data?.track?.runningCount ? "Clock running" : "Read-only";

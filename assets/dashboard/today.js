@@ -190,7 +190,8 @@ function lanes(ctx, hb) {
   const needsPaths = new Set(needs.map((x) => x.path));
   const inAir = (hb.attention || []).filter((a) => !needsPaths.has(a.path) && a.kind !== "verify" && a.kind !== "direction" && a.status !== "later" && !isAgingItem(a));
   const decisions = hb.openDecisions || [];
-  const inAirTotal = Math.max(inAir.length, (hb.needYouCount ?? hb.attentionCount ?? 0) - (hb.needsEyesCount || 0));
+  const freshEyes = hb.freshEyesCount ?? needs.filter((a) => !isAgingItem(a)).length;
+  const inAirTotal = Math.max(inAir.length, (hb.needYouCount ?? hb.attentionCount ?? 0) - freshEyes);
   return h(
     "div.lanes",
     null,
@@ -198,8 +199,8 @@ function lanes(ctx, hb) {
       key: "eyes",
       title: "Needs your eyes",
       hint: "verify before trusting",
-      items: needs,
-      total: hb.needsEyesCount ?? needs.length,
+      items: needs.filter((a) => !isAgingItem(a)),
+      total: freshEyes,
       empty: "Nothing waiting on you.",
       more: () => ctx.go("attention", { kind: "verify" }),
     }),

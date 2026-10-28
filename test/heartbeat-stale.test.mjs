@@ -160,7 +160,8 @@ test("heartbeat splits attention into need-you, aging, directions and later", ()
   );
   const hb = parseOk(mental(home, cwd, ["heartbeat", "--json"]), "heartbeat");
   assert.equal(hb.attentionCount, 5);
-  assert.equal(hb.needYouCount, 2, "fresh concern + old verify");
-  assert.equal(hb.agingCount, 1, "old concern only; verify never ages");
+  assert.equal(hb.needYouCount, 1, "fresh concern only");
+  assert.equal(hb.agingCount, 2, "old concern and old verify");
   assert.equal(hb.directionCount, 1);
+  assert.equal(hb.freshEyesCount, 0, "the only verify item is old");
 });
