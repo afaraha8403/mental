@@ -78,8 +78,8 @@ mental handoff --title "…" --body "…" --title-external "…" --body-external
 
 - When tracking is on, `track start --via <host>` after heartbeat if
   `runningCount` is 0 (or the runner is another day / past 12h). Not only when
-  the user asked about hours. Hooks never start a clock (`session-start.sh` is
-  status-only). If `data.track.unclocked` is true, say the gap and start now.
+  the user asked about hours. Hooks never start a clock (the session-start hook
+  is status-only). If `data.track.unclocked` is true, say the gap and start now.
   Generate and pass internal + customer title/body
   from the current task. Do not ask for wording by default. Calling start again
   the same sit-down is **ensure-running**

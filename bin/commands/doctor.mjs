@@ -268,7 +268,7 @@ export async function cmdDoctor(args, io = {}) {
       ),
     );
     const gitRoot = resolved.ok ? resolved.data.gitRoot : findGitRoot(cwd, { env });
-    for (const extra of hostRuleChecks({ home, gitRoot })) {
+    for (const extra of hostRuleChecks({ home, gitRoot, env })) {
       checks.push(check(extra.id, extra.ok, extra.message, extra.level));
     }
     for (const extra of hostPluginChecks({ home, env, version: VERSION })) {

@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { encode, handle, runTool, serveMcp } from "../bin/lib/mcp.mjs";
 import { mcpEntry } from "../bin/lib/mcp-hosts.mjs";
-import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
+import { spawnSync } from "node:child_process";
+import { CLI, gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
+import { fitJson, hookCommand, HOOK_CONTEXT_MAX, sessionStartContext, sessionStartOutput } from "../bin/lib/hooks.mjs";
 import { CMD } from "../bin/lib/pkg.mjs";
 
 test("uninstall removes skill copies and leaves OKF unless DELETE", () => {
@@ -37,14 +39,112 @@ test("hooks on writes cursor + claude entries; hooks off removes only Mental", (
   const on = mental(home, root, ["hooks", "on", "--json"]);
   assert.equal(on.status, 0, on.stderr || on.stdout);
   const cursor = JSON.parse(readFileSync(join(home, ".cursor", "hooks.json"), "utf8"));
-  assert.ok(cursor.hooks.sessionStart.some((e) => String(e.command).includes("session-start.sh")));
+  assert.deepEqual(
+    cursor.hooks.sessionStart.map((e) => e.command),
+    [hookCommand("cursor")],
+  );
+  assert.doesNotMatch(JSON.stringify(cursor), /session-start\.sh|[/\\]hooks[/\\]/);
   const claude = JSON.parse(readFileSync(join(home, ".claude", "settings.json"), "utf8"));
-  assert.ok(claude.hooks.SessionStart.length >= 1);
+  assert.deepEqual(claude.hooks.SessionStart.flatMap((b) => b.hooks.map((h) => h.command)), [hookCommand("claude-code")]);
+  assert.equal(claude.hooks.PreCompact, undefined);
 
   const off = mental(home, root, ["hooks", "off", "--json"]);
   assert.equal(off.status, 0, off.stderr || off.stdout);
   const cursor2 = JSON.parse(readFileSync(join(home, ".cursor", "hooks.json"), "utf8"));
   assert.equal(cursor2.hooks.sessionStart.length, 0);
+});
+
+test("install migrates legacy .sh hook entries and keeps other hooks", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const legacy = "/usr/lib/node_modules/@balacode/mental/hooks/session-start.sh";
+  mkdirSync(join(home, ".cursor"), { recursive: true });
+  writeFileSync(
+    join(home, ".cursor", "hooks.json"),
+    JSON.stringify({ version: 1, hooks: { sessionStart: [{ command: "other-tool" }, { command: legacy }] } }),
+  );
+  mkdirSync(join(home, ".claude"), { recursive: true });
+  writeFileSync(
+    join(home, ".claude", "settings.json"),
+    JSON.stringify({
+      hooks: {
+        SessionStart: [{ matcher: "", hooks: [{ type: "command", command: legacy }] }],
+        PreCompact: [{ matcher: "", hooks: [{ type: "command", command: legacy }, { type: "command", command: "keep-me" }] }],
+      },
+    }),
+  );
+  assert.equal(mental(home, root, ["option", "hooks", "on", "--json"]).status, 0);
+  // Simulate the pre-0.12.2 files again, then let install migrate them.
+  writeFileSync(
+    join(home, ".cursor", "hooks.json"),
+    JSON.stringify({ version: 1, hooks: { sessionStart: [{ command: "other-tool" }, { command: legacy }] } }),
+  );
+  const r = mental(home, root, ["install", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const cursor = JSON.parse(readFileSync(join(home, ".cursor", "hooks.json"), "utf8"));
+  assert.deepEqual(cursor.hooks.sessionStart.map((e) => e.command), ["other-tool", hookCommand("cursor")]);
+  const claude = JSON.parse(readFileSync(join(home, ".claude", "settings.json"), "utf8"));
+  assert.deepEqual(claude.hooks.PreCompact.flatMap((b) => b.hooks.map((h) => h.command)), ["keep-me"]);
+  assert.doesNotMatch(JSON.stringify(claude), /session-start\.sh/);
+});
+
+test("hooks session-start prints each host's documented JSON shape", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const run = (args, input) =>
+    spawnSync(process.execPath, [CLI, "hooks", "session-start", ...args], {
+      encoding: "utf8",
+      cwd: root,
+      env: gitEnv(home),
+      input,
+    });
+
+  const cursor = run(["cursor"], "{}");
+  assert.equal(cursor.status, 0, cursor.stderr);
+  const c = JSON.parse(cursor.stdout);
+  assert.deepEqual(Object.keys(c), ["additional_context"]);
+  assert.match(c.additional_context, /mental status --json/);
+  const status = JSON.parse(c.additional_context.slice(c.additional_context.indexOf("\n") + 1));
+  assert.equal(status.ok, true);
+
+  const claude = JSON.parse(run(["claude-code"], "{}").stdout);
+  assert.equal(claude.hookSpecificOutput.hookEventName, "SessionStart");
+  assert.equal(typeof claude.hookSpecificOutput.additionalContext, "string");
+
+  // Legacy .sh entries name no host: it comes from the stdin payload.
+  const auto = JSON.parse(run([], JSON.stringify({ hook_event_name: "sessionStart" })).stdout);
+  assert.equal(typeof auto.additional_context, "string");
+  const autoClaude = JSON.parse(run([], JSON.stringify({ hook_event_name: "SessionStart" })).stdout);
+  assert.equal(autoClaude.hookSpecificOutput.hookEventName, "SessionStart");
+  const compact = run([], JSON.stringify({ hook_event_name: "PreCompact" }));
+  assert.equal(compact.status, 0);
+  assert.equal(compact.stdout, "");
+});
+
+test("session-start context stays valid JSON within the budget", () => {
+  const big = {
+    ok: true,
+    data: {
+      resume: "r".repeat(5000),
+      attention: Array.from({ length: 200 }, (_, i) => ({ title: `item ${i} ${"x".repeat(300)}` })),
+    },
+  };
+  for (const max of [4000, 1500, 300]) {
+    const text = fitJson(big, max);
+    assert.ok(text.length <= max, `${text.length} > ${max}`);
+    assert.equal(JSON.parse(text).truncated, true);
+  }
+  const ctx = sessionStartContext(JSON.stringify(big));
+  assert.ok(ctx.length <= HOOK_CONTEXT_MAX);
+  JSON.parse(ctx.slice(ctx.indexOf("\n") + 1));
+  assert.match(sessionStartContext("not json"), /unavailable/);
+  const out = sessionStartOutput({ host: "cursor", statusText: JSON.stringify(big) });
+  assert.ok(JSON.parse(out).additional_context.length <= HOOK_CONTEXT_MAX);
+});
+
+test("hook command uses mental.cmd on Windows and the bare bin elsewhere", () => {
+  assert.equal(hookCommand("cursor", "win32"), `${CMD}.cmd hooks session-start cursor`);
+  assert.equal(hookCommand("claude-code", "linux"), `${CMD} hooks session-start claude-code`);
 });
 
 test("install --mcp writes user MCP configs without enabling hooks", () => {
