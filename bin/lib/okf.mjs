@@ -603,6 +603,34 @@ export function listOpenAttention(root) {
   return out;
 }
 
+/** Open attention older than this many days is "aging": a "still true?" review, not an alarm. */
+export const AGING_DAYS = 7;
+
+/**
+ * Split open attention into what needs the person now, what is aging, standing directions
+ * and what was parked on purpose. Verify items always need the person, however old.
+ * @param {Array<{ path: string, status: string, kind: string, timestamp?: string }>} items
+ * @param {Date} [now]
+ * @returns {{ needYou: number, aging: number, directions: number, later: number }}
+ */
+export function splitAttention(items, now = new Date()) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const ageDays = (item) => {
+    const m = /^attention\/(\d{4})-(\d{2})-(\d{2})-/.exec(item.path || "");
+    const day = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : item.timestamp ? new Date(item.timestamp) : null;
+    if (!day || Number.isNaN(day.getTime())) return 0;
+    return Math.round((today - new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime()) / 86400000);
+  };
+  const out = { needYou: 0, aging: 0, directions: 0, later: 0 };
+  for (const item of items) {
+    if (item.status === "later") out.later += 1;
+    else if (item.kind === "direction") out.directions += 1;
+    else if (item.kind !== "verify" && ageDays(item) >= AGING_DAYS) out.aging += 1;
+    else out.needYou += 1;
+  }
+  return out;
+}
+
 /**
  * @param {string} root
  * @param {{ path?: string, title?: string }} opts

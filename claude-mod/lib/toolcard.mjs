@@ -72,7 +72,7 @@ export function toolCardOf(props) {
     const hand = data.handoff;
     title = oneLine(hand?.resume || "") || "No resume point yet";
     const bits = [];
-    const att = Number(data.attentionCount) || 0;
+    const att = Number(data.needYouCount ?? data.attentionCount) || 0;
     const dec = Number(data.openDecisionCount) || 0;
     if (att) bits.push(`${att} open ${att === 1 ? "thread" : "threads"}`);
     if (dec) bits.push(`${dec} ${dec === 1 ? "decision" : "decisions"}`);

@@ -130,7 +130,7 @@ export async function renderMapView(_el, ctx, search0, alive) {
 export async function renderProjects(el, ctx, search0) {
   const sort = search0.get("sort") || "recent";
   const list = ctx.projects.slice();
-  if (sort === "attention") list.sort((a, b) => (b.attentionCount || 0) - (a.attentionCount || 0) || a.name.localeCompare(b.name));
+  if (sort === "attention") list.sort((a, b) => (b.needYouCount ?? b.attentionCount ?? 0) - (a.needYouCount ?? a.attentionCount ?? 0) || a.name.localeCompare(b.name));
   else if (sort === "name") list.sort((a, b) => a.name.localeCompare(b.name));
   else list.sort((a, b) => String(b.lastTouched || "").localeCompare(String(a.lastTouched || "")) || a.name.localeCompare(b.name));
 
@@ -192,7 +192,7 @@ export async function renderProjects(el, ctx, search0) {
               "span.project-meta",
               null,
               p.outcome ? h("span.chip.chip-soft.project-outcome", { title: p.outcome }, p.outcome) : null,
-              h(`span.project-stat${p.attentionCount ? ".is-hot" : ""}`, { title: "Open attention" }, h("span.mark", { "aria-hidden": "true" }, KIND.Attention.emoji), h("b.num", null, String(p.attentionCount || 0))),
+              h(`span.project-stat${(p.needYouCount ?? p.attentionCount) ? ".is-hot" : ""}`, { title: "Needs you (excludes aging items and directions)" }, h("span.mark", { "aria-hidden": "true" }, KIND.Attention.emoji), h("b.num", null, String(p.needYouCount ?? p.attentionCount ?? 0))),
               h("span.project-stat", { title: "Open decisions" }, h("span.mark", { "aria-hidden": "true" }, KIND.Decision.emoji), h("b.num", null, String(p.openDecisionCount || 0))),
               h("span.card-spacer"),
               p.lastTouched ? h("time.card-age", { datetime: p.lastTouched }, relTime(p.lastTouched)) : null,

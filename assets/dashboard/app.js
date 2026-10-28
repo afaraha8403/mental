@@ -290,7 +290,7 @@ function applyHeartbeat(data) {
     for (const el of $$(`[data-nav="${v.id}"]`)) el.closest("li, a").hidden = !ctx.trackEnabled;
   }
   const counts = {
-    attention: data?.attentionCount || 0,
+    attention: data?.needYouCount ?? data?.attentionCount ?? 0,
     decisions: data?.openDecisionCount || 0,
   };
   for (const el of $$("[data-badge]")) {

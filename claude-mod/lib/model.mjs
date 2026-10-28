@@ -224,6 +224,7 @@ export function viewModelOf(hb, now) {
     handoffAge: handoffAt == null ? null : Math.max(0, now - handoffAt),
     attention: Array.isArray(d.attention) ? d.attention : [],
     attentionCount: Number(d.attentionCount) || 0,
+    needYouCount: Number.isFinite(Number(d.needYouCount)) && d.needYouCount != null ? Number(d.needYouCount) : null,
     decisions: Array.isArray(d.openDecisions) ? d.openDecisions : [],
     decisionCount: Number(d.openDecisionCount) || 0,
     needsEyes: Array.isArray(d.needsEyes) ? d.needsEyes : [],
@@ -385,7 +386,8 @@ export function needsOf(vm) {
   ];
   const items = listed.filter((x) => x.title).map((x) => ({ ...x, key: x.path || `${x.kind}|${x.title}` }));
   const later = Math.max((vm.attention || []).filter((x) => x?.status === "later").length, Number(vm.laterCount) || 0);
-  const counted = Math.max(0, (Number(vm.attentionCount) || 0) - later) + (Number(vm.decisionCount) || 0);
+  const attn = vm.needYouCount != null ? vm.needYouCount : Math.max(0, (Number(vm.attentionCount) || 0) - later);
+  const counted = attn + (Number(vm.decisionCount) || 0);
   return { items, total: Math.max(items.length, counted), later };
 }
 

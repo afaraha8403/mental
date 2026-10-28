@@ -7,6 +7,12 @@ export function itemWhen(item) {
   return item?.timestamp || pathDate(item?.path) || "";
 }
 
+/** Open items past the aging line sit in the Attention page's Aging section, not in the lane. */
+function isAgingItem(item) {
+  const age = ageDays(itemWhen(item));
+  return age != null && age >= AGING_DAYS;
+}
+
 /** Compact card used by Today lanes and the Attention board. */
 export function itemCard(ctx, item, { showKind = true, type = "" } = {}) {
   const when = itemWhen(item);
@@ -182,9 +188,9 @@ function lanes(ctx, hb) {
   const needs = hb.needsEyes || [];
   const later = hb.later || [];
   const needsPaths = new Set(needs.map((x) => x.path));
-  const inAir = (hb.attention || []).filter((a) => !needsPaths.has(a.path) && a.kind !== "verify" && a.status !== "later");
+  const inAir = (hb.attention || []).filter((a) => !needsPaths.has(a.path) && a.kind !== "verify" && a.kind !== "direction" && a.status !== "later" && !isAgingItem(a));
   const decisions = hb.openDecisions || [];
-  const inAirTotal = Math.max(inAir.length, (hb.attentionCount || 0) - (hb.needsEyesCount || 0) - (hb.laterCount || 0));
+  const inAirTotal = Math.max(inAir.length, (hb.needYouCount ?? hb.attentionCount ?? 0) - (hb.needsEyesCount || 0));
   return h(
     "div.lanes",
     null,

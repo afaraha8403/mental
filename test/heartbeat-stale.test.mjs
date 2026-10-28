@@ -143,3 +143,24 @@ test("collectStale and formatHeartbeat tolerate a missing root and missing field
   });
   assert.doesNotMatch(text, /Stale/);
 });
+
+test("heartbeat splits attention into need-you, aging, directions and later", () => {
+  const { home, cwd, bundle } = seed();
+  const today = new Date().toISOString();
+  const day = today.slice(0, 10);
+  staleAttention(bundle, "old-concern", "Old concern");
+  staleAttention(bundle, "old-verify", "Old verify", { kind: "verify" });
+  staleAttention(bundle, "old-direction", "Old direction", { kind: "direction" });
+  staleAttention(bundle, "old-later", "Old later", { status: "later", kind: "thread" });
+  writeOkf(
+    bundle,
+    `attention/${day}-fresh-concern.md`,
+    { type: "Attention", title: "Fresh concern", description: "Fresh concern", tags: [], timestamp: today, status: "open", kind: "concern" },
+    "# Fresh concern\n",
+  );
+  const hb = parseOk(mental(home, cwd, ["heartbeat", "--json"]), "heartbeat");
+  assert.equal(hb.attentionCount, 5);
+  assert.equal(hb.needYouCount, 2, "fresh concern + old verify");
+  assert.equal(hb.agingCount, 1, "old concern only; verify never ages");
+  assert.equal(hb.directionCount, 1);
+});

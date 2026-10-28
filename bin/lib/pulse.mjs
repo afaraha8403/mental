@@ -6,7 +6,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadBindings, projectSliceDir } from "./bindings.mjs";
 import { isOptedInLocal } from "./import-legacy.mjs";
-import { latestJournalHandoff, listOpenAttention, listOpenDecisions } from "./okf.mjs";
+import { latestJournalHandoff, listOpenAttention, listOpenDecisions, splitAttention } from "./okf.mjs";
 import { collectDelta, PULSE_TITLE_CAP } from "./delta.mjs";
 import { readWatermark } from "./watermark.mjs";
 
@@ -32,7 +32,7 @@ export function pulseRootForBinding(home, binding) {
 
 /**
  * @param {string} home
- * @returns {Array<{ id: string, name: string, resume: string, attentionCount: number, openDecisionCount: number }>}
+ * @returns {Array<{ id: string, name: string, resume: string, attentionCount: number, needYouCount: number, openDecisionCount: number }>}
  */
 export function collectPulseProjects(home) {
   if (!home) return [];
@@ -55,6 +55,7 @@ export function collectPulseProjects(home) {
       name: String(b.name || b.id),
       resume: handoff.resume || "",
       attentionCount: attention.length,
+      needYouCount: splitAttention(attention).needYou,
       openDecisionCount: decisions.length,
     };
   });

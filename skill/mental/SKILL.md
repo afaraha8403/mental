@@ -190,6 +190,17 @@ decisions: `mental list --type Decision --status open --json`. Extra later:
 A `Stale (> 14d)` block lists open/deferred decisions and open/later attention
 that have sat untouched (`stale` in JSON). On orient, propose resolving,
 deciding, or superseding them; never delete without the user's say-so.
+`needYouCount` is the number to quote when asked what needs the user: open attention
+minus `agingCount` (open 7+ days, not verify) and `directionCount` (standing guidance).
+`attentionCount` still totals everything open or later.
+Aging triage (when `agingCount` is high, or the user asks how to clear the pile): read
+`mental list --type Attention --status open --json`, take the items 7+ days old (not
+verify, not direction), and check each against `git log --since <item date>` and the
+code it names. Put every item in one of three groups: likely done (name the commit or
+file), still true (keep), unclear (ask). Show the grouped list and wait. On the user's
+yes, close the likely-done group with `mental attention --title "<title>" --status
+resolved --via <host> --json`. Never resolve a verify item or a direction this way, and
+never resolve on a hunch: an item you cannot tie to evidence goes in "unclear".
 `list` and `search` page (default 50): use `--limit`, `--offset`, `--all`; read
 `total` / `truncated` / `nextOffset`. `--since` / `--on YYYY-MM-DD` filter by
 timestamp. `--project <id|name>` reads one other project and `--all-projects`

@@ -11,6 +11,7 @@ import {
   latestJournalHandoff,
   listDecidedGuardrails,
   listOpenAttention,
+  splitAttention,
   listOpenDecisions,
   localDate,
 } from "./okf.mjs";
@@ -67,6 +68,9 @@ export const HEARTBEAT_JSON_FIELDS = [
   "attention",
   "openDecisions",
   "attentionCount",
+  "needYouCount",
+  "agingCount",
+  "directionCount",
   "openDecisionCount",
   "needsEyes",
   "needsEyesCount",
@@ -145,6 +149,7 @@ export function collectHeartbeat(args, { pingTrack = true, where: whereOverride 
   const attention = capHeartbeatAttention(attentionAll);
   const needsEyesAll = attentionAll.filter((a) => a.kind === "verify");
   const laterAll = attentionAll.filter((a) => a.status === "later");
+  const split = splitAttention(attentionAll);
   const guardrailsAll = root ? listDecidedGuardrails(root) : [];
   const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
   const env = args.env ?? process.env;
@@ -163,6 +168,9 @@ export function collectHeartbeat(args, { pingTrack = true, where: whereOverride 
     attention,
     openDecisions: openDecisions.slice(0, DECISION_HEARTBEAT_CAP),
     attentionCount: attentionAll.length,
+    needYouCount: split.needYou,
+    agingCount: split.aging,
+    directionCount: split.directions,
     openDecisionCount: openDecisions.length,
     needsEyes: attention.filter((a) => a.kind === "verify"),
     needsEyesCount: needsEyesAll.length,
