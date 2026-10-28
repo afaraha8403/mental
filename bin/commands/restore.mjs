@@ -1,5 +1,5 @@
 /**
- * `mental restore --from <dir>` — merge a backup into this HOME.
+ * `mental restore --from <dir> [--dry-run]` — merge a backup into this HOME, or preview what it would do.
  */
 import { restoreHome } from "../lib/restore.mjs";
 import { printResult, EXIT_USAGE } from "../lib/output.mjs";
@@ -12,7 +12,8 @@ export function cmdRestore(args, io = {}) {
   const from = typeof args.flags?.from === "string" ? args.flags.from : "";
   const replace = Boolean(args.flags?.replace);
   const confirm = typeof args.flags?.confirm === "string" ? args.flags.confirm : "";
-  const result = restoreHome({ home, from, cwd, replace, confirm, env });
+  const dryRun = Boolean(args.flags?.["dry-run"]);
+  const result = restoreHome({ home, from, cwd, replace, confirm, dryRun, env });
   if (!result.ok) {
     printResult(stdout, args, false, undefined, result.error);
     return result.error?.code === "usage" ? EXIT_USAGE : 1;
@@ -21,9 +22,17 @@ export function cmdRestore(args, io = {}) {
   return 0;
 }
 
-/** @param {{ from: string, slices: Array<{ id: string, action: string }>, personal: object | null }} data */
+/** @param {{ from: string, dryRun?: boolean, slices: Array<object>, personal: object | null }} data */
 function formatRestore(data) {
-  const bits = data.slices.map((s) => `${s.action} ${s.id.slice(0, 8)}`);
-  if (data.personal) bits.push(`${data.personal.action} personal`);
-  return `restore ${bits.join(", ") || "(nothing)"} ← ${data.from}`;
+  const line = (label, r) => {
+    const bits = [`${r.wrote ?? 0} new/newer`];
+    if (r.journalMerged) bits.push(`${r.journalMerged} journals merged`);
+    if (r.kept) bits.push(`${r.kept} kept (yours is newer)`);
+    if (r.removed) bits.push(`${r.removed} removed`);
+    return `  ${label}  ${r.action}  ${bits.join(", ")}`;
+  };
+  const rows = data.slices.map((s) => line(s.id.slice(0, 8), s));
+  if (data.personal) rows.push(line("personal", data.personal));
+  const head = data.dryRun ? `restore preview (nothing written) <- ${data.from}` : `restore <- ${data.from}`;
+  return [head, ...(rows.length ? rows : ["  (nothing)"])].join("\n");
 }

@@ -998,10 +998,11 @@ function walkPacked(abs, rel, out) {
  * Merge pack OKF into dest without last-write-wins on journals.
  * @param {string} destRoot
  * @param {Map<string, string>} packFiles rel → abs in the archive
+ * @param {{ dryRun?: boolean }} [opts] dryRun reports the same result without writing anything
  * @returns {{ wrote: string[], kept: string[], journalMerged: string[] }}
  */
-export function mergeOkfTree(destRoot, packFiles) {
-  mkdirSync(destRoot, { recursive: true });
+export function mergeOkfTree(destRoot, packFiles, { dryRun = false } = {}) {
+  if (!dryRun) mkdirSync(destRoot, { recursive: true });
   const destFiles = listPackedOkfFiles(destRoot);
   /** @type {string[]} */
   const wrote = [];
@@ -1018,18 +1019,18 @@ export function mergeOkfTree(destRoot, packFiles) {
       continue;
     }
     if (!destAbs) {
-      copyPackedFile(packAbs, join(destRoot, ...rel.split("/")));
+      if (!dryRun) copyPackedFile(packAbs, join(destRoot, ...rel.split("/")));
       wrote.push(rel);
       continue;
     }
     if (rel.startsWith("journal/") && rel.endsWith(".md")) {
-      const r = mergeJournalFile(destAbs, packAbs);
+      const r = mergeJournalFile(destAbs, packAbs, { dryRun });
       if (r.changed) journalMerged.push(rel);
       else kept.push(rel);
       continue;
     }
     if (packConceptNewer(destAbs, packAbs)) {
-      copyPackedFile(packAbs, destAbs);
+      if (!dryRun) copyPackedFile(packAbs, destAbs);
       wrote.push(rel);
     } else {
       kept.push(rel);
@@ -1043,11 +1044,14 @@ export function mergeOkfTree(destRoot, packFiles) {
  * @param {string} destRoot
  * @param {Map<string, string>} packFiles
  */
-export function replaceOkfTree(destRoot, packFiles) {
-  mkdirSync(destRoot, { recursive: true });
+export function replaceOkfTree(destRoot, packFiles, { dryRun = false } = {}) {
+  if (!dryRun) mkdirSync(destRoot, { recursive: true });
   const destFiles = listPackedOkfFiles(destRoot);
+  const removed = [];
   for (const [rel, abs] of destFiles) {
     if (!packFiles.has(rel)) {
+      removed.push(rel);
+      if (dryRun) continue;
       try {
         rmSync(abs);
       } catch {
@@ -1056,8 +1060,9 @@ export function replaceOkfTree(destRoot, packFiles) {
     }
   }
   for (const [rel, packAbs] of packFiles) {
-    copyPackedFile(packAbs, join(destRoot, ...rel.split("/")));
+    if (!dryRun) copyPackedFile(packAbs, join(destRoot, ...rel.split("/")));
   }
+  return { removed, wrote: [...packFiles.keys()] };
 }
 
 /**
@@ -1097,7 +1102,7 @@ function conceptTimeFromText(abs, text) {
  * @param {string} packAbs
  * @returns {{ changed: boolean }}
  */
-export function mergeJournalFile(destAbs, packAbs) {
+export function mergeJournalFile(destAbs, packAbs, { dryRun = false } = {}) {
   const destRaw = readFileSync(destAbs, "utf8");
   const packRaw = readFileSync(packAbs, "utf8");
   const dest = parseFrontmatter(destRaw);
@@ -1123,6 +1128,7 @@ export function mergeJournalFile(destAbs, packAbs) {
     extra.push(hop);
   }
   if (extra.length === 0) return { changed: false };
+  if (dryRun) return { changed: true };
   const preamble = journalPreamble(dest.body);
   const destBlocks = destHops.map((h) => `## ${h.heading}\n${h.body.replace(/\s+$/, "")}`).join("\n\n");
   const extraBlocks = extra.map((h) => `## ${h.heading}\n${h.body.replace(/\s+$/, "")}`).join("\n\n");

@@ -513,3 +513,39 @@ test("replace on skipped-ambiguous leaves dest uuid journal intact", () => {
   assert.match(firstJournalText(homeB, destA), /Dest-A/);
   assert.equal(parseOk(mental(homeB, localA.root, ["where", "--json"])).id, destA);
 });
+
+test("restore --dry-run reports what would land and writes nothing", () => {
+  const homeA = tempHome("mental-a3-");
+  const pack = join(tempHome("mental-p3-"), "archive");
+  const a = initRepo(homeA, { name: "proj-a", origin: "https://github.com/org/alpha3.git" });
+  const idA = parseOk(mental(homeA, a.root, ["journal", "--json", "--title", "DryRunHop", "--resume", "next"])).id;
+  parseOk(mental(homeA, a.root, ["backup", "--json", "--out", pack]), "pack");
+
+  const homeB = tempHome("mental-b3-");
+  const preview = parseOk(mental(homeB, homeB, ["restore", "--json", "--dry-run", "--from", pack]), "preview");
+  assert.equal(preview.dryRun, true);
+  assert.equal(preview.slices[0].action, "adopted");
+  assert.ok(preview.slices[0].wrote > 0, JSON.stringify(preview));
+  assert.equal(loadBindings(homeB).bindings.length, 0);
+  assert.ok(!existsSync(join(homeB, ".mental", "projects", idA)));
+
+  const real = parseOk(mental(homeB, homeB, ["restore", "--json", "--from", pack]), "real");
+  assert.equal(real.dryRun, false);
+  assert.equal(real.slices[0].wrote, preview.slices[0].wrote);
+  assert.equal(loadBindings(homeB).bindings.length, 1);
+
+  const again = parseOk(mental(homeB, homeB, ["restore", "--json", "--dry-run", "--from", pack]), "again");
+  assert.equal(again.slices[0].action, "merged");
+  assert.equal(again.slices[0].wrote, 0);
+});
+
+test("restore --dry-run --replace previews a wipe without the confirm token", () => {
+  const homeA = tempHome("mental-a4-");
+  const pack = join(tempHome("mental-p4-"), "archive");
+  const a = initRepo(homeA, { name: "proj-a", origin: "https://github.com/org/alpha4.git" });
+  parseOk(mental(homeA, a.root, ["journal", "--json", "--title", "WipeHop", "--resume", "next"]));
+  parseOk(mental(homeA, a.root, ["backup", "--json", "--out", pack]), "pack");
+  const preview = parseOk(mental(homeA, homeA, ["restore", "--json", "--dry-run", "--replace", "--from", pack]), "preview");
+  assert.equal(preview.slices[0].action, "replaced");
+  assert.equal(preview.slices[0].removed, 0);
+});

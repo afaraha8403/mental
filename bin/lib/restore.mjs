@@ -15,17 +15,17 @@ import { listPackedOkfFiles, mergeOkfTree, replaceOkfTree } from "./okf.mjs";
 import { reindexBundle } from "./index.mjs";
 
 /**
- * @param {{ home: string, from: string, cwd: string, replace?: boolean, confirm?: string, env?: NodeJS.ProcessEnv }} opts
+ * @param {{ home: string, from: string, cwd: string, replace?: boolean, confirm?: string, dryRun?: boolean, env?: NodeJS.ProcessEnv }} opts
  * @returns {{ ok: true, data: object } | { ok: false, error: object }}
  */
-export function restoreHome({ home, from, cwd, replace = false, confirm = "", env = process.env }) {
+export function restoreHome({ home, from, cwd, replace = false, confirm = "", dryRun = false, env = process.env }) {
   if (!home) {
     return { ok: false, error: { code: "no-home", message: "HOME is unset; Mental will not write." } };
   }
   if (!from || typeof from !== "string" || !from.trim()) {
     return { ok: false, error: { code: "usage", message: "mental restore requires --from <dir>" } };
   }
-  if (replace && confirm !== "REPLACE") {
+  if (replace && !dryRun && confirm !== "REPLACE") {
     return {
       ok: false,
       error: {
@@ -55,10 +55,20 @@ export function restoreHome({ home, from, cwd, replace = false, confirm = "", en
     }
   }
 
-  /** @type {Array<{ id: string, action: string, destId?: string, files?: number }>} */
+  /** @type {Array<{ id: string, action: string, destId?: string, files?: number, wrote?: number, kept?: number, journalMerged?: number, removed?: number }>} */
   const rows = [];
   /** @type {string[]} */
   const touched = [];
+
+  /** Merge or replace one tree; with dryRun nothing is written and the counts say what would happen. */
+  const apply = (destRoot, packFiles, wipe) => {
+    if (wipe) {
+      const r = replaceOkfTree(destRoot, packFiles, { dryRun });
+      return { wrote: r.wrote.length, removed: r.removed.length };
+    }
+    const r = mergeOkfTree(destRoot, packFiles, { dryRun });
+    return { wrote: r.wrote.length, kept: r.kept.length, journalMerged: r.journalMerged.length };
+  };
 
   for (const identity of manifest.slices) {
     if (!identity?.id) continue;
@@ -67,56 +77,49 @@ export function restoreHome({ home, from, cwd, replace = false, confirm = "", en
     const packFiles = listPackedOkfFiles(packRoot);
     const destHit = destBindings.bindings.find((b) => b.id === identity.id);
     const originClash = originClashIds(destBindings.bindings, identity.origins || [], identity.id);
+    const destRoot = projectSliceDir(home, identity.id);
 
     if (!destHit && originClash.length > 0) {
-      adoptPortableIdentity(home, identity);
-      const destRoot = projectSliceDir(home, identity.id);
-      if (replace) replaceOkfTree(destRoot, packFiles);
-      else mergeOkfTree(destRoot, packFiles);
+      if (!dryRun) adoptPortableIdentity(home, identity);
+      const counts = apply(destRoot, packFiles, replace);
       rows.push({
         id: identity.id,
         action: "skipped-ambiguous",
         destId: originClash[0],
         files: packFiles.size,
+        ...counts,
       });
       touched.push(identity.id);
       continue;
     }
 
     if (!destHit) {
-      adoptPortableIdentity(home, identity);
-      const destRoot = projectSliceDir(home, identity.id);
-      mergeOkfTree(destRoot, packFiles);
-      rows.push({ id: identity.id, action: "adopted", files: packFiles.size });
+      if (!dryRun) adoptPortableIdentity(home, identity);
+      const counts = apply(destRoot, packFiles, false);
+      rows.push({ id: identity.id, action: "adopted", files: packFiles.size, ...counts });
       touched.push(identity.id);
       continue;
     }
 
-    const destRoot = projectSliceDir(home, identity.id);
-    if (replace) {
-      replaceOkfTree(destRoot, packFiles);
-      rows.push({ id: identity.id, action: "replaced", files: packFiles.size });
-    } else {
-      mergeOkfTree(destRoot, packFiles);
-      rows.push({ id: identity.id, action: "merged", files: packFiles.size });
-    }
+    const counts = apply(destRoot, packFiles, replace);
+    rows.push({ id: identity.id, action: replace ? "replaced" : "merged", files: packFiles.size, ...counts });
     touched.push(identity.id);
   }
 
   let personal = null;
   if (manifest.personal) {
     const packFiles = listPackedOkfFiles(join(abs, "personal"));
-    const destRoot = userMentalDir(home);
-    if (replace) replaceOkfTree(destRoot, packFiles);
-    else mergeOkfTree(destRoot, packFiles);
-    personal = { action: replace ? "replaced" : "merged", files: packFiles.size };
+    const counts = apply(userMentalDir(home), packFiles, replace);
+    personal = { action: replace ? "replaced" : "merged", files: packFiles.size, ...counts };
   }
 
-  for (const id of touched) {
-    try {
-      reindexBundle({ root: projectSliceDir(home, id), id, home, env });
-    } catch {
-      // FTS is derived; restore still succeeded
+  if (!dryRun) {
+    for (const id of touched) {
+      try {
+        reindexBundle({ root: projectSliceDir(home, id), id, home, env });
+      } catch {
+        // FTS is derived; restore still succeeded
+      }
     }
   }
 
@@ -125,6 +128,7 @@ export function restoreHome({ home, from, cwd, replace = false, confirm = "", en
     data: {
       from: abs,
       replace: Boolean(replace),
+      dryRun: Boolean(dryRun),
       slices: rows,
       personal,
     },

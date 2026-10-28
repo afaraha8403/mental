@@ -434,13 +434,15 @@ export const CATALOG = {
     name: "restore",
     group: "Identity",
     summary: "Merge a backup into this machine per UUID. Newer dest work stays. --replace --confirm REPLACE is disaster-only.",
-    usage: `${CMD} restore --from <dir>`,
+    usage: `${CMD} restore --from <dir> [--dry-run]`,
     examples: [
+      `${CMD} restore --from ~/mental-backup --dry-run`,
       `${CMD} restore --from ~/mental-backup --json`,
       `${CMD} restore --from ~/mental-backup --replace --confirm REPLACE`,
     ],
     flags: [
       v("from", { required: true, summary: "Backup directory from mental backup --out" }),
+      b("dry-run", { summary: "Preview what would be adopted, merged or removed; writes nothing" }),
       b("replace", { summary: "Replace packed slices only (requires --confirm REPLACE)" }),
       v("confirm", { summary: "Must be REPLACE with --replace" }),
     ],

@@ -1,6 +1,6 @@
 import { ageDays, clockTime, copyText, dayLabel, emptyState, h, icon, KIND, pathDate, relTime, skeleton, toDate, fill } from "./ui.js";
 
-const STALE_DAYS = 7;
+const AGING_DAYS = 7;
 
 /** Age source for a heartbeat list item. */
 export function itemWhen(item) {
@@ -11,13 +11,13 @@ export function itemWhen(item) {
 export function itemCard(ctx, item, { showKind = true, type = "" } = {}) {
   const when = itemWhen(item);
   const age = ageDays(when);
-  const stale = age != null && age >= STALE_DAYS;
+  const aging = age != null && age >= AGING_DAYS;
   const t = type || (String(item.path).startsWith("decisions/") ? "Decision" : "Attention");
   return h(
     "button.card",
     {
       type: "button",
-      class: stale ? "is-stale" : "",
+      class: aging ? "is-aging" : "",
       dataset: { path: item.path },
       onclick: () => ctx.open(item.path),
     },
@@ -29,7 +29,7 @@ export function itemCard(ctx, item, { showKind = true, type = "" } = {}) {
       showKind && item.kind ? h("span.chip.chip-soft", null, item.kind) : showKind ? h("span.mark", { "aria-hidden": "true", title: t }, KIND[t]?.emoji) : null,
       item.from ? h("span.card-from", null, `from ${item.from}`) : null,
       h("span.card-spacer"),
-      stale ? h("span.chip.chip-stale", { title: `${age} days old` }, "stale") : null,
+      aging ? h("span.chip.chip-aging", { title: `${age} days old` }, `${age}d`) : null,
       when ? h("time.card-age", { datetime: when, title: toDate(when)?.toLocaleString() || when }, relTime(when)) : null,
     ),
   );

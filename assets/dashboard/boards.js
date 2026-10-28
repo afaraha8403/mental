@@ -1,8 +1,8 @@
-import { ageDays, debounce, emptyState, h, icon, pathDate, relTime, skeleton, statusChip, tagChip, toDate, fill } from "./ui.js";
+import { ageDays, copyText, debounce, emptyState, h, icon, pathDate, relTime, skeleton, statusChip, tagChip, toDate, fill } from "./ui.js";
 
 const PAGE = 100;
 const MAX_ITEMS = 1000;
-const STALE_DAYS = 7;
+const AGING_DAYS = 7;
 
 /** Page through `/api/list` (100 per call) up to MAX_ITEMS. */
 export async function listAll(ctx, params) {
@@ -36,10 +36,10 @@ function boardCard(ctx, item) {
   const when = pathDate(item.path);
   const age = ageDays(when);
   const open = item.status === "open";
-  const stale = open && age != null && age >= STALE_DAYS;
+  const aging = open && age != null && age >= AGING_DAYS;
   return h(
     "button.card",
-    { type: "button", class: [stale && "is-stale", item.status === "resolved" && "is-done"].filter(Boolean).join(" "), onclick: () => ctx.open(item.path) },
+    { type: "button", class: [aging && "is-aging", item.status === "resolved" && "is-done"].filter(Boolean).join(" "), onclick: () => ctx.open(item.path) },
     h("span.card-title", null, item.title || item.path),
     item.description && item.description !== item.title ? h("span.card-desc", null, item.description) : null,
     h(
@@ -48,7 +48,7 @@ function boardCard(ctx, item) {
       item.status !== "open" ? statusChip(item.status) : null,
       (item.tags || []).slice(0, 2).map((t) => h("span.chip.chip-tag", null, `#${t}`)),
       h("span.card-spacer"),
-      stale ? h("span.chip.chip-stale", { title: `Open for ${age} days` }, "stale") : null,
+      aging ? h("span.chip.chip-aging", { title: `Open for ${age} days: still true? Resolve or keep.` }, `${age}d`) : null,
       when ? h("time.card-age", { datetime: when }, relTime(when)) : null,
     ),
   );
@@ -103,16 +103,28 @@ export async function renderAttention(el, ctx, search0, alive) {
     if (tag && !(i.tags || []).includes(tag)) return false;
     if (age) {
       const d = ageDays(pathDate(i.path));
-      if (age === "stale" && !(d != null && d >= STALE_DAYS)) return false;
+      if (age === "aging" && !(d != null && d >= AGING_DAYS)) return false;
       if (age === "week" && !(d != null && d < 7)) return false;
     }
     if (q && !`${i.title} ${i.description} ${(i.tags || []).join(" ")}`.toLowerCase().includes(q)) return false;
     return true;
   });
 
-  const groups = (kind ? [kind] : kinds).map((k) => ({
+  // The default open view is a worklist: fresh items on the board, aging items and directions folded below.
+  const split = status === "open" && !age && !kind;
+  const isAging = (i) => {
+    const d = ageDays(pathDate(i.path));
+    return d != null && d >= AGING_DAYS;
+  };
+  const byNewest = (a, b) => pathDate(b.path).localeCompare(pathDate(a.path));
+  const directions = split ? filtered.filter((i) => i.kind === "direction").sort(byNewest) : [];
+  const agingItems = split ? filtered.filter((i) => i.kind !== "direction" && isAging(i)).sort(byNewest) : [];
+  const boardItems = split ? filtered.filter((i) => i.kind !== "direction" && !isAging(i)) : filtered;
+  const boardKinds = split ? kinds.filter((k) => k !== "direction") : kinds;
+
+  const groups = (kind ? [kind] : boardKinds).map((k) => ({
     k,
-    items: filtered.filter((i) => (i.kind || "") === k).sort((a, b) => pathDate(b.path).localeCompare(pathDate(a.path))),
+    items: boardItems.filter((i) => (i.kind || "") === k).sort(byNewest),
   }));
 
   const set = (patch) => ctx.setParams(patch, { render: true });
@@ -144,7 +156,7 @@ export async function renderAttention(el, ctx, search0, alive) {
       [
         ["", "Any age"],
         ["week", "This week"],
-        ["stale", "Stale 7d+"],
+        ["aging", "Aging 7d+"],
       ],
       age,
       (v) => set({ age: v || null }),
@@ -176,7 +188,7 @@ export async function renderAttention(el, ctx, search0, alive) {
     ),
   );
 
-  const board = filtered.length
+  const board = boardItems.length
     ? h(
         "div.board",
         { dataset: { cols: String(groups.length) } },
@@ -196,20 +208,118 @@ export async function renderAttention(el, ctx, search0, alive) {
           ),
         ),
       )
-    : emptyState({ icon: "🌤", title: "Nothing matches these filters", body: "Try another status, kind, or tag." });
+    : split && (agingItems.length || directions.length)
+      ? h("p.lane-empty", null, "Nothing fresh needs you.")
+      : emptyState({ icon: "🌤", title: "Nothing matches these filters", body: "Try another status, kind, or tag." });
+
+  const stat = split
+    ? [`${boardItems.length} need you`, agingItems.length ? `${agingItems.length} aging` : "", directions.length ? `${directions.length} directions` : ""].filter(Boolean).join(" · ")
+    : `${byStatus("open").length} open`;
 
   fill(el, 
     h(
       "div.page.page-wide",
       null,
-      pageHead("Attention", "What's in the air — residue that outlives a chat.", `${byStatus("open").length} open`),
+      pageHead("Attention", "What's in the air — residue that outlives a chat.", stat),
       toolbar,
       kindTabs,
       board,
+      agingItems.length ? agingSection(ctx, agingItems) : null,
+      directions.length ? directionsSection(ctx, directions) : null,
       res.capped ? h("p.muted.small", null, `Showing the first ${all.length} items.`) : null,
     ),
   );
   restoreFocus(el, search, params);
+}
+
+/** Quote a title for a shell; null when it has characters that differ between bash and PowerShell. */
+function shellQuote(title) {
+  if (/[$`\\"\r\n]/.test(title)) return null;
+  return `"${title}"`;
+}
+
+/** Commands that close attention items; the dashboard is read-only, so the user runs them. */
+export function resolveCommands(items) {
+  return items
+    .map((i) => {
+      const q = shellQuote(String(i.title || ""));
+      return q ? `mental attention --title ${q} --status resolved --via dashboard --json` : `# edit by hand: ${i.path}`;
+    })
+    .join("\n");
+}
+
+/** Open items older than AGING_DAYS: a "still true?" review, not an alarm. */
+function agingSection(ctx, items) {
+  const picked = new Set();
+  const count = h("span.num", null, "0");
+  const copy = h(
+    "button.btn.btn-primary",
+    { type: "button", disabled: true, onclick: () => copyText(resolveCommands(items.filter((i) => picked.has(i.path))), "Resolve commands copied") },
+    icon("copy", 15),
+    "Copy resolve commands (",
+    count,
+    ")",
+  );
+  const sync = () => {
+    count.textContent = String(picked.size);
+    copy.disabled = picked.size === 0;
+  };
+  const boxes = [];
+  const rows = items.map((i) => {
+    const box = h("input", {
+      type: "checkbox",
+      "aria-label": `Select ${i.title}`,
+      onchange: (e) => {
+        if (e.target.checked) picked.add(i.path);
+        else picked.delete(i.path);
+        sync();
+      },
+    });
+    boxes.push(box);
+    const when = pathDate(i.path);
+    return h(
+      "li.aging-row",
+      null,
+      box,
+      h("button.aging-title", { type: "button", onclick: () => ctx.open(i.path) }, i.title || i.path),
+      h("span.chip.chip-soft", null, i.kind || "other"),
+      h("time.card-age", { datetime: when }, relTime(when)),
+    );
+  });
+  const all = h(
+    "button.btn.btn-ghost",
+    {
+      type: "button",
+      onclick: () => {
+        const on = picked.size < items.length;
+        boxes.forEach((b, n) => {
+          b.checked = on;
+          if (on) picked.add(items[n].path);
+          else picked.delete(items[n].path);
+        });
+        sync();
+      },
+    },
+    "Select all",
+  );
+  return h(
+    "details.aging",
+    { "aria-label": "Aging attention" },
+    h("summary.aging-head", null, h("span.section-title", null, "Aging"), h("span.section-sub", null, `${items.length} open ${AGING_DAYS}+ days. Still true? Keep it, or resolve it.`)),
+    h("div.aging-actions", null, all, copy),
+    h("ul.aging-list", null, rows),
+    h("p.muted.small", null, "Paste the commands into a terminal in this project. The dashboard stays read-only."),
+  );
+}
+
+/** Directions are standing context, so they sit outside the "needs you" count. */
+function directionsSection(ctx, items) {
+  return h(
+    "details.aging.directions",
+    { "aria-label": "Directions" },
+    h("summary.aging-head", null, h("span.section-title", null, "Directions"), h("span.section-sub", null, `${items.length} standing guidance, not a to-do`)),
+    h("div.card-grid", null, items.map((i) => boardCard(ctx, i))),
+  );
 }
 
 function rank(k) {
