@@ -521,3 +521,26 @@ test("openBrowser only launches plain loopback URLs", () => {
   assert.equal(isLaunchableUrl("https://example.com/"), false);
   assert.equal(isLaunchableUrl("http://127.0.0.1:3847/\"x"), false);
 });
+
+test("panel helper stops the dashboard its port file names, and only that one", async () => {
+  const { spawn, spawnSync } = await import("node:child_process");
+  const { fileURLToPath } = await import("node:url");
+  const { CLI } = await import("./helpers.mjs");
+  const home = tempHome();
+  const env = { ...gitEnv(home), HOME: home, USERPROFILE: home };
+  const dash = fileURLToPath(new URL("../claude-mod/dash.mjs", import.meta.url));
+  const server = spawn(process.execPath, [CLI, "dashboard", "--port", "0", "--no-open"], { env, stdio: "ignore", windowsHide: true });
+  const portFile = join(home, ".mental", "dashboard.json");
+  for (let i = 0; i < 50 && !existsSync(portFile); i++) await new Promise((r) => setTimeout(r, 100));
+  try {
+    const { url } = JSON.parse(readFileSync(portFile, "utf8"));
+    const run = (verb) => JSON.parse(spawnSync(process.execPath, [dash, verb], { env, encoding: "utf8", windowsHide: true }).stdout);
+    assert.deepEqual(run("probe"), { serving: true, url });
+    assert.deepEqual(run("stop"), { stopped: true, url });
+    await new Promise((r) => server.once("exit", r));
+    assert.equal(existsSync(portFile), false, "the port file goes with the server");
+    assert.equal(run("stop").stopped, false, "nothing left to stop");
+  } finally {
+    server.kill();
+  }
+});

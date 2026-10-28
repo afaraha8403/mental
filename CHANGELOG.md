@@ -8,11 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Features
+- The Mental pane in Claude Desktop is a console that follows the light or dark theme and draws no background of its own. A hero card shows the project, its live status and branch, where to pick up, and the thread: the last eight hops as a timeline coloured by the agent that left each one (Claude, Cursor, Copilot, Codex, OpenCode). Pulse tiles show what needs you by kind, the decisions in force, the context window and this session. Park and Hand off, each open item, and the Journal, Decisions, Notes and Threads links stay native controls under the drawings. The terminal pane keeps its native layout.
+- Mental's accent colour is teal instead of violet in the Claude Desktop panel and the dashboard. The dashboard's Today card now follows the light or dark theme like the rest of the page, and journals use pink so nothing reads as purple.
+- The Mental panel's pages are redesigned on Claude Desktop. Journal, Decisions, Notes and Threads open with a drawn header and a bar that splits the list by status, then group their entries (open, later and resolved threads; open, decided and superseded decisions; the journal by month) as outlined rows tagged by kind and status. An entry opens with its kind, status, date and tags, its body framed, an "Ask Claude about this" action, and the entries that link to it.
+- Rows in the Mental panel on Claude Desktop are whole targets: a need, a list entry, a linked entry, a Read in Mental tile or Last hand-off lights its border and title when the pointer is anywhere on it, and a click anywhere on the row (or Enter once it has focus) opens it. If the host cannot run the row module, rows fall back to native outlined rows that still light on hover.
+- The band above the prompt in Claude Desktop is one strip with the project, live status and resume line, plus a plain "N need you ›" link, instead of two crowded lines and a red reminder.
+- A running dashboard can be stopped from the Mental pane. The panel stops only the server named in `~/.mental/dashboard.json`, and only after its address still answers as a Mental dashboard.
 - `mental dashboard` writes `~/.mental/dashboard.json` (`port`, `pid`, `url`, `startedAt`) once it is listening and removes it on a clean exit, so launchers such as the Claude Desktop panel can find a dashboard that fell back to another port instead of assuming 3847. A second dashboard owns the file until it exits; the first one never deletes it.
 - `mental dashboard --idle-exit <minutes>` stops the server after that long with no requests, for detached launches that should not linger.
 - The dashboard has an embed mode for editor panels and iframes: open it with `?embed=1` (for example `http://127.0.0.1:3847/?embed=1#/today`) to hide the sidebar and tab bar, compact the top bar, stack lanes in one column, and skip the refresh on returning to the tab.
 
 ### Fixes
+- The Mental pane is titled with the project's folder name instead of its id.
+- Pressing "N need you" no longer shows a toast that repeats the whole list the pane is about to show. Only when the pane cannot open does a short line say how many items need you.
 - The Mental panel no longer counts a subagent's turns as turns of the session, so "This session" shows how many times you and Claude went back and forth.
 - MCP tools now act on every argument their schema offers. `slug` on attention, decide and note, `description` on attention, `passive` on heartbeat, `this` and `provider` on option, and `started` and `accept_stale` on track were accepted but silently ignored.
 - A dashboard started from the Mental panel now stops after 30 minutes with no requests instead of running until you sign out.

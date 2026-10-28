@@ -21,30 +21,30 @@
   --border-default: light-dark(#e4e4e7, #232329);
   --border-subtle: light-dark(#ececef, #1b1b20);
   --border-strong: light-dark(#d4d4d8, #2e2e36);
-  --border-focus: light-dark(#a78bfa, #8b5cf6);
+  --border-focus: light-dark(#5eead4, #14b8a6);
   --ink-primary: light-dark(#18181b, #ededf0);
   --ink-secondary: light-dark(#52525b, #a1a1aa);
   --ink-muted: light-dark(#8b8b94, #6e6e78);
   --text: var(--ink-primary);
   --muted: var(--ink-muted);
 
-  --accent: light-dark(#7c3aed, #8b5cf6);
-  --accent-ink: light-dark(#6d28d9, #a78bfa);
-  --accent-soft: light-dark(rgba(124, 58, 237, 0.1), rgba(139, 92, 246, 0.14));
-  --accent-ring: light-dark(rgba(124, 58, 237, 0.35), rgba(139, 92, 246, 0.45));
-  --on-accent: #ffffff;
-  --accent-grad: linear-gradient(180deg, #9b6dff, #7c3aed);
-  --accent-grad-hover: linear-gradient(180deg, #a77fff, #8445f0);
+  --accent: light-dark(#0d9488, #2dd4bf);
+  --accent-ink: light-dark(#0f766e, #5eead4);
+  --accent-soft: light-dark(rgba(13, 148, 136, 0.1), rgba(45, 212, 191, 0.14));
+  --accent-ring: light-dark(rgba(13, 148, 136, 0.35), rgba(45, 212, 191, 0.45));
+  --on-accent: light-dark(#ffffff, #042f2e);
+  --accent-grad: linear-gradient(180deg, light-dark(#14b8a6, #5eead4), light-dark(#0d9488, #2dd4bf));
+  --accent-grad-hover: linear-gradient(180deg, light-dark(#2dd4bf, #99f6e4), light-dark(#0f9e90, #5eead4));
 
   --k-decision: light-dark(#0284c7, #38bdf8);
   --k-attention: light-dark(#d97706, #f59e0b);
   --k-note: light-dark(#059669, #10b981);
-  --k-journal: light-dark(#9333ea, #a855f7);
+  --k-journal: light-dark(#db2777, #f472b6);
   --c-rose: light-dark(#e11d48, #fb7185);
   --c-amber: light-dark(#d97706, #f59e0b);
   --c-sky: light-dark(#0284c7, #38bdf8);
   --c-green: light-dark(#059669, #34d399);
-  --c-violet: light-dark(#7c3aed, #a78bfa);
+  --c-teal: light-dark(#0d9488, #2dd4bf);
   --c-zinc: light-dark(#71717a, #a1a1aa);
 
   --radius-sm: 6px;
@@ -64,19 +64,20 @@
   --top-h: 52px;
   --insp-w: 440px;
 
-  /* Hero and toast stay dark in both themes: the hero is the one loud surface, the toast must pop. */
-  --hero-bg: light-dark(#0c0a14, #0e0b18);
-  --hero-ink: #fafafa;
-  --hero-ink-2: #b4b4c0;
-  --hero-ink-3: #7c7c8a;
-  --hero-line: rgba(255, 255, 255, 0.09);
-  --hero-accent: #c4b5fd;
-  --hero-sha: #a78bfa;
-  --hero-ok: #34d399;
-  --hero-warn: #f59e0b;
-  --hero-bad: #fb7185;
-  --hero-idle: #a1a1aa;
-  --hero-title-grad: linear-gradient(180deg, #ffffff 30%, #c9c3e6);
+  /* The hero follows the theme like every other surface; the toast stays dark so it pops. */
+  --hero-bg: var(--bg-surface);
+  --hero-ink: var(--ink-primary);
+  --hero-ink-2: var(--ink-secondary);
+  --hero-ink-3: var(--ink-muted);
+  --hero-line: var(--border-default);
+  --hero-accent: var(--accent-ink);
+  --hero-sha: var(--accent);
+  --hero-ok: light-dark(#059669, #34d399);
+  --hero-warn: light-dark(#b45309, #f59e0b);
+  --hero-bad: light-dark(#e11d48, #fb7185);
+  --hero-idle: light-dark(#71717a, #a1a1aa);
+  --hero-title-grad: linear-gradient(180deg, var(--ink-primary) 30%, light-dark(#115e59, #99f6e4));
+  --hero-dots: light-dark(rgba(24, 24, 27, 0.06), rgba(255, 255, 255, 0.07));
   --toast-bg: #18181b;
   --toast-ink: #fafafa;
 }
@@ -330,7 +331,7 @@ time,
   --s: var(--c-zinc);
 }
 .status-running {
-  --s: var(--c-violet);
+  --s: var(--c-teal);
 }
 .chip-tag {
   color: var(--ink-secondary);
@@ -426,7 +427,7 @@ button.chip-tag[aria-pressed="true"] {
 .btn-primary {
   background: var(--accent-grad);
   color: var(--on-accent);
-  box-shadow: 0 0 0 1px rgba(124, 58, 237, 0.6), 0 6px 20px -6px rgba(139, 92, 246, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 0 1px light-dark(rgba(13, 148, 136, 0.6), rgba(45, 212, 191, 0.6)), 0 6px 20px -6px light-dark(rgba(13, 148, 136, 0.55), rgba(45, 212, 191, 0.5)), inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 .btn-primary:hover {
   background: var(--accent-grad-hover);
@@ -1243,15 +1244,15 @@ body.rail-open .main-col {
   border-radius: var(--radius-xl);
   background: var(--hero-bg);
   color: var(--hero-ink);
-  border: 1px solid rgba(139, 92, 246, 0.22);
-  box-shadow: 0 30px 80px -40px rgba(124, 58, 237, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  border: 1px solid light-dark(rgba(13, 148, 136, 0.28), rgba(45, 212, 191, 0.22));
+  box-shadow: 0 30px 80px -40px light-dark(rgba(13, 148, 136, 0.3), rgba(45, 212, 191, 0.35));
 }
 .hero::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: -1;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-image: radial-gradient(var(--hero-dots) 1px, transparent 1px);
   background-size: 22px 22px;
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 75%);
   -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.9), transparent 75%);
@@ -1263,7 +1264,7 @@ body.rail-open .main-col {
   right: -12%;
   width: 70%;
   height: 160%;
-  background: radial-gradient(closest-side, rgba(139, 92, 246, 0.42), rgba(56, 189, 248, 0.12) 55%, transparent 75%);
+  background: radial-gradient(closest-side, light-dark(rgba(45, 212, 191, 0.22), rgba(45, 212, 191, 0.3)), rgba(56, 189, 248, 0.1) 55%, transparent 75%);
   filter: blur(10px);
   animation: drift 18s ease-in-out infinite alternate;
   pointer-events: none;
@@ -1289,7 +1290,7 @@ body.rail-open .main-col {
   flex-wrap: wrap;
 }
 .hero .chip-soft {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--bg-hover);
   color: var(--hero-ink-2);
 }
 .hero-resume {
@@ -1380,12 +1381,12 @@ body.rail-open .main-col {
   gap: 8px;
 }
 .hero .btn-ghost {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
   color: var(--hero-ink);
 }
 .hero .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-active);
 }
 .hero-empty {
   margin-top: 14px;
@@ -1447,7 +1448,7 @@ body.rail-open .main-col {
   background: var(--d, var(--c-zinc));
 }
 .delta-writes {
-  --d: var(--c-violet);
+  --d: var(--c-teal);
 }
 .delta-attention {
   --d: var(--c-amber);
@@ -1513,7 +1514,7 @@ body.rail-open .main-col {
   --lane: var(--c-zinc);
 }
 .col-thread {
-  --lane: var(--c-violet);
+  --lane: var(--c-teal);
 }
 .lane-head {
   display: flex;

@@ -6,13 +6,14 @@
  *   node dash.mjs probe          -> {"serving":bool,"url":string}
  *   node dash.mjs open <url>     -> opens a loopback dashboard URL in the default browser
  *   node dash.mjs start          -> starts `mental dashboard` detached (it opens the browser)
+ *   node dash.mjs stop           -> stops the dashboard the port file names
  *
  * One dashboard serves every project (`#/today?p=<id>`), so `probe` looks for
  * any running one: first the port file the server writes
  * (`~/.mental/dashboard.json`), then the default port 3847.
  */
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -34,27 +35,51 @@ async function answers(url) {
   }
 }
 
-/** The advertised dashboard URL, or null when the file is missing, malformed, or its process is gone. */
-function advertisedUrl() {
+/** The port file's live dashboard, or null when it is missing, malformed, or its process is gone. */
+function advertised() {
   const home = process.env.HOME || process.env.USERPROFILE;
   if (!home) return null;
+  const file = join(home, ".mental", "dashboard.json");
   let body;
   try {
-    body = JSON.parse(readFileSync(join(home, ".mental", "dashboard.json"), "utf8"));
+    body = JSON.parse(readFileSync(file, "utf8"));
   } catch {
     return null;
   }
   const url = typeof body?.url === "string" && body.url.endsWith("/") ? body.url : null;
   if (!url || !LOOPBACK_URL.test(url)) return null;
+  const pid = Number.isInteger(body.pid) && body.pid > 0 ? body.pid : null;
   // A hard kill leaves the file behind; a dead pid means it is stale.
-  if (Number.isInteger(body.pid)) {
+  if (pid) {
     try {
-      process.kill(body.pid, 0);
+      process.kill(pid, 0);
     } catch (err) {
       if (err?.code === "ESRCH") return null;
     }
   }
-  return url;
+  return { url, pid, file };
+}
+
+function advertisedUrl() {
+  return advertised()?.url ?? null;
+}
+
+/**
+ * Stop the dashboard the port file names. The pid is trusted only while its
+ * URL still answers as a Mental dashboard, so a recycled pid is never killed.
+ */
+async function stop() {
+  const live = advertised();
+  if (!live?.pid) return { stopped: false, reason: (await answers(DEFAULT_URL)) ? "unknown-pid" : "not-running" };
+  if (!(await answers(live.url))) return { stopped: false, reason: "not-running" };
+  try {
+    process.kill(live.pid);
+  } catch {
+    return { stopped: false, reason: "kill-failed" };
+  }
+  // On Windows the kill is immediate, so the server never gets to remove its own file.
+  rmSync(live.file, { force: true });
+  return { stopped: true, url: live.url };
 }
 
 async function probe() {
@@ -79,7 +104,9 @@ if (verb === "probe") {
   });
   child.unref();
   process.stdout.write(`${JSON.stringify({ started: true, pid: child.pid })}\n`);
+} else if (verb === "stop") {
+  process.stdout.write(`${JSON.stringify(await stop())}\n`);
 } else {
-  process.stderr.write("usage: dash.mjs probe | open <url> | start\n");
+  process.stderr.write("usage: dash.mjs probe | open <url> | start | stop\n");
   process.exit(2);
 }

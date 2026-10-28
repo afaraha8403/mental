@@ -2,7 +2,7 @@ const TAG_PALETTE = [
   "#38bdf8",
   "#f59e0b",
   "#10b981",
-  "#a855f7",
+  "#ec4899",
   "#f97316",
   "#06b6d4",
   "#eab308",
@@ -46,7 +46,7 @@ export const KIND_COLOR = {
   Decision: "#38bdf8", // Sky blue
   Attention: "#f59e0b", // Amber
   Note: "#10b981", // Emerald
-  Journal: "#a855f7", // Purple
+  Journal: "#ec4899", // Pink
 };
 
 /** Metadata and emoji for each catalog type. */
@@ -54,7 +54,7 @@ export const KIND_META = {
   Decision: { emoji: "🎯", label: "Decisions", color: "#38bdf8", angle: -Math.PI / 4 },
   Attention: { emoji: "🚦", label: "Attention", color: "#f59e0b", angle: -3 * Math.PI / 4 },
   Note: { emoji: "📝", label: "Notes", color: "#10b981", angle: Math.PI / 4 },
-  Journal: { emoji: "📓", label: "Journals", color: "#a855f7", angle: 3 * Math.PI / 4 },
+  Journal: { emoji: "📓", label: "Journals", color: "#ec4899", angle: 3 * Math.PI / 4 },
 };
 
 /**
@@ -83,16 +83,16 @@ export const HUB_LAYOUT = {
 export const MATTER_DEFINITIONS = [
   { id: "track", label: "Time & Tracking", emoji: "⏱️", color: "#06b6d4", regex: /\b(track|time|clock|billable|timer|interval|unclocked|hour)\b/i },
   { id: "backup", label: "Backup & Portability", emoji: "📦", color: "#ec4899", regex: /\b(backup|restore|pack|unpack|portable|slice|copy)\b/i },
-  { id: "dashboard", label: "Dashboard & Explorer", emoji: "🧭", color: "#8b5cf6", regex: /\b(dashboard|mind[ -]?map|explorer|graph|preview|canvas|3d-force)\b/i },
+  { id: "dashboard", label: "Dashboard & Explorer", emoji: "🧭", color: "#14b8a6", regex: /\b(dashboard|mind[ -]?map|explorer|graph|preview|canvas|3d-force)\b/i },
   { id: "plugins", label: "Plugins & Host Agents", emoji: "🔌", color: "#f97316", regex: /\b(plugin|claude|agent|opencode|cursor|host)\b/i },
   { id: "release", label: "Release & npm", emoji: "🚀", color: "#eab308", regex: /\b(release|publish|npm|version|lockstep|oidc|otp|tag)\b/i },
   { id: "sync", label: "Cross-PC Sync", emoji: "🔄", color: "#14b8a6", regex: /\b(cross-pc|live sync|syncthing)\b/i },
   { id: "doctor", label: "Doctor & Health", emoji: "🩺", color: "#10b981", regex: /\b(doctor|repair|install|uninstall|sanity|fix|exclude)\b/i },
   { id: "search", label: "Search & Retrieval", emoji: "🔍", color: "#6366f1", regex: /\b(search|query|retrieval|fts|prior-attempt)\b/i },
   { id: "receipt", label: "Formatting & Receipts", emoji: "🧾", color: "#d97706", regex: /\b(receipt|format|wrapper|ascii|bullet)\b/i },
-  { id: "product", label: "Product & Identity", emoji: "🧠", color: "#a855f7", regex: /\b(slogan|brand|mark|domain|getmental)\b/i },
+  { id: "product", label: "Product & Identity", emoji: "🧠", color: "#ec4899", regex: /\b(slogan|brand|mark|domain|getmental)\b/i },
   { id: "cli", label: "CLI & Protocols", emoji: "⚡", color: "#3b82f6", regex: /\b(cli|heartbeat|pulse|glance|status|where|handoff|park|resume|graphify|residue)\b/i },
-  { id: "journal", label: "Work Logs & Sit-downs", emoji: "📓", color: "#9333ea", regex: /\b(journal|work log|sit-down)\b/i },
+  { id: "journal", label: "Work Logs & Sit-downs", emoji: "📓", color: "#db2777", regex: /\b(journal|work log|sit-down)\b/i },
 ];
 
 /**
@@ -126,7 +126,7 @@ export function getConceptMatter(node) {
 
   // 3. Fallback for unclassified journal entries
   if (node.type === "Journal" || (node.path && String(node.path).startsWith("journal/"))) {
-    return MATTER_DEFINITIONS.find((m) => m.id === "journal") || { id: "journal", label: "Work Logs & Sit-downs", emoji: "📓", color: "#9333ea" };
+    return MATTER_DEFINITIONS.find((m) => m.id === "journal") || { id: "journal", label: "Work Logs & Sit-downs", emoji: "📓", color: "#db2777" };
   }
 
   // 4. Default to General & Governance

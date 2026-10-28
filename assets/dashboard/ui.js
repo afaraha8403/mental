@@ -5,7 +5,7 @@ export const KIND = {
   Decision: { emoji: "🎯", label: "Decision", plural: "Decisions", color: "#38bdf8" },
   Attention: { emoji: "🚦", label: "Attention", plural: "Attention", color: "#f59e0b" },
   Note: { emoji: "📝", label: "Note", plural: "Notes", color: "#10b981" },
-  Journal: { emoji: "📓", label: "Journal", plural: "Journals", color: "#a855f7" },
+  Journal: { emoji: "📓", label: "Journal", plural: "Journals", color: "#ec4899" },
 };
 
 export const TYPES = ["Decision", "Attention", "Note", "Journal"];

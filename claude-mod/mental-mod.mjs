@@ -18,6 +18,7 @@ import {
   bandModelOf,
   isWriteCommand,
   mentalCommandOf,
+  needsLabelOf,
   needsOf,
   newSession,
   noteContext,
@@ -126,6 +127,11 @@ export function heartbeatArgvs(root) {
   return cliArgvs(root, ["heartbeat", "--json", "--passive"]);
 }
 
+/** argv for the thread of recent hops the Desktop console draws. */
+export function briefArgvs(root) {
+  return cliArgvs(root, ["brief", "--json", "--hops", "8"]);
+}
+
 /**
  * argv for the dashboard helper (`claude-mod/dash.mjs`), or null without a plugin root.
  * @param {string} root
@@ -184,6 +190,8 @@ export const register = (on) => {
   let s = newSession(Date.now());
   /** @type {any} */
   let vm = null;
+  /** `mental brief` output for the console's thread; Desktop only, read while the pane is open. */
+  let brief = null;
   let updatedAt = null;
   let error = "";
   let isPaneOpen = false;
@@ -215,6 +223,10 @@ export const register = (on) => {
   let dismissed = new Set();
   /** @type {any[]} */
   let nav = [];
+  /** What each pressable row of the open pane does, by its Client key; rebuilt on every draw. */
+  let rowActions = new Map();
+  /** Set once a row Client fails on this host; rows are drawn native from then on. */
+  let clientFailed = false;
   /** @type {any} */
   let route = null;
   let routeSeq = 0;
@@ -261,6 +273,20 @@ export const register = (on) => {
     return { hb: null, error: lastError || "Mental did not answer" };
   }
 
+  /** The first launcher that prints JSON, or null. Never throws. */
+  async function runJson(argvs) {
+    for (const argv of argvs) {
+      try {
+        const r = await host.run(argv, cwd ? { cwd, timeoutMs: HEARTBEAT_TIMEOUT_MS } : { timeoutMs: HEARTBEAT_TIMEOUT_MS });
+        const got = heartbeatOf(r.stdout);
+        if (got?.ok) return got;
+      } catch {
+        /* the next launcher, or nothing */
+      }
+    }
+    return null;
+  }
+
   async function refresh() {
     if (!host) return;
     if (inFlight) {
@@ -280,6 +306,7 @@ export const register = (on) => {
         if (!vm) vm = { linked: false };
       }
       if (isRich) await probeDash();
+      if (isRich && isPaneOpen && hb) brief = (await runJson(briefArgvs(root))) || brief;
     } finally {
       inFlight = false;
       lastTryAt = nowOf();
@@ -303,6 +330,7 @@ export const register = (on) => {
       vm,
       error,
       dash.state,
+      brief?.data?.hops?.[0]?.time ?? null,
       Math.floor(nowOf() / 60_000),
       route ? [route.view, route.status] : null,
     ], (k, v) => (k === "handoffAge" ? undefined : v));
@@ -425,6 +453,18 @@ export const register = (on) => {
         if (dash.state === "starting") recheck();
       });
     recheck();
+  }
+
+  /** Stop the running dashboard (the one the port file names). */
+  async function onDashboardStop() {
+    if (!host || !root || dash.state !== "running") return;
+    const r = await runDash(["stop"]);
+    const got = r && r.exitCode === 0 ? heartbeatOf(r.stdout) : null;
+    if (got?.stopped) host.toast("Dashboard stopped");
+    else if (got?.reason === "unknown-pid") host.toast("That dashboard wasn't started by this Mental — stop it where it runs");
+    else host.toast("Couldn't stop the dashboard");
+    await probeDash();
+    redraw();
   }
 
   function refreshSoon(delay = DEBOUNCE_MS) {
@@ -578,15 +618,14 @@ export const register = (on) => {
   async function showNeeds() {
     if (!host) return;
     clearRoute();
-    if (!isPaneOpen) {
+    let opened = isPaneOpen;
+    if (!opened) {
       isFullscreen = true;
-      await openPane();
+      opened = await openPane();
     }
-    const { items, total } = needsOf(vm);
-    if (items.length) {
-      const shown = items.slice(0, 2);
-      host.toast(`Needs you: ${shown.map((x) => `${x.label} — ${x.title}`).join(" · ")}${total > shown.length ? ` · +${total - shown.length} more` : ""}`);
-    }
+    // The pane lists every item, so only say something when it could not open.
+    const { total } = needsOf(vm);
+    if (!opened && total) host.toast(`${needsLabelOf(total)} · open Mental with /mental`);
     redraw();
   }
 
@@ -698,15 +737,28 @@ export const register = (on) => {
     if (e.requestId !== PANE_ID || !host) return next(e);
     noteSurface(e.surface);
     const E = await $.ui.resolve(e);
-    const look = { rich: isRich, typography, columns: e.props.bodyColumns };
+    rowActions = new Map();
+    // Each pressable row is its own Client, so the pointer anywhere on the row
+    // lights it and a click there runs its action (ui.message below).
+    const client =
+      isRich && E.Client && !clientFailed
+        ? (key, props, onPress) => {
+            rowActions.set(key, onPress);
+            return E.Client({ key, module: "./lib/row-client.mjs", props, width: "100%" });
+          }
+        : null;
+    const look = { rich: isRich, typography, columns: e.props.bodyColumns, ...(client ? { client } : {}) };
     const openItem = (path, title) =>
       safely(() => go({ view: "item", path, title, crumb: route?.view === "list" ? `Mental › ${route.type}` : "Mental" }))();
-    if (route) return renderRoute(E, route, { onBack: () => goBack(), onOpenItem: openItem }, look);
     // Desktop sends the request as a turn; the terminal fills the prompt so the person sends it.
     const ask = (text, toast) => (isRich ? safely(() => send(text, toast)) : safely(() => fill(text)));
+    if (route) {
+      const onAskItem = (item) => ask(`Open the Mental ${item.kind} "${item.title}" (${item.path}) and help me act on it.`, "Asking Claude about this…")();
+      return renderRoute(E, route, { onBack: () => goBack(), onOpenItem: openItem, onAskItem }, look);
+    }
     return renderPane(
       E,
-      paneModelOf({ vm, s, now: nowOf(), error, updatedAt }),
+      paneModelOf({ vm, s, now: nowOf(), error, updatedAt, brief }),
       {
         onPark: ask(PARK_PROMPT, "Asking Claude to park this session…"),
         onHandoff: ask(HANDOFF_PROMPT, "Asking Claude to write the hand-off…"),
@@ -719,9 +771,9 @@ export const register = (on) => {
         },
         onTrackStart: ask(TRACK_START_PROMPT, "Asking Claude to start the clock…"),
         onTrackStop: ask(TRACK_STOP_PROMPT, "Asking Claude to stop the clock…"),
-        ...(isRich ? { onDashboard: safely(onDashboard) } : {}),
+        ...(isRich ? { onDashboard: safely(onDashboard), onDashboardStop: safely(onDashboardStop), onDismiss: () => dismissNeeds() } : {}),
       },
-      { ...look, dash: isRich ? { state: dash.state, href: dash.state === "running" ? dashHrefOf(dash.url, projectId) : "" } : null },
+      { ...look, now: nowOf(), dash: isRich ? { state: dash.state, href: dash.state === "running" ? dashHrefOf(dash.url, projectId) : "" } : null },
     );
   });
 
@@ -758,6 +810,20 @@ export const register = (on) => {
     }
     return isFullscreen && !inDesktop ? { text: "Mental panel shown" } : {};
   }).catch(($, e, next) => (next.called ? undefined : { text: "The Mental panel hit an error — try /mental again" }));
+
+  on("ui.message", ($, e, next) => {
+    const run = rowActions.get(e.element);
+    if (!run || !e.data || /** @type {any} */ (e.data).press !== true) return next(e);
+    run();
+    return {};
+  });
+
+  // The row Client is the only one this mod draws, so a fault is always it:
+  // fall back to native rows. The host runs the render hook again after this.
+  on("ui.fault", ($, e, next) => {
+    clientFailed = true;
+    return next(e);
+  });
 
   on("ui.close", { id: PANE_ID }, async ($, e, next) => {
     const r = await next(e);

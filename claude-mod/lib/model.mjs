@@ -209,6 +209,7 @@ export function viewModelOf(hb, now) {
   return {
     linked: true,
     id: String(d.id),
+    name: nameOfPath(d.gitRoot),
     branch: d.git?.branch || "",
     dirty: !!d.git?.dirty,
     changed: String(d.git?.porcelain || "")
@@ -241,6 +242,42 @@ export function viewModelOf(hb, now) {
         }
       : null,
   };
+}
+
+/** The last segment of a path on any OS, or "" for none. */
+function nameOfPath(p) {
+  return String(p || "")
+    .replace(/[\\/]+$/, "")
+    .split(/[\\/]/)
+    .pop() || "";
+}
+
+/** Agent behind a hop (`--via`), as a stable short id for colour and legend. */
+export function agentOf(via) {
+  const v = String(via || "").toLowerCase();
+  if (!v) return "unknown";
+  if (v.includes("claude")) return "claude";
+  for (const a of ["cursor", "copilot", "codex", "opencode"]) if (v.includes(a)) return a;
+  return "other";
+}
+
+/**
+ * The thread: the last hops from `mental brief`, oldest first, each with the
+ * agent that left it. Hops without a parseable time are dropped.
+ * @param {any} brief `mental brief --json` output
+ * @returns {{ hops: { at: number, agent: string, via: string, title: string }[], agents: string[] }}
+ */
+export function threadOf(brief) {
+  const raw = Array.isArray(brief?.data?.hops) ? brief.data.hops : [];
+  const hops = raw
+    .map((h) => {
+      const at = Date.parse(`${h?.date || ""}T${h?.time || "00:00"}`);
+      return { at, agent: agentOf(h?.via), via: String(h?.via || ""), title: oneLine(h?.title || "") };
+    })
+    .filter((h) => Number.isFinite(h.at))
+    .sort((a, b) => a.at - b.at);
+  const agents = [...new Set(hops.map((h) => h.agent))];
+  return { hops, agents };
 }
 
 /**
@@ -388,7 +425,7 @@ export function bandModelOf({ vm, s, now, dismissed, error = "" }) {
   else if (status.state === "receipt" && s.receipt?.title) second = { text: `${s.receipt.glyph} ${s.receipt.label} › ${s.receipt.title}`, tone: status.tone };
   else if (status.state === "compacting") second = { text: "Compacting context. The resume point is safe in Mental.", tone: "accent" };
   else if (items.length) second = { text: `${items[0].label} · ${items[0].title}${total > 1 ? `  +${total - 1} more` : ""}`, tone: items[0].tone };
-  return { status, message, needs: total, hideable: items.length > 0, second, working: s.working };
+  return { status, message, needs: total, hideable: items.length > 0, second, working: s.working, name: vm?.name || "Mental" };
 }
 
 /**
@@ -396,12 +433,12 @@ export function bandModelOf({ vm, s, now, dismissed, error = "" }) {
  * above the fold, then this session, the clock and ways to read more.
  * @param {{ vm: any, s: SessionStats, now: number, error?: string, updatedAt?: number | null }} input
  */
-export function paneModelOf({ vm, s, now, error = "", updatedAt = null }) {
+export function paneModelOf({ vm, s, now, error = "", updatedAt = null, brief = null }) {
   const status = statusOf(vm, s, now);
   const linked = !!vm?.linked;
   const ago = (ms) => (ageOf(ms) === "now" ? "just now" : `${ageOf(ms)} ago`);
   const header = {
-    title: linked ? vm.id : "Mental",
+    title: linked ? vm.name || vm.id : "Mental",
     status,
     meta: linked ? [vm.branch && `⎇ ${vm.branch}`, vm.dirty ? plural(vm.changed, "change") : vm.branch ? "clean" : ""].filter(Boolean).join(" · ") : "",
     error,
@@ -444,6 +481,10 @@ export function paneModelOf({ vm, s, now, error = "", updatedAt = null }) {
     // Near the context limit the way out is a hand-off; otherwise a park.
     primary: ctx != null && ctx >= PRESSURE_CONTEXT_PCT ? "handoff" : "park",
     needs: needsOf(vm),
+    thread: threadOf(brief),
+    guardrails: vm.guardrailCount || 0,
+    context: ctx == null ? null : Math.round(ctx),
+    stats: { turns: s.turns + (s.working ? 1 : 0), files: s.files.size, startedAt: s.startedAt },
     session,
     activity,
     time: timeModelOf(vm.track, now),
