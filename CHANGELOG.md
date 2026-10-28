@@ -35,6 +35,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Dashboard styles define each colour once with `light-dark()` instead of a duplicated dark-theme block, and the remaining hard-coded colours are tokens, so the light theme has no dark-only colours. The project picker fits narrow panels, full-height areas use dynamic viewport units, and there is a phone breakpoint at 480px.
+### Changed
+- The Mental panel in Claude Desktop and Claude Code is redesigned around what you need next. The top of the pane is where to pick up, Park and Hand off (Hand off leads when the context is nearly full), and what needs you as one button per item that opens it. Below are this session in one line, the clock, recent receipts, and Journal, Decisions, Notes and Threads to read in the panel. The terminal and Desktop now draw the same native panel instead of separate tab and card designs, the terminal pane scrolls instead of cutting to "+N more", and the terminal can browse and open entries too. Desktop uses the host's own text sizes, a primary button and Markdown on Claude Code 2.1.299 or later, keeps the logo as the only image, and drops the stat cards and looping animations.
+- When Mental cannot be read, the band says why instead of "Not linked here".
+
+### Fixed
+- The Claude panel kept working after `/clear`, `/resume` or `/branch` only until then: those commands end the conversation, not the session, and the panel stopped its refresh timer. It now starts a fresh session view and keeps refreshing.
+- A commit message, `echo` or heredoc that mentioned `mental park` or `mental decide` no longer shows a false "Parked" or "Decision" receipt or resets the edit count. Only a real `mental …` call at the start of a command (or after `&&`, `;`, `|`) counts, and the inline chat card appears only on shell tool rows.
+- The panel's Dashboard button no longer starts a second dashboard when one is already running for another project. It finds the running server from `~/.mental/dashboard.json` (falling back to port 3847), opens this project's Today view with a native link, and only starts a server when none answers.
+- Panel buttons no longer leave unhandled errors when Claude cannot open the pane, and every gating hook now has an error handler, so `claude plugin validate --strict` is clean.
+- Receipts and inline cards read the tool result when the host gives no `text`, so their titles show again.
+- "Needs you" counts every open item, not just the first few the heartbeat lists, and no longer lists each verify item twice. Hiding an item is remembered by its file, so a retitle does not bring it back.
+- Panel text is readable on light terminals and light Desktop themes: primary text keeps the host's colour, secondary text is dimmed, and accents use theme colour names instead of a fixed dark palette.
+- The panel shows the real error when Mental cannot be read, instead of "heartbeat failed", and no longer waits up to a minute trying `mental` and `mental.cmd` on PATH when the plugin's own CLI fails.
 
 ## [0.12.1] - 2026-10-08
 

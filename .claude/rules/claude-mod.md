@@ -12,7 +12,7 @@ A mod is a host UI module (not MCP). It runs in a sandbox: web globals only, no 
 
 ## Surfaces
 
-`$.session.surfaces` picks the look: `desktop` = rich cards (`lib/desktop.mjs`), terminal = text pane (`lib/views.mjs`), `mobile` = leave alone. There is no left-nav slot and no web embed; the Dashboard card opens the browser.
+Every surface draws one native tree: `lib/model.mjs` turns heartbeat into plain data (`paneModelOf`, `bandModelOf`; host-neutral, keep it pure) and `lib/views.mjs` renders it. `$.session.surfaces` only sets the look: `desktop`/`vscode` add the logo `Svg` and the footer opener; `mobile` = leave alone. `lib/desktop.mjs` is just the chat tool-card `Svg`. `Text` `size`/`weight`, `Button` `variant` and `Markdown` are used only when `$.session.version()` is 2.1.299+ (older builds refuse the whole tree). There is no left-nav slot and no web embed. A running dashboard opens through a native `Link` (`http://localhost:<port>/#/today?p=<id>`; Desktop opens no other `http:` host); `dash.mjs probe` finds it from `~/.mental/dashboard.json`, then port 3847.
 
 ## Host limits (learned the hard way)
 
@@ -26,6 +26,8 @@ A mod is a host UI module (not MCP). It runs in a sandbox: web globals only, no 
 
 ## Behaviour rules
 
+- `session.end` also fires on `/clear`, `/resume` and `/branch` (`e.reason` `clear` / `resume`) and `session.start` does not fire again: keep the timers then, tear down only on a real end.
+- Native `Text` sits on the host's chrome: no hex colours. Primary text uncoloured, secondary `dimColor`, accents as colour names (`nativeTone`).
 - Redraw only when `signatureOf()` changes. A redraw every tick makes the pane fight scrolling.
 - Park and Hand off send a prompt; the agent records through the skill. Hide is footer-only and stored in `store.dismissed`; the panel still lists everything.
 - Heartbeat is always `--passive` (no clock ping, no write).
@@ -38,4 +40,4 @@ node --test test/claude-mod.test.mjs test/host-plugins.test.mjs
 claude plugin validate . --strict
 ```
 
-`desktop.mjs` is CRLF, `mental-mod.mjs` is LF; keep each as is. Types (git-ignored) live in `.claude-plugin/types/`. The "gating hook without .catch" validator warnings are expected. User-visible change: add a CHANGELOG line. Next hosts (Codex, then DeepSeek) get their own folder; do not bend this one.
+All `claude-mod/` files are LF. Types (git-ignored) live in `.claude-plugin/types/`. Every gating hook (`tool.call`, `command.run`, `ui.close`, `session.compact`) has a `.catch` that passes the event on; validate must show none "without .catch". User-visible change: add a CHANGELOG line. Next hosts (Codex, then DeepSeek) get their own folder; do not bend this one.
