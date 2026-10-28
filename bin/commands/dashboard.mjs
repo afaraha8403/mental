@@ -26,6 +26,19 @@ export async function cmdDashboard(args, io = {}) {
     fallbackOnBusy = false;
   }
   const open = args.flags?.["no-open"] !== true;
+  const rawIdle = args.flags?.["idle-exit"];
+  let idleExitMs = null;
+  if (rawIdle != null && rawIdle !== true) {
+    const minutes = Number(rawIdle);
+    if (!Number.isFinite(minutes) || minutes <= 0) {
+      printResult(stdout, args, false, undefined, {
+        code: "usage",
+        message: "mental dashboard --idle-exit must be a positive number of minutes",
+      });
+      return EXIT_USAGE;
+    }
+    idleExitMs = Math.round(minutes * 60_000);
+  }
   let bind;
   try {
     bind = await listenDashboard({
@@ -36,6 +49,7 @@ export async function cmdDashboard(args, io = {}) {
       port,
       fallbackOnBusy,
       open,
+      idleExitMs,
     });
   } catch (err) {
     const code = err && typeof err === "object" && "code" in err ? String(err.code) : "";
@@ -62,6 +76,7 @@ export async function cmdDashboard(args, io = {}) {
     url: bind.url,
     opened: bind.opened,
     fallback: bind.fallback,
+    portFile: bind.portFile,
   };
   printResult(stdout, args, true, data, undefined, (d) => {
     const extra = d.fallback ? " (3847 busy; ephemeral)" : "";

@@ -2,13 +2,13 @@
  * Optional localhost explorer. Loopback only. GET/HEAD. No writes.
  */
 import { createServer } from "node:http";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join, relative, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 import { PKG_ROOT } from "./pkg.mjs";
 import { resolveBundle } from "./resolve.mjs";
 import { catalogRoot, collectHeartbeat } from "./heartbeat.mjs";
-import { loadBindings } from "./bindings.mjs";
+import { bindingsPath, loadBindings, userMentalDir } from "./bindings.mjs";
 import { collectPulseProjects, pulseRootForBinding } from "./pulse.mjs";
 import { extractLinks, filterConcepts, listConcepts, listBacklinks, searchBundle } from "./index.mjs";
 import { journalHops, latestJournalHandoff, parseFrontmatter, readBundleFile } from "./okf.mjs";
@@ -26,6 +26,8 @@ const GRAPH_CAP = 400;
 const ACTIVITY_DAYS = 14;
 const ACTIVITY_DAYS_MAX = 90;
 const ACTIVITY_CAP = 200;
+/** Parallel boot requests within this window share one scan without re-statting the bundle. */
+const MEMO_TTL_MS = 2000;
 
 const STATIC_FILES = {
   "/": { file: "index.html", type: "text/html; charset=utf-8" },
@@ -50,9 +52,12 @@ const SECURITY_HEADERS = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Cache-Control": "no-store",
-  // 3d-force-graph injects a <style> for its tooltip and cursor. Scripts stay same-origin.
+  // Views set inline style attributes (bar widths, map node colours), so styles allow 'unsafe-inline'.
+  // Scripts stay same-origin. Framing is limited to loopback pages and editor webviews (Claude Code panel,
+  // VS Code); the port-pinned Host check in isAllowedHost remains the DNS-rebinding defence.
   "Content-Security-Policy":
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; " +
+    "frame-ancestors 'self' http://127.0.0.1:* http://localhost:* http://[::1]:* vscode-webview: vscode-file:",
 };
 
 /**
@@ -350,6 +355,74 @@ export function collectActivity(root, days) {
 }
 
 /**
+ * Cheap change signature for a bundle: file count and summed mtimes, without reading any file.
+ * Skips the same entries as `listConcepts` (dot files, `status/`, top-level `projects/`) so a
+ * personal bundle is not invalidated by writes to project slices.
+ * @param {string | null} root
+ */
+function treeSignature(root) {
+  if (!root) return "none";
+  let count = 0;
+  let sum = 0;
+  const walk = (dir) => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name.startsWith(".") || entry.name === "status") continue;
+      if (dir === root && entry.name === "projects") continue;
+      const abs = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(abs);
+        continue;
+      }
+      try {
+        sum += statSync(abs).mtimeMs;
+        count += 1;
+      } catch {
+        // Deleted between readdir and stat; the next request re-signs.
+      }
+    }
+  };
+  walk(root);
+  return `${count}:${sum}`;
+}
+
+/**
+ * Per-server memo. Reuses a value inside MEMO_TTL_MS, then only while `sign()` is unchanged.
+ * @template T
+ * @param {Map<string, { at: number, sig: string, value: T }>} store
+ * @param {string} key
+ * @param {() => string} sign
+ * @param {() => T} compute
+ * @returns {T}
+ */
+function memo(store, key, sign, compute) {
+  const now = Date.now();
+  const hit = store.get(key);
+  if (hit && now - hit.at < MEMO_TTL_MS) return hit.value;
+  const sig = sign();
+  if (hit && hit.sig === sig) {
+    hit.at = now;
+    return hit.value;
+  }
+  const value = compute();
+  store.set(key, { at: now, sig, value });
+  return value;
+}
+
+function fileStamp(abs) {
+  try {
+    return String(statSync(abs).mtimeMs);
+  } catch {
+    return "none";
+  }
+}
+
+/**
  * Pulse rows plus when each project last handed off. Dashboard-only; `mental pulse` stays compact.
  * @param {string | null} home
  */
@@ -374,6 +447,26 @@ function dashboardProjects(home) {
     }
     return { ...p, outcome: handoff?.outcome || "", lastTouched };
   });
+}
+
+/**
+ * Pick the binding path to read git from. Bindings sync across machines, so `paths` can hold
+ * checkouts from another PC (`/home/...` on Windows); only paths that exist here qualify.
+ * The checkout containing `cwd` wins, so a dashboard started in a worktree shows that worktree.
+ * @param {string[] | undefined} paths
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+export function localCheckout(paths, cwd) {
+  const present = (paths || []).filter((p) => p && existsSync(p));
+  const here = resolve(cwd);
+  const containing = present
+    .filter((p) => {
+      const rel = relative(resolve(p), here);
+      return rel === "" || (!rel.startsWith("..") && !rel.split(sep).includes("..") && !/^[a-z]:/i.test(rel));
+    })
+    .sort((a, b) => b.length - a.length);
+  return containing[0] || present[0] || null;
 }
 
 /**
@@ -414,7 +507,7 @@ export function resolveDashboardProject(ctx, projectId) {
     id: binding.id,
     mode: "home",
     reason: "dashboard-id",
-    gitRoot: (binding.paths && binding.paths[0]) || null,
+    gitRoot: localCheckout(binding.paths, cwd),
   };
   return { ok: true, where, root: root && existsSync(root) ? root : null };
 }
@@ -502,7 +595,9 @@ export function handleDashboardRequest(req, res, ctx) {
   const cwd = ctx.cwd ?? process.cwd();
   const dir = ctx.dir ?? null;
   const id = url.searchParams.get("id") || null;
-  const base = { cwd, home, env, dir };
+  if (!ctx.memo) ctx.memo = new Map();
+  ctx.lastSeen = Date.now();
+  const base = { cwd, home, env, dir, memo: ctx.memo };
 
   try {
     routeApi(method, url, res, base, id);
@@ -513,20 +608,82 @@ export function handleDashboardRequest(req, res, ctx) {
 }
 
 /**
+ * @typedef {{ cwd: string, home: string | null, env: NodeJS.ProcessEnv, dir: string | null, memo: Map<string, any> }} ApiBase
+ */
+
+/**
+ * Parsed catalog for a bundle, memoised until a file in it changes.
+ * @param {ApiBase} base
+ * @param {string} root
+ */
+function concepts(base, root) {
+  return memo(base.memo, `concepts:${root}`, () => treeSignature(root), () => listConcepts(root));
+}
+
+/**
+ * Project rows (expensive: reads every bundle's attention and decisions) and the cwd's project id.
+ * @param {ApiBase} base
+ */
+function projectsPayload(base) {
+  const stamp = () => (base.home ? fileStamp(bindingsPath(base.home)) : "none");
+  const projects = memo(
+    base.memo,
+    "projects",
+    () => {
+      if (!base.home) return "none";
+      let bindings = [];
+      try {
+        bindings = loadBindings(base.home).bindings;
+      } catch {
+        return "bad";
+      }
+      return [stamp(), ...bindings.map((b) => treeSignature(pulseRootForBinding(base.home, b)))].join("|");
+    },
+    () => dashboardProjects(base.home),
+  );
+  const activeId = memo(base.memo, "active", stamp, () => {
+    const resolved = resolveBundle({ cwd: base.cwd, home: base.home, env: base.env, dir: base.dir, write: false });
+    return resolved.ok ? resolved.data.id : null;
+  });
+  return { projects, activeId };
+}
+
+/**
+ * @param {ApiBase} base
+ * @param {{ where: any, root: string | null }} session
+ */
+function heartbeatFor(base, session) {
+  return collectHeartbeat(
+    { cwd: base.cwd, home: base.home, env: base.env, dir: session.root },
+    { pingTrack: false, where: session.where },
+  );
+}
+
+/**
  * @param {string} method
  * @param {URL} url
  * @param {import("node:http").ServerResponse} res
- * @param {{ cwd: string, home: string | null, env: NodeJS.ProcessEnv, dir: string | null }} base
+ * @param {ApiBase} base
  * @param {string | null} id
  */
 function routeApi(method, url, res, base, id) {
   const path = url.pathname;
 
   if (path === "/api/projects") {
-    const projects = dashboardProjects(base.home);
-    const resolved = resolveBundle({ ...base, write: false });
-    const activeId = resolved.ok ? resolved.data.id : null;
-    sendJson(res, method, 200, { ok: true, data: { projects, activeId } });
+    sendJson(res, method, 200, { ok: true, data: projectsPayload(base) });
+    return;
+  }
+
+  // One round trip for first paint: the project list plus the heartbeat of the project being opened.
+  if (path === "/api/boot") {
+    const { projects, activeId } = projectsPayload(base);
+    const wanted = id && projects.some((p) => p.id === id) ? id : activeId || null;
+    const session = resolveDashboardProject(base, wanted);
+    const hb = session.ok ? heartbeatFor(base, session) : { ok: false, error: session.error };
+    sendJson(res, method, 200, {
+      ok: true,
+      data: { projects, activeId, id: wanted, heartbeat: hb.ok ? hb.data : null, heartbeatError: hb.ok ? null : hb.error },
+    });
     return;
   }
 
@@ -542,10 +699,7 @@ function routeApi(method, url, res, base, id) {
   }
 
   if (path === "/api/heartbeat") {
-    const hb = collectHeartbeat(
-      { cwd: base.cwd, home: base.home, env: base.env, dir: session.root },
-      { pingTrack: false, where: session.where },
-    );
+    const hb = heartbeatFor(base, session);
     if (!hb.ok) {
       sendJson(res, method, 400, hb);
       return;
@@ -564,7 +718,7 @@ function routeApi(method, url, res, base, id) {
     const all = session.root
       ? hideForeignSlices(
           session.where,
-          filterConcepts(listConcepts(session.root), { type, status, tag, kind }),
+          filterConcepts(concepts(base, session.root), { type, status, tag, kind }),
         ).map(summarize)
       : [];
     const items = all.slice(offset, offset + limit);
@@ -672,10 +826,15 @@ function routeApi(method, url, res, base, id) {
   }
 
   if (path === "/api/graph") {
-    const concepts = session.root
-      ? hideForeignSlices(session.where, listConcepts(session.root))
-      : [];
-    sendJson(res, method, 200, { ok: true, data: catalogGraph(concepts) });
+    const graph = session.root
+      ? memo(
+          base.memo,
+          `graph:${session.where.mode}:${session.root}`,
+          () => treeSignature(session.root),
+          () => catalogGraph(hideForeignSlices(session.where, concepts(base, session.root))),
+        )
+      : catalogGraph([]);
+    sendJson(res, method, 200, { ok: true, data: graph });
     return;
   }
 
@@ -710,8 +869,8 @@ function routeApi(method, url, res, base, id) {
       sendJson(res, method, 404, { ok: false, error: { code: "not-found", message: "no such session" } });
       return;
     }
-    const concepts = hideForeignSlices(session.where, listConcepts(session.root));
-    sendJson(res, method, 200, { ok: true, data: { session: one, events: sessionEvents(concepts, one) } });
+    const visible = hideForeignSlices(session.where, concepts(base, session.root));
+    sendJson(res, method, 200, { ok: true, data: { session: one, events: sessionEvents(visible, one) } });
     return;
   }
 
@@ -783,10 +942,61 @@ async function listenOnce(handler, port) {
 }
 
 /**
+ * Where a running dashboard advertises itself, so launchers (the Claude Desktop mod) can find a
+ * server that fell back to an ephemeral port instead of assuming 3847.
+ * @param {string} home
+ */
+export function dashboardPortFile(home) {
+  return join(userMentalDir(home), "dashboard.json");
+}
+
+/**
+ * @param {string | null} home
+ * @param {{ port: number, url: string }} info
+ * @returns {string | null} path written, or null when HOME is unknown or unwritable
+ */
+function writePortFile(home, info) {
+  if (!home) return null;
+  const file = dashboardPortFile(home);
+  const body = { port: info.port, pid: process.pid, url: info.url, startedAt: new Date().toISOString() };
+  try {
+    mkdirSync(userMentalDir(home), { recursive: true });
+    // Rename so a reader never sees a half-written file.
+    const tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, `${JSON.stringify(body, null, 2)}\n`);
+    renameSync(tmp, file);
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+/** Remove the port file only if it still names this process; a newer dashboard may own it. */
+function removePortFile(file) {
+  if (!file) return;
+  try {
+    const current = JSON.parse(readFileSync(file, "utf8"));
+    if (current?.pid === process.pid) rmSync(file, { force: true });
+  } catch {
+    // Missing or unreadable: nothing of ours to remove.
+  }
+}
+
+/**
+ * A plain loopback dashboard URL. Windows hands the URL to `cmd start`, where `&`, `|`, `^`, `%`
+ * and quotes are shell syntax, so anything outside this conservative set is refused.
  * @param {string} url
- * @returns {boolean}
+ */
+export function isLaunchableUrl(url) {
+  return /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}\/[\w\-./?=#:+~]*$/.test(String(url));
+}
+
+/**
+ * @param {string} url
+ * @returns {boolean} false when the URL is refused or the opener could not be spawned
  */
 export function openBrowser(url) {
+  if (!isLaunchableUrl(url)) return false;
   try {
     const platform = process.platform;
     if (platform === "darwin") {
@@ -814,6 +1024,9 @@ export function openBrowser(url) {
  *   port?: number | null,
  *   fallbackOnBusy?: boolean,
  *   open?: boolean,
+ *   portFile?: boolean,
+ *   idleExitMs?: number | null,
+ *   onIdle?: () => void,
  * }} [opts]
  */
 export async function listenDashboard(opts = {}) {
@@ -832,7 +1045,7 @@ export async function listenDashboard(opts = {}) {
     throw err;
   }
 
-  const ctx = { cwd, home, env, dir, port: target };
+  const ctx = { cwd, home, env, dir, port: target, memo: new Map(), lastSeen: Date.now() };
   const handler = (req, res) => handleDashboardRequest(req, res, ctx);
 
   let bound;
@@ -864,7 +1077,26 @@ export async function listenDashboard(opts = {}) {
       }
       server.close((err) => (err ? reject(err) : resolve()));
     });
-  const close = () => Promise.all([closeOne(bound.server), closeOne(bound.v6)]).then(() => undefined);
+  const portFile = opts.portFile === false ? null : writePortFile(home, { port: bound.port, url });
+
+  // Optional: a detached server (launched by an editor panel) exits once nobody has asked it anything.
+  let idleTimer = null;
+  const idleMs = Number(opts.idleExitMs) || 0;
+  if (idleMs > 0) {
+    idleTimer = setInterval(() => {
+      if (Date.now() - ctx.lastSeen >= idleMs) {
+        clearInterval(idleTimer);
+        (opts.onIdle ?? (() => close().finally(() => process.exit(0))))();
+      }
+    }, Math.min(idleMs, 30_000));
+    idleTimer.unref();
+  }
+
+  const close = () => {
+    if (idleTimer) clearInterval(idleTimer);
+    removePortFile(portFile);
+    return Promise.all([closeOne(bound.server), closeOne(bound.v6)]).then(() => undefined);
+  };
 
   return {
     server: bound.server,
@@ -873,6 +1105,7 @@ export async function listenDashboard(opts = {}) {
     url,
     opened,
     fallback,
+    portFile,
     close,
   };
 }

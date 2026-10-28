@@ -977,9 +977,9 @@ export function startMap(container, onPick) {
         allCrossLinks.classed("highlighted", (l) => l.id === d.id);
         tooltip.hidden = false;
         tooltip.innerHTML = `
-          <div class="tt-title">🔗 OKF Relation: ${d.rel || "related"}</div>
-          <div class="tt-meta">${s.typeEmoji || ""} ${s.title || s.path}</div>
-          <div class="tt-meta" style="margin-top:2px; color:var(--accent);">↕ ${t.typeEmoji || ""} ${t.title || t.path}</div>
+          <div class="tt-title">🔗 OKF Relation: ${escapeHtml(d.rel || "related")}</div>
+          <div class="tt-meta">${s.typeEmoji || ""} ${escapeHtml(s.title || s.path)}</div>
+          <div class="tt-meta" style="margin-top:2px; color:var(--accent);">↕ ${t.typeEmoji || ""} ${escapeHtml(t.title || t.path)}</div>
         `;
         positionTooltip(event);
       })
@@ -1154,14 +1154,14 @@ export function startMap(container, onPick) {
         if (d.isConcept) {
           tooltip.hidden = false;
           const tagsStr = d.tags && d.tags.length
-            ? `<div class="tt-tags">Tags: ${d.tags.map((t) => `<span class="badge">#${t}</span>`).join(" ")}</div>`
+            ? `<div class="tt-tags">Tags: ${d.tags.map((t) => `<span class="badge">#${escapeHtml(t)}</span>`).join(" ")}</div>`
             : "";
           tooltip.innerHTML = `
-            <div class="tt-title">${d.typeEmoji || ""} ${d.title || d.path}</div>
-            <div class="tt-meta">${d.type} · ${d.matterEmoji || ""} ${d.matterLabel || ""}${d.status ? ` · ${d.status}` : ""}${d.links ? ` · ${d.links} connection${d.links === 1 ? "" : "s"}` : ""}</div>
-            ${d.description ? `<div class="tt-desc" style="margin-top:4px; font-size:0.75rem; color:var(--ink-secondary); max-width:320px; line-height:1.35;">${d.description}</div>` : ""}
+            <div class="tt-title">${d.typeEmoji || ""} ${escapeHtml(d.title || d.path)}</div>
+            <div class="tt-meta">${d.type} · ${d.matterEmoji || ""} ${d.matterLabel || ""}${d.status ? ` · ${escapeHtml(d.status)}` : ""}${d.links ? ` · ${d.links} connection${d.links === 1 ? "" : "s"}` : ""}</div>
+            ${d.description ? `<div class="tt-desc" style="margin-top:4px; font-size:0.75rem; color:var(--ink-secondary); max-width:320px; line-height:1.35;">${escapeHtml(d.description)}</div>` : ""}
             ${tagsStr}
-            <div class="tt-path">${d.path}</div>
+            <div class="tt-path">${escapeHtml(d.path)}</div>
             ${d.isPinned ? '<div class="tt-pinned">📌 Pinned (double-click to unpin)</div>' : ""}
           `;
           positionTooltip(event);
@@ -1169,7 +1169,7 @@ export function startMap(container, onPick) {
           tooltip.hidden = false;
           const isCollapsed = collapsedHubs.has(d.id);
           tooltip.innerHTML = `
-            <div class="tt-title">${d.emoji || "📁"} ${d.title}</div>
+            <div class="tt-title">${d.emoji || "📁"} ${escapeHtml(d.title)}</div>
             <div class="tt-meta">${d.count} file${d.count === 1 ? "" : "s"} · Click to ${isCollapsed ? "expand" : "collapse"}</div>
           `;
           positionTooltip(event);
@@ -1259,14 +1259,19 @@ export function startMap(container, onPick) {
     attributes: true,
     attributeFilter: ["data-theme"],
   });
+  // "Match system" leaves data-theme unset, so the observer above never fires on an OS switch.
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (!document.documentElement.dataset.theme) renderGraph({ keepView: true });
+  });
 
   return {
     /**
      * @param {{ nodes?: Array<{ path: string, type?: string, title?: string }>, edges?: Array<{ from: string, to: string }> }} data
+     * @param {{ render?: boolean }} [opts] render: false when `start()` follows and will draw anyway
      */
-    setGraph(data) {
+    setGraph(data, { render = true } = {}) {
       rawPayload = data || { nodes: [], edges: [] };
-      renderGraph();
+      if (render) renderGraph();
     },
 
     /**
@@ -1297,9 +1302,10 @@ export function startMap(container, onPick) {
      * Switch layout mode: "organic" (radial force constellation) or "tree" (columnar)
      * @param {"graph" | "organic" | "tree"} mode
      */
-    setLayoutMode(mode) {
+    setLayoutMode(mode, { render = true } = {}) {
       if (mode && mode !== layoutMode) {
         layoutMode = mode;
+        if (!render) return;
         renderGraph();
         setTimeout(() => frameSelection(true), 150);
       }

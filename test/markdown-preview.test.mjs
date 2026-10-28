@@ -189,3 +189,10 @@ test("toClusterGraph puts a file in its largest topic with at least MIN_CLUSTER 
   assert.equal(linux.color, tagColor("linux"));
   assert.equal(graph.clusters[0].id, "topic:linux");
 });
+
+test("markdown links drop schemes hidden behind tabs or newlines", () => {
+  for (const href of ["java\tscript:alert", "java\nscript:alert", "\u0001javascript:alert"]) {
+    assert.doesNotMatch(renderMarkdown(`[x](${href})`), /href="[^"]*script/i, JSON.stringify(href));
+  }
+  assert.match(renderMarkdown("[ok](https://example.com/a)"), /href="https:\/\/example\.com\/a"/);
+});

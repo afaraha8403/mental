@@ -34,15 +34,16 @@ export async function renderMapView(_el, ctx, search0, alive) {
   if (!alive()) return;
   const nodes = data?.nodes || [];
   const key = `${ctx.id}|${nodes.length}|${data?.edges?.length || 0}`;
+  const params = Object.fromEntries(search0);
+  const layout = params.layout || "graph";
   if (key !== mapKey) {
     mapKey = key;
-    map.setGraph(data || { nodes: [], edges: [] });
+    map.setGraph(data || { nodes: [], edges: [] }, { render: false });
   }
+  map.setLayoutMode(layout, { render: false });
   map.start();
   running = true;
 
-  const params = Object.fromEntries(search0);
-  const layout = params.layout || "graph";
   const activeTag = params.tag || "";
   const counts = new Map();
   for (const n of nodes) for (const t of topicTags(n)) counts.set(t, (counts.get(t) || 0) + 1);
@@ -118,7 +119,6 @@ export async function renderMapView(_el, ctx, search0, alive) {
     );
   setHelp(layout);
 
-  if (layout !== "graph") map.setLayoutMode(layout);
   if (activeTag || params.q) map.setFilter({ tag: activeTag, query: params.q || "" });
   const open = search0.get("open");
   if (open) map.select(open);

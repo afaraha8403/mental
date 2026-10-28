@@ -1,4 +1,4 @@
-import { $, copyText, h, icon, kindChip, pathDate, relTime, skeleton, statusChip, tagChip, tagsOf, KIND, fill } from "./ui.js";
+import { $, copyText, h, icon, kindChip, pathDate, relTime, skeleton, statusChip, store, tagChip, tagsOf, KIND, fill } from "./ui.js";
 import { renderFrontmatter, renderMarkdown } from "./markdown.js";
 
 const PIN_KEY = "mental-dashboard-pin";
@@ -23,7 +23,7 @@ export function createInspector(ctx) {
   let doc = null;
   let returnFocus = null;
   let token = 0;
-  let pinned = localStorage.getItem(PIN_KEY) === "1";
+  let pinned = store.get(PIN_KEY) === "1";
   // Drawer history: a card stack. `pos` is the visible card; entries past it are "forward".
   // Each entry: { path, title, type, scroll, pushed } — `pushed` means arriving at it added a
   // browser history entry, so stepping back over it can use history.go and stay in sync.
@@ -64,7 +64,7 @@ export function createInspector(ctx) {
 
   function setPinned(on) {
     pinned = on;
-    localStorage.setItem(PIN_KEY, on ? "1" : "0");
+    store.set(PIN_KEY, on ? "1" : "0");
     $("#insp-pin").setAttribute("aria-pressed", String(on));
     $("#insp-pin").title = on ? "Unpin drawer" : "Pin drawer (stays open while you browse)";
     syncChrome();

@@ -1,4 +1,4 @@
-import { $, $$, api, badge, debounce, fuzzyScore, h, icon, relTime, fill } from "./ui.js";
+import { $, $$, api, badge, copyText, fuzzyScore, h, icon, relTime, fill, store } from "./ui.js";
 import { createInspector } from "./inspector.js";
 import { createPalette, renderShortcutSheet } from "./palette.js";
 import { renderToday } from "./today.js";
@@ -82,8 +82,9 @@ function parseHash() {
     params.set("open", decodeURIComponent(rest.join("/")));
     view = "today";
   }
-  if (!VIEW_BY_ID[view]) view = "today";
-  return { view, params };
+  const known = Boolean(VIEW_BY_ID[view]);
+  if (!known) view = "today";
+  return { view, params, known };
 }
 
 function buildHash(view, params) {
@@ -127,11 +128,13 @@ let lastRouteKey = "";
 let renderToken = 0;
 
 async function onRoute() {
-  const { view, params } = parseHash();
+  const { view, params, known } = parseHash();
   const wantedId = params.get("p") || ctx.activeId || "";
   if (wantedId !== ctx.id && (ctx.projects.some((p) => p.id === wantedId) || !wantedId)) {
     await switchProject(wantedId, { fromRoute: true });
   }
+  // A typo'd or retired view name lands on Today; rewrite the URL so Back does not bounce through it.
+  if (!known) history.replaceState(history.state, "", buildHash(view, params));
   const spec = VIEW_BY_ID[view];
   if (spec.trackOnly && !ctx.trackEnabled) {
     go("today");
@@ -182,10 +185,9 @@ async function renderView({ fresh = false } = {}) {
 
 // ─── Projects ───────────────────────────────────────────────────────────────
 
-async function loadProjects() {
-  const { body } = await api("/api/projects");
-  ctx.projects = body?.ok ? body.data.projects || [] : [];
-  ctx.activeId = body?.ok ? body.data.activeId || "" : "";
+function applyProjects(projects, activeId) {
+  ctx.projects = projects || [];
+  ctx.activeId = activeId || "";
   const sel = $("#project");
   fill(sel, h("option", { value: "" }, "This folder"), ...ctx.projects.map((p) => h("option", { value: p.id }, p.name)));
 }
@@ -277,7 +279,10 @@ function wireProjectSwitch() {
 // ─── Heartbeat (badges, track gate) ─────────────────────────────────────────
 
 async function loadHeartbeat() {
-  const data = await ctx.get("/api/heartbeat");
+  applyHeartbeat(await ctx.get("/api/heartbeat"));
+}
+
+function applyHeartbeat(data) {
   ctx.heartbeat = data;
   ctx.trackEnabled = Boolean(data?.track?.enabled);
   for (const v of VIEWS) {
@@ -338,9 +343,9 @@ function buildNav() {
     document.body.classList.toggle("rail-open", on);
     expand.setAttribute("aria-expanded", String(on));
     expand.title = on ? "Collapse sidebar" : "Expand sidebar";
-    localStorage.setItem(RAIL_KEY, on ? "1" : "0");
+    store.set(RAIL_KEY, on ? "1" : "0");
   };
-  setRail(localStorage.getItem(RAIL_KEY) === "1");
+  setRail(store.get(RAIL_KEY) === "1");
   expand.addEventListener("click", () => setRail(!document.body.classList.contains("rail-open")));
 }
 
@@ -371,16 +376,16 @@ function paintThemeButton() {
 function setTheme(next) {
   if (next === "system") {
     delete document.documentElement.dataset.theme;
-    localStorage.removeItem(THEME_KEY);
+    store.remove(THEME_KEY);
   } else {
     document.documentElement.dataset.theme = next;
-    localStorage.setItem(THEME_KEY, next);
+    store.set(THEME_KEY, next);
   }
   paintThemeButton();
 }
 
 function initTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
+  const saved = store.get(THEME_KEY);
   if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
   paintThemeButton();
   $("#theme-toggle").addEventListener("click", () => setTheme(currentTheme() === "dark" ? "light" : "dark"));
@@ -403,7 +408,7 @@ const commands = () => [
   { id: "refresh", label: "Refresh data", hint: "r", icon: "refresh", run: () => refresh() },
   { id: "shortcuts", label: "Keyboard shortcuts", hint: "?", icon: "keyboard", run: () => openShortcuts() },
   ...(ctx.heartbeat?.handoff?.resume
-    ? [{ id: "copy-resume", label: "Copy resume line", icon: "copy", run: () => navigator.clipboard.writeText(ctx.heartbeat.handoff.resume) }]
+    ? [{ id: "copy-resume", label: "Copy resume line", icon: "copy", run: () => copyText(ctx.heartbeat.handoff.resume, "Resume line copied") }]
     : []),
 ];
 
@@ -491,15 +496,26 @@ function wireKeys() {
   });
 }
 
-// ─── Refresh on focus (no polling) ──────────────────────────────────────────
+// ─── Refresh on return (no polling) ─────────────────────────────────────────
 
+/** Coming back to the tab refetches only if the data is older than this; quick tab flips stay still. */
+const STALE_MS = 30_000;
 let lastRefresh = Date.now();
+
+/** Projects and the current project's heartbeat in one request. */
+async function fetchBoot() {
+  const { body } = await api(`/api/boot${ctx.qs()}`);
+  return body?.ok ? body.data : null;
+}
 
 async function refresh() {
   lastRefresh = Date.now();
   ctx.invalidate();
-  const { body } = await api("/api/projects");
-  if (body?.ok) ctx.projects = body.data.projects || ctx.projects;
+  const boot = await fetchBoot();
+  if (boot) {
+    ctx.projects = boot.projects || ctx.projects;
+    seedHeartbeat(boot.heartbeat);
+  }
   await loadHeartbeat();
   lastRouteKey = "";
   await renderView();
@@ -508,30 +524,78 @@ async function refresh() {
   setTimeout(() => $("#live").classList.remove("pulse"), 900);
 }
 
-const refreshSoon = debounce(() => {
+/** Prime `ctx.get("/api/heartbeat")` so the first render does not ask again. */
+function seedHeartbeat(data) {
+  if (data) ctx.cache.set(`/api/heartbeat${ctx.qs()}`, Promise.resolve(data));
+}
+
+function onVisible() {
   if (document.visibilityState !== "visible") return;
-  if (Date.now() - lastRefresh < 4000) return;
+  if (Date.now() - lastRefresh < STALE_MS) return;
   refresh();
-}, 120);
+}
+
+// ─── Server reachability ────────────────────────────────────────────────────
+
+function wireNetBanner() {
+  const banner = $("#net-banner");
+  const text = $("#net-banner-text");
+  $("#net-retry").addEventListener("click", () => refresh());
+  document.addEventListener("mental:net", (e) => {
+    const { ok, offline } = e.detail || {};
+    if (ok) {
+      banner.hidden = true;
+      return;
+    }
+    text.textContent = offline
+      ? "Can't reach the dashboard server. It may have stopped; run mental dashboard again, then retry."
+      : "The dashboard server hit an error loading this data.";
+    banner.hidden = false;
+  });
+}
 
 // ─── Boot ───────────────────────────────────────────────────────────────────
 
+/** `?embed=1` (or `embed=1` in the hash) renders a single-column view for editor panels and iframes. */
+const EMBED = new URLSearchParams(location.search).get("embed") === "1" || parseHash().params.get("embed") === "1";
+
+function bootFailed(err) {
+  console.error(err);
+  document.body.classList.add("ready", "boot-failed");
+  const retry = h("button.btn.btn-primary", { type: "button", onclick: () => location.reload() }, "Try again");
+  document.body.append(
+    h(
+      "div.boot-error",
+      { role: "alert" },
+      h("p.empty-title", null, "The dashboard couldn't start."),
+      h("p.empty-body", null, String(err?.message || err)),
+      retry,
+    ),
+  );
+  retry.focus();
+}
+
 async function boot() {
+  if (EMBED) document.documentElement.classList.add("embed");
   initTheme();
   buildNav();
   wireProjectSwitch();
   wireKeys();
-  await loadProjects();
+  wireNetBanner();
   const first = parseHash();
-  ctx.id = first.params.get("p") || ctx.activeId || "";
+  ctx.id = first.params.get("p") || "";
+  const data = await fetchBoot();
+  if (!data) throw new Error("The dashboard server did not answer. Start it with `mental dashboard`, then try again.");
+  applyProjects(data.projects, data.activeId);
+  ctx.id = data.id || "";
   $("#project").value = ctx.id;
+  seedHeartbeat(data.heartbeat);
   await loadHeartbeat();
   window.addEventListener("hashchange", onRoute);
-  window.addEventListener("focus", refreshSoon);
-  document.addEventListener("visibilitychange", refreshSoon);
+  if (!EMBED) document.addEventListener("visibilitychange", onVisible);
   if (!location.hash) history.replaceState(null, "", buildHash("today", {}));
   await onRoute();
   document.body.classList.add("ready");
 }
 
-boot();
+boot().catch(bootFailed);
