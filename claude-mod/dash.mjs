@@ -70,9 +70,8 @@ if (verb === "probe") {
   const { openBrowser } = await import(pathToFileURL(join(here, "..", "bin", "lib", "dashboard.mjs")).href);
   process.exit(openBrowser(arg) ? 0 : 1);
 } else if (verb === "start") {
-  // CONCERN: pass `--idle-exit 30` once `mental dashboard` accepts it, so a
-  // dashboard the panel started does not outlive every session that used it.
-  const child = spawn(process.execPath, [cli, "dashboard"], {
+  // The idle exit keeps a panel-started dashboard from outliving every session that used it.
+  const child = spawn(process.execPath, [cli, "dashboard", "--idle-exit", "30"], {
     cwd: process.cwd(),
     detached: true,
     stdio: "ignore",

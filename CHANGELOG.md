@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 - The Mental panel no longer counts a subagent's turns as turns of the session, so "This session" shows how many times you and Claude went back and forth.
+- MCP tools now act on every argument their schema offers. `slug` on attention, decide and note, `description` on attention, `passive` on heartbeat, `this` and `provider` on option, and `started` and `accept_stale` on track were accepted but silently ignored.
+- A dashboard started from the Mental panel now stops after 30 minutes with no requests instead of running until you sign out.
 - `mental serve` now speaks the MCP stdio transport that real clients use: one JSON-RPC message per line (newline-delimited JSON). It previously framed messages with LSP-style `Content-Length` headers, so Claude Code, Cursor and Codex could not talk to it. Input with `Content-Length` headers is still accepted, and a client that sends it gets replies framed the same way.
 - The MCP `initialize` reply negotiates the protocol version: it echoes the client's requested version when supported (`2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`) and otherwise offers the newest one, instead of always answering `2024-11-05`.
 - MCP error handling follows JSON-RPC: a malformed line gets a `-32700` parse error, an unknown tool a `-32602` error, an unknown method `-32601`, and notifications (including unknown ones) are never answered. Batched requests are answered as a batch.

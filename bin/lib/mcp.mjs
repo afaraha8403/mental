@@ -76,7 +76,12 @@ function runTool(name, args, ctx) {
     flags: {},
     rest: [],
   };
-  if (name === "heartbeat") return capture(cmdHeartbeat, { ...base, flags: args.fields ? { fields: args.fields } : {} });
+  if (name === "heartbeat") {
+    const flags = {};
+    if (args.fields) flags.fields = args.fields;
+    if (args.passive) flags.passive = true;
+    return capture(cmdHeartbeat, { ...base, flags });
+  }
   if (name === "where") return capture(cmdWhere, base);
   if (name === "status") return capture(cmdStatus, base);
   if (name === "search") {
@@ -150,9 +155,11 @@ function runTool(name, args, ctx) {
         kind: args.kind,
         status: args.status,
         from: args.from,
+        description: args.description,
         via: args.via,
         body: args.body,
         against: args.against,
+        slug: args.slug,
         tag: args.tag,
         project: args.project,
         "move-to": args.move_to,
@@ -176,6 +183,7 @@ function runTool(name, args, ctx) {
         description: args.description,
         body: args.body,
         via: args.via,
+        slug: args.slug,
         tag: args.tag,
         project: args.project,
       },
@@ -184,7 +192,7 @@ function runTool(name, args, ctx) {
   if (name === "note") {
     return capture(cmdNote, {
       ...base,
-      flags: { title: args.title, status: args.status, description: args.description, body: args.body, tag: args.tag, project: args.project },
+      flags: { title: args.title, status: args.status, description: args.description, body: args.body, slug: args.slug, tag: args.tag, project: args.project },
     });
   }
   if (name === "park") {
@@ -238,7 +246,7 @@ function runTool(name, args, ctx) {
     const rest = [];
     if (args.feature) rest.push(String(args.feature));
     if (args.action) rest.push(String(args.action));
-    return capture(cmdOption, { ...base, rest, flags: { all: Boolean(args.all) } });
+    return capture(cmdOption, { ...base, rest, flags: { all: Boolean(args.all), this: Boolean(args.this), provider: args.provider } });
   }
   if (name === "track") {
     const rest = args.sub ? [String(args.sub)] : [];
@@ -255,6 +263,8 @@ function runTool(name, args, ctx) {
     if (args.history) flags.history = true;
     if (args.all) flags.all = true;
     if (args.new) flags.new = true;
+    if (args.started) flags.started = args.started;
+    if (args.accept_stale) flags["accept-stale"] = true;
     if (args.since) flags.since = args.since;
     if (args.until) flags.until = args.until;
     if (args.out) flags.out = args.out;

@@ -191,6 +191,25 @@ test("install --mcp preserves other MCP servers; uninstall removes only mental",
   assert.equal(claude.mcpServers?.mental, undefined);
 });
 
+test("MCP tools forward every argument their schema advertises", async () => {
+  const src = readFileSync(new URL("../bin/lib/mcp.mjs", import.meta.url), "utf8");
+  const run = src.slice(src.indexOf("function runTool("));
+  const listed = handle({ jsonrpc: "2.0", id: 1, method: "tools/list" }, {});
+  for (const tool of listed.result.tools) {
+    const start = run.indexOf(`name === "${tool.name}"`);
+    assert.ok(start >= 0, `runTool has no branch for ${tool.name}`);
+    const next = run.indexOf("if (name ===", start + 1);
+    const block = run.slice(start, next < 0 ? undefined : next);
+    const dropped = Object.keys(tool.inputSchema.properties || {}).filter((p) => !new RegExp(`args\\.${p}\\b`).test(block));
+    assert.deepEqual(dropped, [], `${tool.name} advertises arguments runTool never reads`);
+  }
+
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const made = await runTool("attention", { title: "Slug check", kind: "thread", slug: "custom-slug", tag: "mcp" }, { home, cwd: root, env: gitEnv(home) });
+  assert.match(made.body.data.path, /custom-slug\.md$/);
+});
+
 test("MCP initialize + tools/list + where", async () => {
   const home = tempHome();
   const { root } = initRepo(home);
