@@ -15,7 +15,7 @@ import {
   rmSync,
 } from "node:fs";
 import { delimiter, dirname, join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSyncShim } from "./install-recipe.mjs";
 import { CMD, VERSION } from "./pkg.mjs";
 import { canonicalPath, sameIdentity } from "./git.mjs";
 
@@ -146,12 +146,11 @@ export function npmGlobalBinDir(prefix, platform = process.platform) {
 
 function runNpm(args, env, platform = process.platform) {
   const command = platform === "win32" ? "npm.cmd" : "npm";
-  return spawnSync(command, args, {
+  return spawnSyncShim(command, args, {
     encoding: "utf8",
     env,
-    shell: platform === "win32",
     windowsHide: platform === "win32",
-  });
+  }, platform);
 }
 
 export function npmGlobalPrefix(env = process.env, platform = process.platform) {
@@ -169,12 +168,11 @@ export function pathHasDir(pathValue, dir, platform = process.platform) {
 
 function defaultVerify(npmBinDir, env, platform) {
   const executable = join(npmBinDir, platform === "win32" ? `${CMD}.cmd` : CMD);
-  const r = spawnSync(executable, ["--version"], {
+  const r = spawnSyncShim(executable, ["--version"], {
     encoding: "utf8",
     env,
-    shell: platform === "win32",
     windowsHide: platform === "win32",
-  });
+  }, platform);
   return !r.error && r.status === 0 && (r.stdout || "").trim() === VERSION;
 }
 

@@ -12,8 +12,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { spawnSync } from "node:child_process";
-import { win32SpawnCommand } from "./install-recipe.mjs";
+import { spawnSyncShim, win32SpawnCommand } from "./install-recipe.mjs";
 import { NAME, PKG_ROOT, VERSION } from "./pkg.mjs";
 import { cacheMentalDir } from "./watermark.mjs";
 
@@ -262,23 +261,23 @@ function inFailureBackoff(cached, now) {
 
 /**
  * @param {string} name
- * @param {{ env?: NodeJS.ProcessEnv, timeoutMs?: number, spawn?: typeof spawnSync, platform?: NodeJS.Platform }} opts
+ * @param {{ env?: NodeJS.ProcessEnv, timeoutMs?: number, spawn?: typeof import("node:child_process").spawnSync, platform?: NodeJS.Platform }} opts
  */
 function spawnNpmView(name, opts) {
   const platform = opts.platform ?? process.platform;
-  const spawn = opts.spawn ?? spawnSync;
+  /** @type {typeof import("node:child_process").spawnSync} */
+  const spawn = opts.spawn ?? ((c, a, o) => spawnSyncShim(c, a, o, platform));
   const command = win32SpawnCommand("npm", platform);
   return spawn(command, ["view", name, "version"], {
     encoding: "utf8",
     env: opts.env,
     timeout: opts.timeoutMs ?? UPDATE_REFRESH_TIMEOUT_MS,
-    shell: platform === "win32",
     windowsHide: platform === "win32",
   });
 }
 
 /**
- * @param {{ env?: NodeJS.ProcessEnv, name?: string, timeoutMs?: number, cache?: boolean, now?: number, spawn?: typeof spawnSync, platform?: NodeJS.Platform }} [opts]
+ * @param {{ env?: NodeJS.ProcessEnv, name?: string, timeoutMs?: number, cache?: boolean, now?: number, spawn?: typeof import("node:child_process").spawnSync, platform?: NodeJS.Platform }} [opts]
  * @returns {{ skipped: boolean, latest: string | null }}
  */
 export function checkForUpdate(opts = {}) {
@@ -318,7 +317,7 @@ export function updateHint(current, latest, pkg = NAME) {
  * failed view is still inside the 15-minute backoff. Null when this CLI is
  * current or the check is skipped.
  *
- * @param {{ env?: NodeJS.ProcessEnv, version?: string, now?: number, ttlMs?: number, timeoutMs?: number, spawn?: typeof spawnSync, platform?: NodeJS.Platform }} [opts]
+ * @param {{ env?: NodeJS.ProcessEnv, version?: string, now?: number, ttlMs?: number, timeoutMs?: number, spawn?: typeof import("node:child_process").spawnSync, platform?: NodeJS.Platform }} [opts]
  * @returns {{ current: string, latest: string, hint: string } | null}
  */
 export function peekUpdateNotice(opts = {}) {

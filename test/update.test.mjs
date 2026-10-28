@@ -320,7 +320,7 @@ test("junk npm stdout is a failed check not a 24h lockout", () => {
   assert.equal(notice.latest, "99.0.0");
 });
 
-test("checkForUpdate spawns npm.cmd with shell on win32", () => {
+test("checkForUpdate spawns npm.cmd without shell on win32 (no DEP0190)", () => {
   const home = tempHome();
   const env = { HOME: home, XDG_CACHE_HOME: `${home}/.cache` };
   const calls = [];
@@ -335,7 +335,7 @@ test("checkForUpdate spawns npm.cmd with shell on win32", () => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, "npm.cmd");
   assert.deepEqual(calls[0].args, ["view", NAME, "version"]);
-  assert.equal(calls[0].options.shell, true);
+  assert.equal(calls[0].options.shell, undefined);
   assert.equal(calls[0].options.windowsHide, true);
   assert.equal(calls[0].options.timeout, UPDATE_REFRESH_TIMEOUT_MS);
   assert.equal(UPDATE_REFRESH_TIMEOUT_MS, 5000);
@@ -354,7 +354,7 @@ test("checkForUpdate spawns npm unshelled on unix", () => {
     },
   });
   assert.equal(calls[0].command, "npm");
-  assert.equal(calls[0].options.shell, false);
+  assert.ok(!calls[0].options.shell);
   assert.equal(calls[0].options.windowsHide, false);
 });
 

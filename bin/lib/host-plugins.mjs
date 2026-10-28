@@ -4,7 +4,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSyncShim } from "./install-recipe.mjs";
 import { skillMetadataVersion } from "./lockstep.mjs";
 import { userInstallTargets } from "./install-skills.mjs";
 import { cmpSemver } from "./update.mjs";
@@ -60,19 +60,17 @@ export function findMentalPlugin(parsed) {
  *   args: string[],
  *   env: NodeJS.ProcessEnv,
  *   timeoutMs?: number,
- *   spawn?: typeof spawnSync,
+ *   spawn?: typeof import("node:child_process").spawnSync,
  * }} opts
  * @returns {{ ok: boolean, parsed: unknown | null }}
  */
 function spawnJson(opts) {
-  const spawn = opts.spawn ?? spawnSync;
+  const spawn = opts.spawn ?? spawnSyncShim;
   try {
     const r = spawn(opts.command, opts.args, {
       encoding: "utf8",
       env: opts.env,
       timeout: opts.timeoutMs ?? HOST_PLUGIN_TIMEOUT_MS,
-      // win32: host CLIs are `.cmd`; CreateProcess will not run them bare.
-      shell: process.platform === "win32",
       windowsHide: process.platform === "win32",
     });
     if (r.status !== 0 || r.error) return { ok: false, parsed: null };
@@ -89,7 +87,7 @@ export const CLAUDE_PANEL_MIN_VERSION = "2.1.287";
 
 /**
  * @param {NodeJS.ProcessEnv} env
- * @param {typeof spawnSync} spawn
+ * @param {typeof import("node:child_process").spawnSync} spawn
  */
 function claudePanelRow(env, spawn) {
   let found = "";
@@ -98,7 +96,6 @@ function claudePanelRow(env, spawn) {
       encoding: "utf8",
       env,
       timeout: HOST_PLUGIN_TIMEOUT_MS,
-      shell: process.platform === "win32",
       windowsHide: process.platform === "win32",
     });
     if (r.status === 0 && !r.error) found = /(\d+\.\d+\.\d+)/.exec(String(r.stdout || ""))?.[1] ?? "";
@@ -124,7 +121,7 @@ function claudePanelRow(env, spawn) {
  *   home: string,
  *   env?: NodeJS.ProcessEnv,
  *   version: string,
- *   spawn?: typeof spawnSync,
+ *   spawn?: typeof import("node:child_process").spawnSync,
  * }} opts
  * @returns {Array<{ id: string, ok: boolean, message: string, level: string }>}
  */
@@ -135,7 +132,7 @@ export function hostPluginChecks(opts) {
   const checks = [];
   if (skipHostPluginCheck(env)) return checks;
 
-  const spawn = opts.spawn ?? spawnSync;
+  const spawn = opts.spawn ?? spawnSyncShim;
 
   const claude = spawnJson({
     command: "claude",

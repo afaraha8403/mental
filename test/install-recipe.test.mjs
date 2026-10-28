@@ -130,3 +130,20 @@ test("agent paste and setup skill lock the universal recipe", () => {
   assert.match(paste, /mental-repair\.cmd/);
   assert.match(setup, /mental-repair\.cmd/);
 });
+
+test("spawnSyncShim runs npm shims and quotes spaced args without DEP0190", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const shim = new URL("../bin/lib/install-recipe.mjs", import.meta.url).href;
+  const script = `
+    const { spawnSyncShim, win32SpawnCommand } = await import(${JSON.stringify(shim)});
+    const npm = spawnSyncShim(win32SpawnCommand("npm", process.platform), ["--version"], { encoding: "utf8" });
+    const echo = spawnSyncShim(process.execPath, ["-e", "process.stdout.write(process.argv[1])", "a b & c"], { encoding: "utf8" });
+    process.stdout.write(JSON.stringify({ npm: [npm.status, npm.stdout.trim()], echo: [echo.status, echo.stdout] }));
+  `;
+  const r = spawnSync(process.execPath, ["--input-type=module", "-e", script], { encoding: "utf8", windowsHide: true });
+  assert.doesNotMatch(r.stderr, /DEP0190/);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.npm[0], 0);
+  assert.match(out.npm[1], /^\d+\.\d+\.\d+/);
+  assert.deepEqual(out.echo, [0, "a b & c"], "spaces and & reach the child as one argument");
+});

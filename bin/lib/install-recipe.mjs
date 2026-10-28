@@ -8,6 +8,7 @@
  *
  * Windows Terminal is a host, not a shell. Profiles: PowerShell, cmd, Git Bash.
  */
+import { spawnSync } from "node:child_process";
 import { CMD, NAME } from "./pkg.mjs";
 
 /** Shells we publish a recipe for. `zsh` shares the bash recipe. */
@@ -51,6 +52,43 @@ export function win32SpawnCommand(command, platform = "linux") {
   if (platform !== "win32") return command;
   if (command === "npm" || command === "npx") return `${command}.cmd`;
   return command;
+}
+
+/**
+ * Quote one argv entry for a `cmd.exe /s /c "..."` line. Plain tokens stay bare.
+ *
+ * @param {string} arg
+ */
+function cmdQuote(arg) {
+  const s = String(arg);
+  return /^[\w@.\/\\:=+,-]+$/.test(s) ? s : `"${s.replace(/"/g, '""')}"`;
+}
+
+/**
+ * `spawnSync` that can run npm-style `.cmd` shims on Windows without `shell: true`.
+ *
+ * Node refuses to start `.cmd`/`.bat` files without a shell, and `shell: true`
+ * with an argv array prints DEP0190 because the args are concatenated unescaped.
+ * On win32 this runs `cmd.exe /d /s /c "<quoted line>"` with verbatim arguments
+ * instead; elsewhere it is plain `spawnSync`. Any `shell` option is ignored.
+ *
+ * @param {string} command
+ * @param {string[]} args
+ * @param {import("node:child_process").SpawnSyncOptions} [options]
+ * @param {string} [platform]
+ * @returns {import("node:child_process").SpawnSyncReturns<string>}
+ */
+export function spawnSyncShim(command, args, options = {}, platform = process.platform) {
+  const { shell: _shell, ...rest } = options;
+  if (platform !== "win32") return /** @type {any} */ (spawnSync(command, args, { ...rest, windowsHide: rest.windowsHide ?? true }));
+  const line = [command, ...args].map(cmdQuote).join(" ");
+  return /** @type {any} */ (
+    spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", `"${line}"`], {
+      ...rest,
+      windowsHide: rest.windowsHide ?? true,
+      windowsVerbatimArguments: true,
+    })
+  );
 }
 
 /**
