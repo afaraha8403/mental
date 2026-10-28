@@ -1,5 +1,5 @@
 /**
- * Minimal MCP stdio server (JSON-RPC + Content-Length). Default off.
+ * Minimal MCP stdio server (JSON-RPC 2.0, newline-delimited JSON). Default off.
  * Tools wrap the same command handlers as the CLI; agents should still prefer
  * `mental … --json` when they can shell. MCP exists so agents that only speak
  * tools (parallel sessions, orchestrators) can re-pulse and record mid-chat.
@@ -28,7 +28,8 @@ import { cmdBrief } from "../commands/brief.mjs";
 import { VERSION, CMD } from "./pkg.mjs";
 import { mcpToolsFromCatalog } from "./catalog.mjs";
 
-const PROTOCOL = "2024-11-05";
+/** Supported MCP protocol revisions, newest first. */
+const PROTOCOLS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
 const TOOLS = mcpToolsFromCatalog();
 
@@ -267,55 +268,95 @@ function runTool(name, args, ctx) {
   return { code: 1, body: { ok: false, error: { code: "unknown-tool", message: name } } };
 }
 
-function encode(msg) {
+/**
+ * Frame one JSON-RPC message for stdio. MCP stdio is newline-delimited JSON and
+ * `JSON.stringify` never emits a raw newline, so one message is one line.
+ * `lsp` frames with `Content-Length` headers for legacy clients that sent them.
+ * @param {object} msg
+ * @param {"ndjson" | "lsp"} [framing]
+ */
+function encode(msg, framing = "ndjson") {
   const json = JSON.stringify(msg);
-  return `Content-Length: ${Buffer.byteLength(json, "utf8")}\r\n\r\n${json}`;
+  if (framing === "lsp") return `Content-Length: ${Buffer.byteLength(json, "utf8")}\r\n\r\n${json}`;
+  return `${json}\n`;
 }
 
-function handle(msg, ctx) {
-  if (!msg || typeof msg !== "object") return null;
+const rpcError = (id, code, message) => ({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
+
+function handleOne(msg, ctx) {
+  if (!msg || typeof msg !== "object" || Array.isArray(msg)) return rpcError(null, -32600, "Invalid Request");
   const id = msg.id;
   const method = msg.method;
+  // Notifications have no id and are never answered, even when the method is unknown.
+  const isNotification = id === undefined || id === null;
+  if (typeof method !== "string") {
+    // Client responses (result/error, no method) need no reply either.
+    if (isNotification || "result" in msg || "error" in msg) return null;
+    return rpcError(id, -32600, "Invalid Request");
+  }
+  if (isNotification) return null;
   if (method === "initialize") {
+    const requested = msg.params?.protocolVersion;
     return {
       jsonrpc: "2.0",
       id,
       result: {
-        protocolVersion: PROTOCOL,
-        capabilities: { tools: {} },
+        protocolVersion: PROTOCOLS.includes(requested) ? requested : PROTOCOLS[0],
+        capabilities: { tools: { listChanged: false } },
         serverInfo: { name: CMD, version: VERSION },
       },
     };
   }
-  if (method === "notifications/initialized" || method === "initialized") return null;
   if (method === "tools/list") {
     return { jsonrpc: "2.0", id, result: { tools: TOOLS } };
   }
   if (method === "tools/call") {
     const name = msg.params?.name;
-    const args = msg.params?.arguments || {};
+    if (!TOOLS.some((t) => t.name === name)) return rpcError(id, -32602, `Unknown tool: ${name}`);
+    const args = msg.params?.arguments;
+    if (args != null && (typeof args !== "object" || Array.isArray(args))) {
+      return rpcError(id, -32602, "Invalid params: arguments must be an object");
+    }
     const toReply = ({ body }) => ({
       jsonrpc: "2.0",
       id,
       result: {
         content: [{ type: "text", text: JSON.stringify(body) }],
+        structuredContent: body,
         isError: body.ok === false,
       },
     });
-    const out = runTool(name, args, ctx);
+    const out = runTool(name, args || {}, ctx);
     return typeof out.then === "function" ? out.then(toReply) : toReply(out);
   }
   if (method === "ping") return { jsonrpc: "2.0", id, result: {} };
-  if (id == null) return null;
-  return {
-    jsonrpc: "2.0",
-    id,
-    error: { code: -32601, message: `Method not found: ${method}` },
-  };
+  return rpcError(id, -32601, `Method not found: ${method}`);
 }
 
 /**
+ * Answer one parsed JSON-RPC payload: a single message or a batch array.
+ * Returns null when nothing must be sent (notifications, client responses),
+ * else the reply, or a promise of it when a tool handler is async.
+ * @param {unknown} msg
+ * @param {{ cwd?: string, home?: string | null, env?: NodeJS.ProcessEnv, dir?: string | null }} ctx
+ */
+function handle(msg, ctx) {
+  if (!Array.isArray(msg)) return handleOne(msg, ctx);
+  if (msg.length === 0) return rpcError(null, -32600, "Invalid Request: empty batch");
+  const replies = msg.map((m) => handleOne(m, ctx));
+  const collect = (all) => {
+    const sent = all.filter(Boolean);
+    return sent.length ? sent : null;
+  };
+  return replies.some((r) => r && typeof r.then === "function") ? Promise.all(replies).then(collect) : collect(replies);
+}
+
+const LSP_HEADER = /^content-length:/i;
+
+/**
  * Serve MCP on the given streams. Resolves when stdin ends.
+ * Input is newline-delimited JSON. `Content-Length`-framed input is still
+ * accepted, and a client that sends it gets replies framed the same way.
  * @param {{ cwd?: string, home?: string, env?: NodeJS.ProcessEnv, dir?: string | null, stdin?: NodeJS.ReadableStream, stdout?: NodeJS.WritableStream }} ctx
  */
 export function serveMcp(ctx = {}) {
@@ -330,39 +371,67 @@ export function serveMcp(ctx = {}) {
 
   return new Promise((resolve) => {
     let buf = Buffer.alloc(0);
+    /** @type {"ndjson" | "lsp"} */
+    let framing = "ndjson";
     const pending = new Set();
+    const send = (reply) => {
+      if (reply) stdout.write(encode(reply, framing));
+    };
+    const dispatch = (text) => {
+      let msg;
+      try {
+        msg = JSON.parse(text);
+      } catch {
+        send(rpcError(null, -32700, "Parse error"));
+        return;
+      }
+      const reply = handle(msg, rpcCtx);
+      if (reply && typeof reply.then === "function") {
+        const p = reply
+          .then(send)
+          .catch((err) => send(rpcError(msg?.id, -32603, err instanceof Error ? err.message : String(err))))
+          .finally(() => pending.delete(p));
+        pending.add(p);
+      } else send(reply);
+    };
+    /** Takes one framed message off `buf`; false when more bytes are needed. */
+    const next = () => {
+      const start = buf.findIndex((b) => b !== 0x0a && b !== 0x0d && b !== 0x20 && b !== 0x09);
+      if (start < 0) {
+        buf = Buffer.alloc(0);
+        return false;
+      }
+      buf = buf.subarray(start);
+      if (LSP_HEADER.test(buf.subarray(0, 15).toString("latin1"))) {
+        const headerEnd = buf.indexOf("\r\n\r\n");
+        if (headerEnd < 0) return false;
+        const lenM = buf.subarray(0, headerEnd).toString("utf8").match(/Content-Length:\s*(\d+)/i);
+        const bodyStart = headerEnd + 4;
+        const bodyEnd = bodyStart + Number(lenM?.[1] ?? 0);
+        if (buf.length < bodyEnd) return false;
+        framing = "lsp";
+        const text = buf.subarray(bodyStart, bodyEnd).toString("utf8");
+        buf = buf.subarray(bodyEnd);
+        dispatch(text);
+        return true;
+      }
+      const nl = buf.indexOf(0x0a);
+      if (nl < 0) return false;
+      const text = buf.subarray(0, nl).toString("utf8");
+      buf = buf.subarray(nl + 1);
+      dispatch(text);
+      return true;
+    };
     stdin.on("data", (chunk) => {
       buf = Buffer.concat([buf, Buffer.from(chunk)]);
-      while (true) {
-        const headerEnd = buf.indexOf("\r\n\r\n");
-        if (headerEnd < 0) break;
-        const header = buf.slice(0, headerEnd).toString("utf8");
-        const lenM = header.match(/Content-Length:\s*(\d+)/i);
-        if (!lenM) {
-          buf = buf.slice(headerEnd + 4);
-          continue;
-        }
-        const len = Number(lenM[1]);
-        const start = headerEnd + 4;
-        if (buf.length < start + len) break;
-        const json = buf.slice(start, start + len).toString("utf8");
-        buf = buf.slice(start + len);
-        let msg;
-        try {
-          msg = JSON.parse(json);
-        } catch {
-          continue;
-        }
-        const reply = handle(msg, rpcCtx);
-        if (reply && typeof reply.then === "function") {
-          const p = reply.then((r) => {
-            if (r) stdout.write(encode(r));
-          }).catch(() => {}).finally(() => pending.delete(p));
-          pending.add(p);
-        } else if (reply) stdout.write(encode(reply));
-      }
+      while (next());
     });
-    stdin.on("end", () => Promise.all([...pending]).then(() => resolve(0)));
+    stdin.on("end", () => {
+      // A last NDJSON line without a trailing newline is still a message.
+      const rest = buf.toString("utf8").trim();
+      if (rest && !LSP_HEADER.test(rest)) dispatch(rest);
+      Promise.all([...pending]).then(() => resolve(0));
+    });
     stdin.on("error", () => resolve(1));
   });
 }

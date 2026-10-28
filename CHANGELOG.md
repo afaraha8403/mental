@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `mental serve` now speaks the MCP stdio transport that real clients use: one JSON-RPC message per line (newline-delimited JSON). It previously framed messages with LSP-style `Content-Length` headers, so Claude Code, Cursor and Codex could not talk to it. Input with `Content-Length` headers is still accepted, and a client that sends it gets replies framed the same way.
+- The MCP `initialize` reply negotiates the protocol version: it echoes the client's requested version when supported (`2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`) and otherwise offers the newest one, instead of always answering `2024-11-05`.
+- MCP error handling follows JSON-RPC: a malformed line gets a `-32700` parse error, an unknown tool a `-32602` error, an unknown method `-32601`, and notifications (including unknown ones) are never answered. Batched requests are answered as a batch.
+- On Windows, `mental install --mcp` and `mental option mcp on` register the server as `cmd /c mental serve`. Hosts start MCP servers without a shell, so the npm-installed `mental.cmd` shim could not be launched from a bare `mental` command. Other platforms keep `mental serve`, and `mental uninstall` / `option mcp off` recognise both forms.
+
+### Changes
+- MCP tool definitions now close their input schemas (`additionalProperties: false`) and carry `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) derived from each command's effects. Tool results include `structuredContent` with the same JSON as the text content, which is kept for older clients. Tool names are unchanged.
+- `mental install --mcp` and `mental option mcp on` also register the server in Codex (`~/.codex/config.toml`, `[mcp_servers.mental]`) when `~/.codex` exists. Other tables in that file are left untouched, and turning MCP off removes only Mental's table.
+
 ## [0.12.1] - 2026-10-08
 
 ### Fixed
