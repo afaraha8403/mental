@@ -259,20 +259,65 @@ export function fitJson(value, max) {
   return JSON.stringify({ truncated: true, hint: `run \`${CMD} status --json\`` });
 }
 
+const NEED_WORD = { verify: "check", concern: "concern", direction: "direction", thread: "thread" };
+
 /**
- * Context text injected at session start, built from `mental status --json` output.
+ * Context text injected at session start: a short brief an agent can act on,
+ * built from `mental status --json` output. It leads with where to pick up,
+ * lists what needs the person (not items parked for later) and open decisions,
+ * and names the next command with the host's `--via` token. Paths and ids stay
+ * out; the agent asks the CLI for detail. Lists are cut to fit `max`, keeping
+ * their true counts.
  * @param {string} statusText
  * @param {number} [max]
+ * @param {string | null} [host] `--via` token for the next-step line
+ * @example
+ * sessionStartContext(statusJson, 4000, "cursor")
+ * // "# Mental — where this repo stands\nPick up here: …\nNeeds you (2):\n- check: …"
  */
-export function sessionStartContext(statusText, max = HOOK_CONTEXT_MAX) {
-  const head = `Mental continuity at session start (\`${CMD} status --json\`):\n`;
-  let parsed;
+export function sessionStartContext(statusText, max = HOOK_CONTEXT_MAX, host = null) {
+  const head = "# Mental — where this repo stands";
+  const unavailable = `${head}\nMental is unavailable here; run \`${CMD} heartbeat --json\`.`;
+  let d;
   try {
-    parsed = JSON.parse(statusText);
+    d = JSON.parse(statusText)?.data;
   } catch {
-    return `${head}unavailable; run \`${CMD} heartbeat --json\`.`;
+    return unavailable;
   }
-  return `${head}${fitJson(parsed, max - head.length)}`;
+  if (!d || typeof d !== "object") return unavailable;
+  const line = (s) => String(s ?? "").replace(/\s+/g, " ").trim();
+  const needs = (Array.isArray(d.attention) ? d.attention : []).filter((x) => x && x.status !== "later" && x.status !== "resolved");
+  const decisions = Array.isArray(d.openDecisions) ? d.openDecisions : [];
+  const git = d.git && typeof d.git === "object" ? d.git : null;
+  const via = host ? `--via ${host}` : "--via <your host>";
+  const next = `Next: run \`${CMD} heartbeat --json\` for the full picture; record with \`${CMD} park|attention|decide … ${via}\`.`;
+
+  /** Build the brief with lists cut to `room` items each and text clipped to `clip` characters. */
+  const build = (room, clip) => {
+    const cut = (s) => (s.length > clip ? `${s.slice(0, clip - 1)}…` : s);
+    const list = (label, items, fmt) => {
+      if (!items.length) return [];
+      const shown = items.slice(0, room).map((x) => `- ${cut(fmt(x))}`);
+      const more = items.length - shown.length;
+      return [`${label} (${items.length}):`, ...shown, ...(more > 0 ? [`- … ${more} more — run \`${CMD} heartbeat --json\``] : [])];
+    };
+    const out = [head];
+    out.push(d.resume ? `Pick up here: ${cut(line(d.resume))}` : "Pick up here: no resume point yet; park when you pause.");
+    if (d.latestOutcome) out.push(`Last hop: ${cut(line(d.latestOutcome))}`);
+    out.push(...list("Needs you", needs, (x) => `${NEED_WORD[x.kind] || x.kind || "item"}: ${line(x.title)}`));
+    out.push(...(decisions.length ? list("Open decisions", decisions, (x) => line(x.title)) : ["Open decisions: none"]));
+    if (git?.branch) {
+      const recent = Array.isArray(git.recent) && git.recent[0] ? ` · last commit ${cut(line(git.recent[0]))}` : "";
+      out.push(`Branch: ${git.branch}${git.dirty ? " (uncommitted changes)" : ""}${recent}`);
+    }
+    out.push(next);
+    return out.join("\n");
+  };
+  for (const [room, clip] of [[8, 400], [5, 200], [3, 120], [1, 60], [0, 40]]) {
+    const text = build(room, clip);
+    if (text.length <= max) return text;
+  }
+  return `${head}\n${next}`.slice(0, max);
 }
 
 /**
@@ -284,7 +329,7 @@ export function sessionStartContext(statusText, max = HOOK_CONTEXT_MAX) {
  */
 export function sessionStartOutput({ host, event = null, statusText, max = HOOK_CONTEXT_MAX }) {
   if (event === "PreCompact") return "";
-  const context = sessionStartContext(statusText, max);
+  const context = sessionStartContext(statusText, max, host);
   if (host === HOST_VIA.claudeCode) {
     return JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: context } });
   }

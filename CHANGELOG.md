@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The dashboard has an embed mode for editor panels and iframes: open it with `?embed=1` (for example `http://127.0.0.1:3847/?embed=1#/today`) to hide the sidebar and tab bar, compact the top bar, stack lanes in one column, and skip the refresh on returning to the tab.
 
 ### Fixes
+- Session-start hooks hand Cursor and Claude Code a short brief instead of a raw `mental status` JSON dump: where to pick up, the last hop, what needs you (open items only, with their true count), open decisions, the branch and last commit, and the next command with the host's own `--via` token. It runs to about 800 characters instead of 4,000, and long lists are cut with a pointer to `mental heartbeat --json`.
 - The Mental pane is titled with the project's folder name instead of its id.
 - Pressing "N need you" no longer shows a toast that repeats the whole list the pane is about to show. Only when the pane cannot open does a short line say how many items need you.
 - The Mental panel no longer counts a subagent's turns as turns of the session, so "This session" shows how many times you and Claude went back and forth.

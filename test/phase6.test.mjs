@@ -103,9 +103,8 @@ test("hooks session-start prints each host's documented JSON shape", () => {
   assert.equal(cursor.status, 0, cursor.stderr);
   const c = JSON.parse(cursor.stdout);
   assert.deepEqual(Object.keys(c), ["additional_context"]);
-  assert.match(c.additional_context, /mental status --json/);
-  const status = JSON.parse(c.additional_context.slice(c.additional_context.indexOf("\n") + 1));
-  assert.equal(status.ok, true);
+  assert.match(c.additional_context, /^# Mental — where this repo stands\nPick up here: /, "a readable brief, not a JSON dump");
+  assert.match(c.additional_context, /--via cursor/, "the next step names Cursor's token");
 
   const claude = JSON.parse(run(["claude-code"], "{}").stdout);
   assert.equal(claude.hookSpecificOutput.hookEventName, "SessionStart");
@@ -136,7 +135,6 @@ test("session-start context stays valid JSON within the budget", () => {
   }
   const ctx = sessionStartContext(JSON.stringify(big));
   assert.ok(ctx.length <= HOOK_CONTEXT_MAX);
-  JSON.parse(ctx.slice(ctx.indexOf("\n") + 1));
   assert.match(sessionStartContext("not json"), /unavailable/);
   const out = sessionStartOutput({ host: "cursor", statusText: JSON.stringify(big) });
   assert.ok(JSON.parse(out).additional_context.length <= HOOK_CONTEXT_MAX);
@@ -308,4 +306,41 @@ test("local --import copies home slice into ./.mental", () => {
   assert.equal(body.data.where.mode, "local");
   assert.equal(body.data.where.root, join(root, ".mental"));
   assert.equal(existsSync(join(root, ".mental", "journal")), true);
+});
+
+test("session-start brief is readable: pick-up line, open needs, decisions, branch, next step — no paths or ids", () => {
+  const status = {
+    ok: true,
+    data: {
+      id: "7927a458-75f3-473c-829f-e52c2da124ab",
+      root: "C:/Users/dev/.mental/projects/7927a458",
+      git: { branch: "main", dirty: true, recent: ["673f332 Redesign the panel", "fbb00fe Fix shims"] },
+      resume: "Rewrite the Cursor hook brief",
+      latestOutcome: "Panel redesigned",
+      attention: [
+        { path: "attention/a.md", title: "Verify the Cursor hook", kind: "verify", status: "open" },
+        { path: "attention/b.md", title: "Multi-root glance", kind: "concern", status: "open" },
+        { path: "attention/c.md", title: "Cross-PC sync", kind: "thread", status: "later" },
+      ],
+      openDecisions: [{ path: "decisions/d.md", title: "Keep MCP optional", status: "open" }],
+    },
+  };
+  const brief = sessionStartContext(JSON.stringify(status), HOOK_CONTEXT_MAX, "cursor");
+  const lines = brief.split("\n");
+  assert.match(lines[0], /^# Mental/);
+  assert.match(brief, /Pick up here: Rewrite the Cursor hook brief/);
+  assert.match(brief, /Last hop: Panel redesigned/);
+  assert.match(brief, /Needs you \(2\):\n- check: Verify the Cursor hook\n- concern: Multi-root glance/);
+  assert.doesNotMatch(brief, /Cross-PC sync/, "parked-for-later items are not pressed on the agent");
+  assert.match(brief, /Open decisions \(1\):\n- Keep MCP optional/);
+  assert.match(brief, /Branch: main \(uncommitted changes\) · last commit 673f332 Redesign the panel/);
+  assert.match(brief, /--via cursor/);
+  assert.doesNotMatch(brief, /7927a458|\.mental\/projects|attention\/a\.md/, "no ids or paths for the agent to wade through");
+
+  const huge = { ok: true, data: { resume: "r".repeat(9000), attention: Array.from({ length: 300 }, (_, i) => ({ title: `item ${i} ${"x".repeat(200)}`, kind: "concern", status: "open" })) } };
+  const capped = sessionStartContext(JSON.stringify(huge), 1200, "claude-code");
+  assert.ok(capped.length <= 1200, `${capped.length} > 1200`);
+  assert.match(capped, /Needs you \(300\):/, "the true count survives trimming");
+  assert.match(capped, /more — run `mental heartbeat --json`/);
+  assert.match(sessionStartContext("not json"), /unavailable/);
 });
