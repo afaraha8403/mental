@@ -31,15 +31,17 @@ If JSON includes `data.track.enabled`, follow the Mental Track skill. `track sta
 
 `park` encodes at an interruption (default title `"Parked"`; optional `--attention` + `--kind`). `handoff` is sugar for journal then heartbeat — both `--title` and `--resume` required. `pulse` returns compact rows from bindings (id, name, resume, counts) — no journal bodies, no merged dump. Heartbeat stays read-only for the pulse watermark; park / handoff / pulse write it after computing since-last-pulse counts.
 
+Pass your host's token as `--via` (`claude-code`, `cursor`, `codex`, `copilot`, `opencode`); the rule `mental install` writes for each host names it.
+
 ```bash
-mental park --resume "…" --via cursor --json
-mental handoff --title "…" --resume "…" --via cursor --json
+mental park --resume "…" --via <host> --json
+mental handoff --title "…" --resume "…" --via <host> --json
 mental pulse --json
-mental journal --title "…" --body "…" --resume "…" --against PLAN.md --via cursor --json
-mental attention --title "…" --kind concern --status open --via cursor --json
-mental attention --title "…" --kind thread --status later --via cursor --json
-mental attention --title "…" --kind verify --status open --via cursor --json
-mental decide --title "…" --body "…" --status open --via cursor --json
+mental journal --title "…" --body "…" --resume "…" --against PLAN.md --via <host> --json
+mental attention --title "…" --kind concern --status open --via <host> --json
+mental attention --title "…" --kind thread --status later --via <host> --json
+mental attention --title "…" --kind verify --status open --via <host> --json
+mental decide --title "…" --body "…" --status open --via <host> --json
 mental decide --title "…" --status decided --json
 mental search overlay --json
 mental list --type Decision --kind direction --json
@@ -133,8 +135,8 @@ Never Stop auto-journal. The skill + rule remain the real contract — Cursor `a
 Default **off**. If heartbeat JSON includes `data.track.enabled`, follow the Mental Track skill. Start with short AI-generated internal and customer-ready title/body when `runningCount` is 0; start twice is ensure-running (a second session joins the existing clock). At park/handoff/journal, regenerate customer copy from the completed work on that same command. Billable defaults to wall; `stop --billable suggested` uses last_seen elapsed. `--accept-stale` is a no-op. Ask only when client identity, billable treatment, or safe wording is genuinely ambiguous. Renderer-safe question = one plain-text draft prompt, 2–3 short `{ id, label }` options, `(Recommended)` in the first label, and `allow_multiple: false`; use the host's structured question tool or numbered text fallback. Never invent a start clock or smaller billable duration.
 
 ```text
-mental track start --title-internal "Auth retry" --body-internal "Tracing retry state." --title-external "Login reliability" --body-external "Improving login retry behavior." --via cursor --json
-mental handoff --title "Auth retry fixed" --body "Original error is preserved." --title-external "Improved login reliability" --body-external "Corrected retry handling for consistent login results." --resume "Commit when asked — open loops: none" --via cursor --json
+mental track start --title-internal "Auth retry" --body-internal "Tracing retry state." --title-external "Login reliability" --body-external "Improving login retry behavior." --via <host> --json
+mental handoff --title "Auth retry fixed" --body "Original error is preserved." --title-external "Improved login reliability" --body-external "Corrected retry handling for consistent login results." --resume "Commit when asked — open loops: none" --via <host> --json
 ```
 
 What it **cannot** do: reconstruct hours from git, fill a missed `start` from chat, invent a smaller billable duration, or print hours on TTY heartbeat / pulse. Missing customer copy returns structured `review` JSON; generate and amend it before export. Usage "Time tracking is off" is not permission to run `mental option track on`.

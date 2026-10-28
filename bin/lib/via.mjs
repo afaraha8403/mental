@@ -8,7 +8,20 @@ export const VIA_USAGE =
   "--via must be a short client token (cursor, claude-code, copilot, codex, opencode, mcp, cli). No emails, URLs, paths, or session ids.";
 
 export const VIA_HINT =
-  "Pass --via cursor (or claude-code, copilot, codex, opencode, mcp, cli). Not a session id.";
+  "Pass --via with your host's token: claude-code, cursor, codex, copilot, opencode, mcp, or cli. Not a session id.";
+
+/**
+ * The `--via` token each agent host's installed rule and skill tell the agent to pass.
+ * The shipped sources say `--via cursor` (the Cursor plugin ships them verbatim);
+ * `mental install` rewrites that token per destination.
+ */
+export const HOST_VIA = Object.freeze({
+  claudeCode: "claude-code",
+  cursor: "cursor",
+  codex: "codex",
+  copilot: "copilot",
+  opencode: "opencode",
+});
 
 /**
  * @param {unknown} raw

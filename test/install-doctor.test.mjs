@@ -415,3 +415,92 @@ function parseOkInstall(home, root) {
   assert.equal(seed.status, 0, seed.stderr || seed.stdout);
 }
 
+
+test("install writes each host's --via token; shared copies get a placeholder", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  mkdirSync(join(home, ".config", "opencode"), { recursive: true });
+  writeFileSync(join(home, ".config", "opencode", "AGENTS.md"), "# mine\n");
+  const r = mental(home, root, ["install", "--json"]);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const read = (...p) => readFileSync(join(home, ...p), "utf8");
+  const expect = [
+    [[".claude", "CLAUDE.md"], "claude-code"],
+    [[".claude", "rules", "mental.md"], "claude-code"],
+    [[".claude", "skills", "mental", "SKILL.md"], "claude-code"],
+    [[".codex", "AGENTS.md"], "codex"],
+    [[".cursor", "rules", "mental.mdc"], "cursor"],
+    [[".cursor", "skills", "mental", "SKILL.md"], "cursor"],
+    [[".config", "opencode", "AGENTS.md"], "opencode"],
+    [[".config", "opencode", "skills", "mental", "SKILL.md"], "opencode"],
+    [[".agents", "AGENTS.md"], "<host>"],
+    [[".agents", "rules", "mental.md"], "<host>"],
+    [[".agents", "skills", "mental", "SKILL.md"], "<host>"],
+  ];
+  for (const [path, token] of expect) {
+    const text = read(...path);
+    assert.ok(text.includes(`--via ${token}`), `${path.join("/")} should say --via ${token}`);
+    const others = text.match(/--via (?!<host>)[a-z][a-z-]*(?=[`\s])/g) ?? [];
+    for (const hit of others) {
+      if (token === "<host>") assert.fail(`${path.join("/")} has a host-specific ${hit}`);
+      else assert.equal(hit, `--via ${token}`, `${path.join("/")} has ${hit}`);
+    }
+  }
+  assert.match(read(".config", "opencode", "AGENTS.md"), /^# mine\n/);
+
+  const again = JSON.parse(mental(home, root, ["install", "--json"]).stdout);
+  assert.deepEqual(again.data.written, [], "second install rewrites nothing");
+});
+
+test("install rewrites a same-version skill copy that still says --via cursor", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  const file = join(home, ".claude", "skills", "mental", "SKILL.md");
+  writeFileSync(file, readFileSync(join(skillSourceDir(), "SKILL.md"), "utf8"));
+  const r = JSON.parse(mental(home, root, ["install", "--json"]).stdout);
+  assert.ok(r.data.written.some((p) => p.includes(join(".claude", "skills", "mental"))));
+  assert.doesNotMatch(readFileSync(file, "utf8"), /--via cursor/);
+});
+
+test("install skips the home Cursor rule when the Cursor plugin ships it", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  const homeRule = join(home, ".cursor", "rules", "mental.mdc");
+  assert.equal(existsSync(homeRule), true);
+  const plugin = join(home, ".cursor", "plugins", "cache", "cursor-public", "mental", "abc123", "rules");
+  mkdirSync(plugin, { recursive: true });
+  writeFileSync(join(plugin, "mental.mdc"), readFileSync(homeRule, "utf8"));
+
+  const warn = JSON.parse(mental(home, root, ["doctor", "--json"]).stdout);
+  const dup = warn.data.checks.find((c) => c.id === "rule-cursor-global");
+  assert.equal(dup.ok, false);
+  assert.equal(dup.level, "warn");
+  assert.match(dup.message, /twice/);
+
+  const r = JSON.parse(mental(home, root, ["install", "--json"]).stdout);
+  assert.equal(existsSync(homeRule), false);
+  assert.deepEqual(r.data.removed, [homeRule]);
+  const ok = JSON.parse(mental(home, root, ["doctor", "--json"]).stdout);
+  const row = ok.data.checks.find((c) => c.id === "rule-cursor-global");
+  assert.equal(row.ok, true, row.message);
+  assert.match(row.message, /plugin/);
+});
+
+test("install leaves OpenCode AGENTS.md absent; doctor names the CLAUDE.md fallback", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  assert.equal(mental(home, root, ["install", "--json"]).status, 0);
+  assert.equal(existsSync(join(home, ".config", "opencode", "AGENTS.md")), false);
+  const doc = JSON.parse(mental(home, root, ["doctor", "--json"]).stdout);
+  const row = doc.data.checks.find((c) => c.id === "rule-opencode");
+  assert.equal(row.ok, true);
+  assert.match(row.message, /CLAUDE\.md/);
+
+  const off = JSON.parse(mental(home, root, ["doctor", "--json"], { OPENCODE_DISABLE_CLAUDE_CODE: "1" }).stdout);
+  const fallback = off.data.checks.find((c) => c.id === "rule-opencode-fallback");
+  assert.equal(fallback.ok, false);
+  assert.equal(fallback.level, "warn");
+  assert.notEqual(off.data.next?.command, "mental doctor --fix");
+});

@@ -261,9 +261,9 @@ working memory after a hop but is not a choice-fork and not a durable fact:
 - `status: resolved` — **must resolve**; residue that cannot close is a
   graveyard. Cap ≤7 on the heartbeat. Merge duplicates.
 
-On every write, pass `--via cursor` (or `claude-code`, `copilot`, `codex`,
-`mcp`, `cli`). Short client token only. Never a session id, email, URL, path,
-or machine name.
+On every write, pass `--via cursor` (this host's token: `claude-code`,
+`cursor`, `codex`, `copilot`, `opencode`, `mcp` or `cli`). Short client token
+only. Never a session id, email, URL, path, or machine name.
 
 ```text
 mental attention --title "…" --kind direction --status open --from "Tom" --tag continuity --via cursor --json

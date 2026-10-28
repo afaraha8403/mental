@@ -517,12 +517,12 @@ export const CATALOG = {
   hooks: {
     name: "hooks",
     group: "Setup",
-    summary: "Optional session-start hooks (default off). Alias of option hooks on|off.",
-    usage: `${CMD} hooks on|off`,
-    examples: [`${CMD} hooks on`, `${CMD} hooks off --json`],
+    summary: "Optional session-start hooks (default off). Alias of option hooks on|off. `hooks session-start <host>` is what the installed hook runs.",
+    usage: `${CMD} hooks on|off  |  ${CMD} hooks session-start [claude-code|cursor]`,
+    examples: [`${CMD} hooks on`, `${CMD} hooks off --json`, `${CMD} hooks session-start cursor`],
     flags: [],
     effects: "non_idempotent",
-    rest: { name: "action", summary: "on or off", required: true },
+    rest: { name: "action", summary: "on, off, or session-start <host>", required: true },
     aliasOf: "option",
   },
   serve: {

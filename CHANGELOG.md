@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+- Writes from Claude Code, Codex and OpenCode are no longer labelled as Cursor. The rule and skill told every host to pass `--via cursor`; `mental install` now writes each host's own token into its copy (`claude-code` in `~/.claude`, `codex` in `~/.codex/AGENTS.md`, `opencode` in OpenCode's dirs, `cursor` in Cursor's), and copies several hosts share (`~/.agents`, `.github/skills`) say `--via <host>` next to the token list. Re-running `install` rewrites older copies even when the skill version has not changed.
+- Session-start hooks now survive a Node reinstall or nvm switch and work in Cursor on Windows. `mental hooks on` writes `mental hooks session-start <host>` (resolved through PATH; `mental.cmd` on Windows) instead of an absolute path to `hooks/session-start.sh`.
+- Session-start hooks now emit what each host reads: `additional_context` for Cursor and `hookSpecificOutput.additionalContext` for Claude Code, instead of raw status JSON that Cursor ignored. Output stays valid JSON under 4,000 characters by shortening long lists and strings rather than cutting bytes mid-token.
+- Cursor no longer loads the Mental rule twice when the Mental Cursor plugin is installed: `mental install` skips and removes `~/.cursor/rules/mental.mdc`, and `mental doctor` warns while both are present.
+
+### Changes
+- `mental install` rewrites session-start hook entries left by 0.12.1 and older when hooks are on; the old `session-start.sh` still works and forwards to the new command. Claude Code no longer gets a `PreCompact` entry, since `SessionStart` already fires after compaction and `PreCompact` output never reaches the model.
+- `mental doctor` explains OpenCode's rule source: without `~/.config/opencode/AGENTS.md` it reads the Mental block in `~/.claude/CLAUDE.md`, and a new `rule-opencode-fallback` warning fires when `OPENCODE_DISABLE_CLAUDE_CODE` turns that fallback off. `install` still never creates that file, because doing so would stop OpenCode from reading `CLAUDE.md`.
+
 ## [0.12.1] - 2026-10-08
 
 ### Fixed

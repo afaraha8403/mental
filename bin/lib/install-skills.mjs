@@ -1,11 +1,12 @@
 /**
  * Copy the Mental skill + tiny rule into user agent dirs (one source in-repo).
  */
-import { cpSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { BEGIN, CMD, END, OPTIONAL_DIR, PKG_ROOT, RULES_DIR, VERSION } from "./pkg.mjs";
 import { loadConfig } from "./config.mjs";
 import { skillMetadataVersion } from "./lockstep.mjs";
+import { HOST_VIA } from "./via.mjs";
 
 /**
  * Directory of the full Mental procedure copied by `mental install`.
@@ -34,6 +35,56 @@ export function ruleBodyText() {
 }
 
 /**
+ * Rewrite the shipped `--via cursor` examples for one destination.
+ * A string token names the host that reads the copy; `null` marks a copy several
+ * hosts share (`~/.agents`, `.github/skills`), which gets the `<host>` placeholder
+ * next to the token list the text already carries.
+ * Deterministic per token, so managed-block merges and skip checks stay idempotent.
+ * @param {string} text
+ * @param {string | null} token
+ */
+export function templateVia(text, token) {
+  return text.replace(/--via cursor(?![\w-])/g, `--via ${token ?? "<host>"}`);
+}
+
+/**
+ * Rule text exactly as a host-specific copy should read.
+ * @param {string | null} token
+ */
+export function ruleBodyFor(token) {
+  return templateVia(ruleBodyText(), token);
+}
+
+/**
+ * The Mental rule shipped by an installed Cursor plugin, or null.
+ * Cursor loads plugin `rules/*.mdc` as well as `~/.cursor/rules`, so a home copy
+ * next to the plugin puts the rule in context twice.
+ * Layouts: `~/.cursor/plugins/local/mental` (local import) and
+ * `~/.cursor/plugins/cache/<marketplace>/mental/<hash>` (marketplace install).
+ * @param {string} home
+ */
+export function cursorPluginRule(home) {
+  const plugins = join(home, ".cursor", "plugins");
+  /** @type {string[]} */
+  const candidates = [join(plugins, "local", "mental", "rules", "mental.mdc")];
+  const cache = join(plugins, "cache");
+  for (const market of safeReaddir(cache)) {
+    for (const build of safeReaddir(join(cache, market, "mental"))) {
+      candidates.push(join(cache, market, "mental", build, "rules", "mental.mdc"));
+    }
+  }
+  return candidates.find((file) => isCursorMentalRule(file)) ?? null;
+}
+
+function safeReaddir(dir) {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Project Cursor rule that actually loads (`.cursor/rules/*.mdc`).
  * @param {string} projectDir
  */
@@ -50,21 +101,45 @@ export function userInstallTargets(home) {
   const claudeMd = join(home, ".claude", "CLAUDE.md");
   const codexAgents = join(home, ".codex", "AGENTS.md");
   const agentsMd = join(home, ".agents", "AGENTS.md");
+  const opencodeAgents = join(home, ".config", "opencode", "AGENTS.md");
+  const cursorRule = join(home, ".cursor", "rules", "mental.mdc");
+  const claudeRule = join(home, ".claude", "rules", "mental.md");
+  const agentsRule = join(home, ".agents", "rules", "mental.md");
+  const skills = {
+    claude: join(home, ".claude", "skills", "mental"),
+    cursor: join(home, ".cursor", "skills", "mental"),
+    agents: join(home, ".agents", "skills", "mental"),
+    opencode: join(home, ".config", "opencode", "skills", "mental"),
+  };
   return {
-    skills: [
-      join(home, ".claude", "skills", "mental"),
-      join(home, ".cursor", "skills", "mental"),
-      join(home, ".agents", "skills", "mental"),
-      join(home, ".config", "opencode", "skills", "mental"),
-    ],
-    cursorRule: join(home, ".cursor", "rules", "mental.mdc"),
-    claudeRule: join(home, ".claude", "rules", "mental.md"),
-    agentsRule: join(home, ".agents", "rules", "mental.md"),
+    skills: [skills.claude, skills.cursor, skills.agents, skills.opencode],
+    cursorRule,
+    claudeRule,
+    agentsRule,
     claudeMd,
     codexAgents,
     agentsMd,
-    opencodeAgents: join(home, ".config", "opencode", "AGENTS.md"),
+    opencodeAgents,
     managedDocs: [claudeMd, codexAgents, agentsMd],
+    /**
+     * `--via` token per destination; null = shared by several hosts.
+     * OpenCode falls back to CLAUDE.md when it has no AGENTS.md of its own, so
+     * those sessions see the claude-code token.
+     * @type {Record<string, string | null>}
+     */
+    via: {
+      [skills.claude]: HOST_VIA.claudeCode,
+      [skills.cursor]: HOST_VIA.cursor,
+      [skills.agents]: null,
+      [skills.opencode]: HOST_VIA.opencode,
+      [cursorRule]: HOST_VIA.cursor,
+      [claudeRule]: HOST_VIA.claudeCode,
+      [agentsRule]: null,
+      [claudeMd]: HOST_VIA.claudeCode,
+      [codexAgents]: HOST_VIA.codex,
+      [agentsMd]: null,
+      [opencodeAgents]: HOST_VIA.opencode,
+    },
   };
 }
 
@@ -76,6 +151,33 @@ function destSkillVersion(dest) {
   } catch {
     return null;
   }
+}
+
+/**
+ * Skip a skill recopy only when the version matches and SKILL.md already carries
+ * this destination's `--via` token (installs before 0.12.2 said cursor everywhere).
+ * @param {string} src
+ * @param {string} target
+ * @param {string | null} via
+ */
+function skillUpToDate(src, target, via) {
+  if (destSkillVersion(target) !== VERSION) return false;
+  try {
+    const want = templateVia(readFileSync(join(src, "SKILL.md"), "utf8"), via);
+    return readFileSync(join(target, "SKILL.md"), "utf8") === want;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * @param {string} src
+ * @param {string} target
+ * @param {string | null} via
+ */
+function copySkillTree(src, target, via) {
+  cpSync(src, target, { recursive: true, force: true });
+  writeFileSync(join(target, "SKILL.md"), templateVia(readFileSync(join(src, "SKILL.md"), "utf8"), via));
 }
 
 function sameFileBytes(a, b) {
@@ -103,7 +205,7 @@ function recordAttempt(written, skipped, failed, dest, fn) {
 /**
  * @returns {"written" | "skipped"}
  */
-function copySkill(dest, { force = false } = {}) {
+function copySkill(dest, { force = false, via = null } = {}) {
   mkdirSync(dirname(dest), { recursive: true });
   let target = dest;
   try {
@@ -117,18 +219,26 @@ function copySkill(dest, { force = false } = {}) {
   } catch {
     // dest does not exist yet
   }
-  if (!force && destSkillVersion(target) === VERSION) return "skipped";
-  cpSync(skillSourceDir(), target, { recursive: true, force: true });
+  if (!force && skillUpToDate(skillSourceDir(), target, via)) return "skipped";
+  copySkillTree(skillSourceDir(), target, via);
   return "written";
 }
 
 /**
+ * Cursor `.mdc` rule (frontmatter kept) with the destination's `--via` token.
  * @returns {"written" | "skipped"}
  */
-function copyRule(dest, { force = false } = {}) {
+function copyRule(dest, { force = false, via = HOST_VIA.cursor } = {}) {
   mkdirSync(dirname(dest), { recursive: true });
-  if (!force && sameFileBytes(dest, ruleSourceFile())) return "skipped";
-  cpSync(ruleSourceFile(), dest);
+  const next = templateVia(readFileSync(ruleSourceFile(), "utf8"), via);
+  if (!force && existsSync(dest)) {
+    try {
+      if (readFileSync(dest, "utf8") === next) return "skipped";
+    } catch {
+      // rewrite
+    }
+  }
+  writeFileSync(dest, next);
   return "written";
 }
 
@@ -184,7 +294,7 @@ export function userTrackTargets(home) {
 /**
  * @returns {"written" | "skipped"}
  */
-function copyDirFollowLink(src, dest, { force = false } = {}) {
+function copyDirFollowLink(src, dest, { force = false, via = null } = {}) {
   mkdirSync(dirname(dest), { recursive: true });
   let target = dest;
   try {
@@ -194,8 +304,8 @@ function copyDirFollowLink(src, dest, { force = false } = {}) {
   } catch {
     // dest does not exist yet
   }
-  if (!force && destSkillVersion(target) === VERSION) return "skipped";
-  cpSync(src, target, { recursive: true, force: true });
+  if (!force && skillUpToDate(src, target, via)) return "skipped";
+  copySkillTree(src, target, via);
   return "written";
 }
 
@@ -240,9 +350,14 @@ export function copyTrackSkills(home, { force = false } = {}) {
   const failed = [];
   if (!existsSync(join(trackSkillSourceDir(), "SKILL.md"))) return { written, skipped, failed };
   const targets = userTrackTargets(home);
-  for (const dest of targets.skills) {
-    recordAttempt(written, skipped, failed, dest, () => copyDirFollowLink(trackSkillSourceDir(), dest, { force }));
-  }
+  const via = userInstallTargets(home).via;
+  targets.skills.forEach((dest) => {
+    // Track skills sit next to the main skill in each host's skills dir.
+    const token = via[join(dirname(dest), "mental")] ?? null;
+    recordAttempt(written, skipped, failed, dest, () =>
+      copyDirFollowLink(trackSkillSourceDir(), dest, { force, via: token }),
+    );
+  });
   if (existsSync(trackRuleSourceFile())) {
     recordAttempt(written, skipped, failed, targets.cursorRule, () => {
       mkdirSync(dirname(targets.cursorRule), { recursive: true });
@@ -355,12 +470,16 @@ export function isCursorMentalRule(file) {
   }
 }
 
+function truthyEnv(v) {
+  return v != null && v !== "" && v !== "0" && v.toLowerCase() !== "false";
+}
+
 /**
  * Doctor checks for host-documented rule delivery.
  * Cursor home `~/.cursor/rules/mental.mdc` is coverage. Project `.cursor/rules` is warn-only.
  * @param {{ home: string, gitRoot?: string | null }} opts
  */
-export function hostRuleChecks({ home, gitRoot = null }) {
+export function hostRuleChecks({ home, gitRoot = null, env = process.env }) {
   const t = userInstallTargets(home);
   const installHint = `run \`${CMD} install\``;
   /** @type {{ id: string, ok: boolean, message: string, level: string }[]} */
@@ -412,25 +531,45 @@ export function hostRuleChecks({ home, gitRoot = null }) {
         : `~/.config/opencode/AGENTS.md exists without a Mental block — ${installHint}`,
     });
   } else {
+    const fallbackOff =
+      truthyEnv(env.OPENCODE_DISABLE_CLAUDE_CODE) || truthyEnv(env.OPENCODE_DISABLE_CLAUDE_CODE_PROMPT);
+    const claudeBlock = hasManagedBlock(t.claudeMd);
+    const createHint =
+      "create ~/.config/opencode/AGENTS.md (it replaces the CLAUDE.md fallback for OpenCode), then run `" +
+      `${CMD} install\``;
     checks.push({
-      id: "rule-opencode",
-      ok: hasManagedBlock(t.claudeMd),
+      // A separate id when only the user can fix it, so doctor does not offer --fix.
+      id: fallbackOff ? "rule-opencode-fallback" : "rule-opencode",
+      ok: claudeBlock && !fallbackOff,
       level: "warn",
-      message: hasManagedBlock(t.claudeMd)
-        ? "OpenCode has no AGENTS.md; it will fall back to ~/.claude/CLAUDE.md"
-        : `OpenCode has no AGENTS.md and CLAUDE.md has no Mental block — ${installHint}`,
+      message: fallbackOff
+        ? `OpenCode's CLAUDE.md fallback is disabled (OPENCODE_DISABLE_CLAUDE_CODE*) and it has no AGENTS.md — ${createHint}`
+        : claudeBlock
+          ? "OpenCode has no AGENTS.md; it reads the Mental block in ~/.claude/CLAUDE.md (writes say --via claude-code)"
+          : `OpenCode has no AGENTS.md and CLAUDE.md has no Mental block — ${installHint}`,
     });
   }
 
-  const cursorOk = isCursorMentalRule(t.cursorRule);
-  checks.push({
-    id: "rule-cursor-global",
-    ok: cursorOk,
-    level: "error",
-    message: cursorOk
-      ? "Cursor ~/.cursor/rules/mental.mdc present"
-      : `missing ~/.cursor/rules/mental.mdc — ${installHint}`,
-  });
+  const cursorHome = isCursorMentalRule(t.cursorRule);
+  if (cursorPluginRule(home)) {
+    checks.push({
+      id: "rule-cursor-global",
+      ok: !cursorHome,
+      level: "warn",
+      message: cursorHome
+        ? `Cursor loads the Mental rule twice (plugin and ~/.cursor/rules/mental.mdc) — ${installHint} to drop the home copy`
+        : "Cursor plugin ships the Mental rule",
+    });
+  } else {
+    checks.push({
+      id: "rule-cursor-global",
+      ok: cursorHome,
+      level: "error",
+      message: cursorHome
+        ? "Cursor ~/.cursor/rules/mental.mdc present"
+        : `missing ~/.cursor/rules/mental.mdc — ${installHint}`,
+    });
+  }
 
   if (gitRoot) {
     const projectRule = projectCursorRule(gitRoot);
@@ -465,31 +604,46 @@ export function installSkills({
   const skipped = [];
   /** @type {Array<{ path: string, code: string, message: string }>} */
   const failed = [];
+  /** @type {string[]} */
+  const removed = [];
+  const cursorPlugin = cursorPluginRule(home);
   if (!dryRun) {
-    const body = ruleBodyText();
+    const via = targets.via;
     if (homeInstall) {
       for (const dest of targets.skills) {
-        recordAttempt(written, skipped, failed, dest, () => copySkill(dest, { force }));
+        recordAttempt(written, skipped, failed, dest, () => copySkill(dest, { force, via: via[dest] }));
       }
-      recordAttempt(written, skipped, failed, targets.cursorRule, () => copyRule(targets.cursorRule, { force }));
-      recordAttempt(written, skipped, failed, targets.claudeRule, () => writePlainRule(targets.claudeRule, body, { force }));
-      recordAttempt(written, skipped, failed, targets.agentsRule, () => writePlainRule(targets.agentsRule, body, { force }));
-      for (const doc of targets.managedDocs) {
+      if (cursorPlugin) {
+        // The Cursor plugin already ships this rule; a home copy would load it twice.
+        if (isCursorMentalRule(targets.cursorRule)) {
+          recordAttempt(removed, skipped, failed, targets.cursorRule, () => {
+            rmSync(targets.cursorRule, { force: true });
+            return "written";
+          });
+        }
+      } else {
+        recordAttempt(written, skipped, failed, targets.cursorRule, () =>
+          copyRule(targets.cursorRule, { force, via: via[targets.cursorRule] }),
+        );
+      }
+      for (const dest of [targets.claudeRule, targets.agentsRule]) {
+        recordAttempt(written, skipped, failed, dest, () => writePlainRule(dest, ruleBodyFor(via[dest]), { force }));
+      }
+      // OpenCode's AGENTS.md is only merged when it exists: creating it would stop
+      // OpenCode from reading ~/.claude/CLAUDE.md, which may carry the user's own rules.
+      const docs = existsSync(targets.opencodeAgents)
+        ? [...targets.managedDocs, targets.opencodeAgents]
+        : targets.managedDocs;
+      for (const doc of docs) {
         recordAttempt(written, skipped, failed, doc, () => {
-          const r = mergeManaged(doc, body, { force });
-          return r.skipped ? "skipped" : "written";
-        });
-      }
-      if (existsSync(targets.opencodeAgents)) {
-        recordAttempt(written, skipped, failed, targets.opencodeAgents, () => {
-          const r = mergeManaged(targets.opencodeAgents, body, { force });
+          const r = mergeManaged(doc, ruleBodyFor(via[doc]), { force });
           return r.skipped ? "skipped" : "written";
         });
       }
     }
     if (projectDir) {
       const vendored = join(projectDir, ".github", "skills", "mental");
-      recordAttempt(written, skipped, failed, vendored, () => copySkill(vendored, { force }));
+      recordAttempt(written, skipped, failed, vendored, () => copySkill(vendored, { force, via: null }));
       const projectRule = projectCursorRule(projectDir);
       recordAttempt(written, skipped, failed, projectRule, () => copyRule(projectRule, { force }));
     }
@@ -500,7 +654,7 @@ export function installSkills({
       failed.push(...track.failed);
     }
   }
-  return { ok: failed.length === 0, written, skipped, failed, targets };
+  return { ok: failed.length === 0, written, skipped, failed, removed, cursorPlugin, targets };
 }
 
 export function skillsPresent(home) {

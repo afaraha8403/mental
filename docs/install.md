@@ -20,7 +20,14 @@ npm puts `mental` on PATH. `mental install` does not reinstall or rewrite the
 CLI; it copies the skill and a tiny always-on rule into each host's documented
 path (`~/.claude/rules`, `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`,
 `~/.cursor/rules`, `~/.agents`, and OpenCode `AGENTS.md` when it already
-exists), and creates a `~/.mental` skeleton. `mental install --project` writes
+exists), and creates a `~/.mental` skeleton. Each copy names that host's
+`--via` token (`claude-code`, `cursor`, `codex`, `opencode`); copies shared by
+several hosts (`~/.agents`, `.github/skills`) say `--via <host>`. When the Cursor
+plugin is installed it already ships the rule, so `install` skips (and removes)
+`~/.cursor/rules/mental.mdc` rather than load it twice. `install` never creates
+OpenCode's `~/.config/opencode/AGENTS.md`: while it is absent OpenCode reads
+`~/.claude/CLAUDE.md`, and creating it would hide whatever else lives there.
+Create it yourself and re-run `mental install` if you want OpenCode's own block. `mental install --project` writes
 only the repo dests (`.github/skills/mental` and `.cursor/rules/mental.mdc`).
 Under a PowerShell policy that
 blocks npm-generated `.ps1` launchers, use `npm.cmd` and `mental.cmd`
@@ -198,12 +205,14 @@ Optional:
 
 ```bash
 mental install --mcp    # register `mental serve` in ~/.cursor/mcp.json + ~/.claude.json
-mental hooks on         # session-start hooks; default off
+mental hooks on         # session-start hooks (Cursor + Claude Code); default off
 mental option track on  # per-UUID sit-down clock; never from install paste unless the user asked
 mental doctor           # PATH, bindings, ignore, skills, npm update, host plugin lag, optionals[]
 mental doctor --fix     # safe repairs: home install + git excludes (never --project)
 mental doctor --fix-ignore   # add .mental/ and .mental-id to your global git excludes
 ```
+
+`mental hooks on` writes `mental hooks session-start cursor` to `~/.cursor/hooks.json` and `mental hooks session-start claude-code` to `~/.claude/settings.json` (`mental.cmd …` on Windows). It resolves through PATH, so it survives a Node reinstall, and prints the shape each host injects (`additional_context` for Cursor, `hookSpecificOutput.additionalContext` for Claude Code), capped at 4,000 characters of valid JSON. Hooks written by 0.12.1 and older pointed at an absolute `hooks/session-start.sh`; that script still works, and `mental install` rewrites those entries when hooks are on.
 
 Install and doctor JSON include `optionals[]` (`id`, `enabled`, `scope`, `command`, `isNew`, `needsConsent: true`). After doctor, re-run `mental doctor --json`, then `mental doctor --fix --json` once if `--fix` can repair remaining errors. Then ask about hooks and time tracking, and whether MCP is needed, with a one-liner each. Do not pass `--hooks` / `--mcp` / `--track` until the user says yes this turn.
 

@@ -6,11 +6,11 @@ import { resolveBundle } from "../lib/resolve.mjs";
 import { userMentalDir } from "../lib/bindings.mjs";
 import { ensureSkeleton } from "../lib/okf.mjs";
 import { installSkills } from "../lib/install-skills.mjs";
-import { enableHooks } from "../lib/hooks.mjs";
+import { enableHooks, hasLegacyHooks } from "../lib/hooks.mjs";
 import { enableMcp } from "../lib/mcp-hosts.mjs";
 import { CMD } from "../lib/pkg.mjs";
 import { printResult, brandLine, EXIT_IO } from "../lib/output.mjs";
-import { FEATURES, listOptionals, markOptionalSeen, setFeature } from "../lib/config.mjs";
+import { FEATURES, featureOn, listOptionals, loadConfig, markOptionalSeen, setFeature } from "../lib/config.mjs";
 import { formatOptionalsTable } from "./option.mjs";
 import { copyTrackSkills } from "../lib/install-skills.mjs";
 import { purgeBalakitMental } from "../lib/legacy-balakit.mjs";
@@ -58,6 +58,9 @@ export function cmdInstall(args, io = {}) {
     if (hooks) {
       hookResult = enableHooks(home);
       setFeature(home, "hooks", "on", { all: true });
+    } else if (featureOn(loadConfig(home).features.hooks, null) && hasLegacyHooks(home)) {
+      // Hooks were already consented to; rewrite the old absolute `.sh` entries in place.
+      hookResult = enableHooks(home);
     }
     if (mcp) {
       mcpResult = enableMcp(home);
@@ -85,6 +88,7 @@ export function cmdInstall(args, io = {}) {
     skills: installed.written,
     written: installed.written,
     skipped: installed.skipped,
+    removed: installed.removed,
     failed: installed.failed,
     project: projectOnly ? `${cwd}/.github/skills/mental` : null,
     hooks: hookResult,
