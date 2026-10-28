@@ -1,418 +1,381 @@
 /**
- * Pure element builders for the Claude Code panel. They take the resolved
- * constructors `{ Box, Text, Button }` (from `$.ui.resolve(e)`, or fakes in
- * tests) and plain data, and return a RenderElement tree. Only props from the
- * Mods allowlist are used — one unknown prop throws the whole tree out.
+ * Element builders for the Mental panel, shared by every surface. They take
+ * the constructors from `$.ui.resolve(e)` (or fakes in tests) and the plain
+ * data from `model.mjs`, and return one RenderElement tree. The terminal and
+ * Claude Desktop draw the same tree; `look` says what the host can do:
+ *
+ * - `rich`: the host draws `Svg` (Desktop, VS Code), so the logo shows.
+ * - `typography`: the host takes `Text` `size`/`weight`, `Button` `variant`
+ *   and `Markdown` (Claude Code 2.1.299+). Without it a tree that sets them
+ *   would not draw at all, so they fall back to `bold` and plain lines.
+ *
+ * Only props from the mods allowlist are used, and never an `undefined` one:
+ * one bad prop throws the whole tree out. No fixed colours: primary text keeps
+ * the host's ink, secondary text is `dimColor`, accents are colour names the
+ * host maps to its own light or dark theme.
  */
 
-import {
-  ageOf,
-  barOf,
-  clip,
-  clockOf,
-  dialOf,
-  fitSegments,
-  plural,
-  relPathOf,
-  sparklineOf,
-  wrapLines,
-} from "./format.mjs";
-import { bandStateOf, pressureReasonOf, topFiles } from "./model.mjs";
+import { clip, oneLine } from "./format.mjs";
+import { markdownLines, needsLabelOf } from "./model.mjs";
+import { logoSvg } from "./desktop.mjs";
 
-/**
- * Terminal palette. Accents are ANSI color names, which the terminal maps to
- * its own light or dark theme; `""` leaves text the terminal's own color and
- * `"dim"` draws it with `dimColor`. Never a fixed hex: on a light terminal a
- * near-white ink vanishes.
- */
-export const C = {
-  violet: "magenta",
-  violetDeep: "magenta",
-  sky: "cyan",
-  amber: "yellow",
-  green: "green",
-  purple: "magenta",
-  rose: "red",
-  zinc: "dim",
-  ink: "",
-  ink2: "dim",
-  ink3: "dim",
-  rule: "dim",
+/** Semantic tone → `Text` props. */
+const TONE = {
+  accent: { color: "magenta" },
+  ok: { color: "green" },
+  info: { color: "cyan" },
+  warn: { color: "yellow" },
+  danger: { color: "red" },
+  muted: { dimColor: true },
 };
 
-const TONE = { violet: C.violet, purple: C.purple, sky: C.sky, amber: C.amber, green: C.green, zinc: C.ink2 };
 const BREATH = ["∙", "•", "●", "•"];
-const KIND_GLYPH = { verify: "◎", thread: "↺", direction: "➜", concern: "△" };
+const MARKDOWN_MAX = 10000;
+const MAX_LIST = 30;
 
-export const TABS = [
-  { id: "now", label: "Now", hotkey: "n" },
-  { id: "residue", label: "Residue", hotkey: "r" },
-  { id: "decisions", label: "Decisions", hotkey: "d" },
-  { id: "session", label: "Session", hotkey: "s" },
-  { id: "time", label: "Time", hotkey: "t" },
+/** Browse targets: `mental list --type` value and label. */
+export const BROWSE = [
+  { type: "Journal", label: "Journal" },
+  { type: "Decision", label: "Decisions" },
+  { type: "Note", label: "Notes" },
+  { type: "Attention", label: "Threads" },
 ];
 
-/**
- * @typedef {{ Box: Function, Text: Function, Button: Function }} Elements
- */
-
-/** @param {Elements} el */
-function span(el, color, children, extra = {}) {
-  const tone = color === "dim" ? { dimColor: true } : color ? { color } : {};
-  return el.Text({ ...tone, ...extra, children });
-}
-
-/** @param {Elements} el */
-function line(el, parts) {
-  return el.Text({ wrap: "truncate-end", children: parts });
-}
-
-function contextTone(pct) {
-  if (pct == null) return C.ink3;
-  if (pct >= 75) return C.amber;
-  if (pct >= 50) return C.violet;
-  return C.violetDeep;
-}
+const TYPE_LABEL = { Journal: "Journal", Decision: "Decision", Note: "Note", Attention: "Thread" };
 
 /**
- * The meta strip under the band headline: sparkline, counts, dial, timer.
- * @returns {{ text: string, color: string, priority: number, bold?: boolean }[]}
+ * @typedef {{ Box: Function, Text: Function, Button: Function, Svg?: Function, Link?: Function, Markdown?: Function }} Elements
+ * @typedef {{ rich?: boolean, typography?: boolean, columns?: number }} Look
+ * @typedef {"title" | "heading" | "body" | "caption"} Size
  */
-export function metaSegments(vm, s, now) {
-  /** @type {{ text: string, color: string, priority: number, bold?: boolean }[]} */
-  const segs = [];
-  if (s.perTurn.length) segs.push({ text: sparklineOf(s.perTurn, 12), color: C.violet, priority: 3 });
-  if (s.turns) segs.push({ text: plural(s.turns, "turn"), color: C.ink3, priority: 2 });
-  if (s.files.size) segs.push({ text: plural(s.files.size, "file"), color: C.ink3, priority: 4 });
-  if (vm?.linked) {
-    if (vm.needsEyesCount) segs.push({ text: `● ${vm.needsEyesCount} needs eyes`, color: C.rose, priority: 9 });
-    if (vm.attentionCount) segs.push({ text: `△ ${vm.attentionCount}`, color: C.amber, priority: 7 });
-    if (vm.decisionCount) segs.push({ text: `◇ ${vm.decisionCount}`, color: C.sky, priority: 6 });
-  }
-  const pct = s.context?.percent;
-  if (pct != null) {
-    segs.push({ text: `${dialOf(pct)} ${Math.round(pct)}%`, color: contextTone(pct), priority: 8 });
-  }
-  if (vm?.linked && vm.track && vm.track.startedAt != null) {
-    segs.push({
-      text: `◷ ${clockOf(now - vm.track.startedAt)}`,
-      color: vm.track.stale ? C.amber : C.ink2,
-      priority: 5,
-    });
-  }
-  segs.push({ text: "/mental", color: C.rule, priority: 1 });
-  return segs;
+
+/**
+ * One `Text`.
+ * @param {Elements} E
+ * @param {Look} look
+ * @param {string} text
+ * @param {{ tone?: string, size?: Size, strong?: boolean, truncate?: boolean }} [o]
+ */
+function say(E, look, text, o = {}) {
+  /** @type {Record<string, unknown>} */
+  const props = { ...(o.tone ? TONE[o.tone] || {} : {}) };
+  if (look.typography) {
+    if (o.size && o.size !== "body") props.size = o.size;
+    if (o.strong) props.weight = "semibold";
+  } else if (o.strong) props.bold = true;
+  if (o.truncate) props.wrap = "truncate-end";
+  props.children = [text];
+  return E.Text(props);
+}
+
+/** A small uppercase label over a section. */
+function caption(E, look, text) {
+  return say(E, look, text.toUpperCase(), { tone: "muted", size: "caption", strong: true });
 }
 
 /**
- * The headline row parts for a band state.
- * @param {Elements} el
+ * One `Button`. `primary` asks for the host's filled style where it has one.
+ * @param {Elements} E
+ * @param {Look} look
+ * @param {{ key: string, label: string, onPress: () => void, hotkey?: string, primary?: boolean, quiet?: boolean }} o
  */
-function headline(el, state, vm, s, now, width, frame) {
-  const brand = span(el, C.violet, "◆ mental", { bold: true });
-  const gap = span(el, C.rule, "  ");
-  const room = Math.max(8, width - 10);
-  switch (state) {
-    case "compacting":
-      return [brand, gap, span(el, C.violet, clip("◌ compacting — the thread is safe in Mental", room))];
-    case "receipt": {
-      const r = s.receipt;
-      const tone = TONE[r.tone] || C.violet;
-      const head = `${r.glyph} ${r.label}`;
-      return [
-        brand,
-        gap,
-        span(el, tone, head, { bold: true }),
-        r.title ? span(el, C.ink, ` ${clip(`› ${r.title}`, room - head.length - 1)}`) : null,
-      ];
-    }
-    case "loading":
-      return [brand, gap, span(el, C.ink3, "reading the thread…", { italic: true })];
-    case "absent":
-      return [brand, gap, span(el, C.ink3, clip("not linked here — run `mental link` to keep this project's thread", room))];
-    case "pressure":
-      return [brand, gap, span(el, C.amber, clip(`▲ ${pressureReasonOf(s)}`, room))];
-    case "working": {
-      const glyph = BREATH[frame % BREATH.length];
-      const head = `${glyph} turn ${s.turns + 1}${s.editsThisTurn ? ` · ${plural(s.editsThisTurn, "edit")}` : ""}`;
-      return [
-        brand,
-        gap,
-        span(el, C.violet, head),
-        vm.resume ? span(el, C.ink3, `  ${clip(`↳ ${vm.resume}`, room - head.length - 2)}`) : null,
-      ];
-    }
-    case "fresh": {
-      const head = `✦ handed off ${ageOf(vm.handoffAge)} ago`;
-      return [
-        brand,
-        gap,
-        span(el, C.green, head),
-        vm.outcome ? span(el, C.ink2, ` ${clip(`— ${vm.outcome}`, room - head.length - 1)}`) : null,
-      ];
-    }
-    default: {
-      if (!vm.resume) return [brand, gap, span(el, C.ink3, "no resume point yet — park when you pause")];
-      const age = vm.handoffAge != null ? `  ${ageOf(vm.handoffAge)}` : "";
-      return [brand, gap, span(el, C.ink2, clip(`↳ ${vm.resume}`, room - age.length)), span(el, C.ink3, age)];
-    }
+function button(E, look, o) {
+  /** @type {Record<string, unknown>} */
+  const props = { key: o.key, label: o.label, onPress: o.onPress };
+  if (o.hotkey) props.hotkey = o.hotkey;
+  if (o.primary && look.typography) props.variant = "primary";
+  if (o.quiet) {
+    props.plain = true;
+    props.dimColor = true;
   }
+  return E.Button(props);
+}
+
+function column(E, key, children, gap = 0) {
+  return E.Box({ key, flexDirection: "column", ...(gap ? { gap } : {}), children: children.filter(Boolean) });
+}
+
+function row(E, key, children, gap = 1) {
+  return E.Box({ key, flexDirection: "row", alignItems: "center", gap, children: children.filter(Boolean) });
+}
+
+/** Room for a label on one line, in cells. */
+function roomOf(look, less = 0) {
+  return Math.max(24, (Number(look.columns) || 60) - 6 - less);
+}
+
+/** Header: logo (rich hosts only), project, status, branch, and any error in full. */
+function headerOf(E, look, h) {
+  const top = row(E, "head", [
+    look.rich && E.Svg ? E.Svg({ source: logoSvg(20), alt: "Mental", width: 20, height: 20 }) : say(E, look, "◆", { tone: "accent", strong: true }),
+    E.Box({ key: "head-title", flexGrow: 1, flexShrink: 1, children: [say(E, look, h.title, { size: "heading", strong: true, truncate: true })] }),
+    say(E, look, `● ${h.status.label}`, { tone: h.status.tone }),
+  ]);
+  return column(E, "header", [
+    top,
+    h.meta ? say(E, look, h.meta, { tone: "muted", truncate: true }) : null,
+    h.error ? say(E, look, `△ ${h.error}`, { tone: "danger" }) : null,
+  ]);
 }
 
 /**
- * The always-on band above the prompt (up to two rows).
- * @param {Elements} el
- * @param {{ vm: any, s: any, now: number, columns: number, maxRows?: number, frame?: number }} input
+ * @typedef {{
+ *   onPark: () => void, onHandoff: () => void, onAskNeeds: () => void,
+ *   onOpenItem: (path: string, title?: string) => void, onBrowse: (type: string) => void,
+ *   onRefresh: () => void, onTrackStart?: () => void, onTrackStop?: () => void,
+ *   onDashboard?: () => void,
+ * }} PaneHandlers
  */
-export function bandView(el, { vm, s, now, columns, maxRows = 2, frame = 0 }) {
-  const width = Math.max(20, columns || 80);
-  const state = bandStateOf(vm, s, now);
-  const rows = [line(el, headline(el, state, vm, s, now, width, frame))];
-  if (maxRows >= 2 && state !== "absent" && state !== "loading") {
-    const segs = fitSegments(metaSegments(vm, s, now), width - 2);
-    const parts = [span(el, C.rule, "  ")];
-    segs.forEach((seg, i) => {
-      if (i) parts.push(span(el, C.rule, "  "));
-      parts.push(span(el, seg.color, seg.text, seg.bold ? { bold: true } : {}));
-    });
-    rows.push(line(el, parts));
-  }
-  return el.Box({ flexDirection: "column", width, children: rows });
-}
 
-/** @param {Elements} el */
-function section(el, label, width, color = C.violetDeep) {
-  const rule = "─".repeat(Math.max(0, width - label.length - 1));
-  return line(el, [span(el, color, label, { bold: true }), span(el, C.rule, ` ${rule}`)]);
-}
+/**
+ * The `/mental` pane. Above the fold: where to pick up, the two ways to leave
+ * a resume point, and what needs you, one button per item. Below: this
+ * session, the clock, recent receipts, and ways to read more. The host scrolls
+ * a tree taller than the pane, so nothing is cut to "+N more".
+ * @param {Elements} E
+ * @param {ReturnType<typeof import("./model.mjs").paneModelOf>} m
+ * @param {PaneHandlers} on
+ * @param {Look & { dash?: { state: string, href?: string } | null }} look
+ */
+export function renderPane(E, m, on, look) {
+  const sections = [headerOf(E, look, m.header)];
+  if (!m.linked) {
+    sections.push(column(E, "absent", [say(E, look, m.message), m.hint ? say(E, look, m.hint, { tone: "muted" }) : null]));
+    sections.push(footerOf(E, look, m, on));
+    return column(E, "pane", sections, 1);
+  }
 
-/** @param {Elements} el */
-function wrapped(el, text, width, color, maxLines, indent = "") {
-  return wrapLines(text, width - indent.length, maxLines).map((l) => line(el, [span(el, C.rule, indent), span(el, color, l)]));
-}
-
-/** @param {Elements} el */
-function nowLines(el, vm, s, now, width) {
-  const out = [];
-  out.push(section(el, "RESUME", width));
-  if (vm.resume) out.push(...wrapped(el, vm.resume, width, C.ink, 3));
-  else out.push(line(el, [span(el, C.ink3, "No resume point yet. Park when you pause.", { italic: true })]));
-  if (vm.outcome || vm.handoffAge != null) {
-    const meta = [vm.outcome, vm.handoffAge != null ? `${ageOf(vm.handoffAge)} ago` : "", vm.via ? `via ${vm.via}` : ""]
-      .filter(Boolean)
-      .join(" · ");
-    out.push(line(el, [span(el, C.green, "✦ "), span(el, C.ink2, clip(meta, width - 2))]));
-  }
-  const pct = s.context?.percent;
-  if (pct != null) {
-    const label = ` ${dialOf(pct)} context ${Math.round(pct)}%`;
-    out.push(line(el, [span(el, contextTone(pct), barOf(pct, Math.max(6, width - label.length))), span(el, C.ink2, label)]));
-  }
-  if (vm.needsEyes.length) {
-    out.push(section(el, "NEEDS EYES", width, C.rose));
-    for (const item of vm.needsEyes.slice(0, 3)) {
-      out.push(line(el, [span(el, C.rose, "● "), span(el, C.ink, clip(item.title || item.file, width - 2))]));
-    }
-  }
-  const d = vm.delta;
-  if (d && (d.writes || d.attention || d.decisions || d.parks)) {
-    out.push(section(el, "SINCE HANDOFF", width));
-    const bits = [
-      d.writes ? plural(d.writes, "write") : "",
-      d.attention ? `△ ${d.attention}` : "",
-      d.decisions ? `◇ ${d.decisions}` : "",
-      d.parks ? plural(d.parks, "park") : "",
-    ].filter(Boolean);
-    out.push(line(el, [span(el, C.ink2, clip(bits.join("  ·  "), width))]));
-  }
-  out.push(section(el, "GIT", width));
-  out.push(
-    line(el, [
-      span(el, C.violet, "⎇ "),
-      span(el, C.ink, clip(vm.branch || "(no branch)", Math.max(8, width - 16))),
-      vm.dirty ? span(el, C.amber, `  ● ${vm.changed} changed`) : span(el, C.green, "  ✓ clean"),
+  sections.push(
+    column(E, "resume", [
+      caption(E, look, "Pick up here"),
+      m.resume ? say(E, look, m.resume.text, { size: "heading" }) : say(E, look, "No resume point yet. Park when you pause.", { tone: "muted" }),
+      m.resume?.detail ? say(E, look, m.resume.detail, { tone: "muted" }) : null,
     ]),
   );
-  for (const c of vm.recent.slice(0, 3)) {
-    const [hash, ...rest] = String(c).split(" ");
-    out.push(line(el, [span(el, C.violetDeep, `${hash} `), span(el, C.ink2, clip(rest.join(" "), width - hash.length - 1))]));
-  }
-  return out;
-}
 
-/** @param {Elements} el */
-function residueLines(el, vm, width) {
-  const out = [section(el, `ATTENTION · ${vm.attentionCount}`, width, C.amber)];
-  if (!vm.attention.length) {
-    out.push(line(el, [span(el, C.ink3, "Nothing open. The thread is clear.", { italic: true })]));
-    return out;
-  }
-  for (const a of vm.attention) {
-    const glyph = KIND_GLYPH[a.kind] || "△";
-    const status = a.status && a.status !== "open" ? `  ${a.status}` : "";
-    out.push(
-      line(el, [
-        span(el, C.amber, `${glyph} `),
-        span(el, C.ink, clip(a.title || a.file, width - 2 - status.length)),
-        span(el, C.ink3, status),
+  const parkFirst = m.primary === "park";
+  sections.push(
+    column(E, "leave", [
+      m.pressure ? say(E, look, `△ ${m.pressure}`, { tone: "warn" }) : null,
+      row(E, "leave-row", [
+        button(E, look, { key: "park", label: "Park", hotkey: "p", primary: parkFirst, onPress: on.onPark }),
+        button(E, look, { key: "handoff", label: "Hand off", hotkey: "h", primary: !parkFirst, onPress: on.onHandoff }),
       ]),
-    );
-  }
-  return out;
-}
-
-/** @param {Elements} el */
-function decisionLines(el, vm, width) {
-  const out = [section(el, `OPEN · ${vm.decisionCount}`, width, C.sky)];
-  if (!vm.decisions.length) out.push(line(el, [span(el, C.ink3, "No open decisions.", { italic: true })]));
-  for (const d of vm.decisions) {
-    out.push(line(el, [span(el, C.sky, "◇ "), span(el, C.ink, clip(d.title || d.file, width - 2))]));
-  }
-  if (vm.guardrails.length) {
-    out.push(section(el, `GUARDRAILS · ${vm.guardrailCount}`, width, C.zinc));
-    for (const g of vm.guardrails) {
-      out.push(line(el, [span(el, C.zinc, "▪ "), span(el, C.ink2, clip(g.title || g.file, width - 2))]));
-    }
-  }
-  return out;
-}
-
-/** @param {Elements} el */
-function sessionLines(el, s, now, width, cwd) {
-  const out = [section(el, "THIS SESSION", width)];
-  out.push(
-    line(el, [
-      span(el, C.ink, plural(s.turns, "turn"), { bold: true }),
-      span(el, C.ink3, "  ·  "),
-      span(el, C.ink2, `${clockOf(now - s.startedAt)} elapsed`),
-      span(el, C.ink3, "  ·  "),
-      span(el, C.ink2, `${plural(s.edits, "edit")} in ${plural(s.files.size, "file")}`),
-    ]),
-  );
-  if (s.perTurn.length) {
-    out.push(line(el, [span(el, C.ink3, "edits/turn "), span(el, C.violet, sparklineOf(s.perTurn, Math.max(4, width - 11)))]));
-  }
-  const pct = s.context?.percent;
-  if (pct != null) {
-    const label = ` ${dialOf(pct)} ${Math.round(pct)}%`;
-    out.push(line(el, [span(el, C.ink3, "context    "), span(el, contextTone(pct), barOf(pct, Math.max(6, width - 11 - label.length))), span(el, C.ink2, label)]));
-  }
-  const files = topFiles(s, 8);
-  if (files.length) {
-    out.push(section(el, "TOUCHED", width));
-    const max = files[0].count;
-    for (const f of files) {
-      const bar = "▪".repeat(Math.max(1, Math.round((f.count / max) * 6)));
-      const count = ` ${f.count}`;
-      out.push(
-        line(el, [
-          span(el, C.violetDeep, bar.padEnd(7)),
-          span(el, C.ink, clip(relPathOf(f.path, cwd), width - 7 - count.length)),
-          span(el, C.ink3, count),
-        ]),
-      );
-    }
-  }
-  return out;
-}
-
-/** @param {Elements} el */
-function timeLines(el, vm, now, width) {
-  if (!vm.track) return [line(el, [span(el, C.ink3, "Time tracking is off for this project.", { italic: true })])];
-  const out = [section(el, "TIME", width, C.zinc)];
-  const t = vm.track;
-  if (t.runningCount && t.startedAt != null) {
-    out.push(
-      line(el, [
-        span(el, t.stale ? C.amber : C.green, "◷ "),
-        span(el, C.ink, clockOf(now - t.startedAt), { bold: true }),
-        span(el, C.ink2, `  running${t.runningCount > 1 ? ` · ${t.runningCount} clocks` : ""}`),
-        t.stale ? span(el, C.amber, "  · stale") : null,
-      ]),
-    );
-  } else {
-    out.push(line(el, [span(el, C.ink3, "◷ No clock running.")]));
-  }
-  if (t.unclocked) out.push(line(el, [span(el, C.amber, "△ Work today with no clocked interval.")]));
-  return out;
-}
-
-/**
- * The `/mental` pane.
- * @param {Elements} el
- * @param {{
- *   vm: any, s: any, now: number, columns: number, rows?: number, tab: string,
- *   updatedAt: number | null, error?: string, cwd?: string,
- *   onTab: (id: string) => void, onPark: () => void, onHandoff: () => void, onRefresh: () => void,
- * }} input
- */
-export function paneView(el, input) {
-  const { vm, s, now, tab, updatedAt, error, cwd } = input;
-  const width = Math.max(30, (input.columns || 80) - 2);
-  const rows = Math.max(8, input.rows || 16);
-
-  const updated = updatedAt == null ? "…" : `updated ${ageOf(now - updatedAt)}${ageOf(now - updatedAt) === "now" ? "" : " ago"}`;
-  const header = el.Box({
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width,
-    children: [
-      line(el, [
-        span(el, C.violet, "◆ mental", { bold: true }),
-        vm?.linked ? span(el, C.ink, `  ${clip(vm.id, Math.max(6, width - 34))}`, { bold: true }) : null,
-        vm?.linked && vm.branch ? span(el, C.ink3, `  ⎇ ${clip(vm.branch, 18)}`) : null,
-      ]),
-      span(el, error ? C.rose : C.ink3, error ? `△ ${clip(error, Math.max(12, width - 30))}` : updated),
-    ],
-  });
-
-  const tabs = el.Box({
-    flexDirection: "row",
-    gap: 1,
-    children: TABS.map((t) =>
-      el.Button({
-        key: `tab-${t.id}`,
-        label: t.label,
-        hotkey: t.hotkey,
-        ...(t.id === tab ? {} : { plain: true, dimColor: true }),
-        onPress: () => input.onTab(t.id),
+      say(E, look, parkFirst ? "Park saves where you are. Hand off writes notes for the next chat." : "Context is nearly full: hand off so the next chat starts clean.", {
+        tone: "muted",
       }),
-    ),
-  });
+    ]),
+  );
 
-  const footer = el.Box({
-    flexDirection: "row",
-    gap: 1,
-    children: [
-      el.Button({ key: "park", label: "Park", hotkey: "p", onPress: input.onPark }),
-      el.Button({ key: "handoff", label: "Handoff", hotkey: "h", onPress: input.onHandoff }),
-      el.Button({ key: "refresh", label: "Refresh", hotkey: "f", plain: true, dimColor: true, onPress: input.onRefresh }),
-    ],
-  });
+  sections.push(needsSectionOf(E, look, m.needs, on));
 
-  /** @type {any[]} */
-  let body;
-  if (!vm) body = [line(el, [span(el, C.ink3, "Reading the thread…", { italic: true })])];
-  else if (!vm.linked) {
-    body = [
-      line(el, [span(el, C.ink2, "This folder isn't linked to a Mental project.")]),
-      line(el, [span(el, C.ink3, "Run `mental link` (or park once) to start keeping its thread.")]),
-    ];
-  } else if (tab === "residue") body = residueLines(el, vm, width);
-  else if (tab === "decisions") body = decisionLines(el, vm, width);
-  else if (tab === "session") body = sessionLines(el, s, now, width, cwd);
-  else if (tab === "time") body = timeLines(el, vm, now, width);
-  else body = nowLines(el, vm, s, now, width);
-
-  const budget = Math.max(3, rows - 4);
-  if (body.length > budget) {
-    const more = body.length - (budget - 1);
-    body = [...body.slice(0, budget - 1), line(el, [span(el, C.ink3, `  +${more} more`)])];
+  if (m.session || m.activity.length) {
+    sections.push(
+      column(E, "session", [
+        caption(E, look, "This session"),
+        m.session ? say(E, look, m.session) : null,
+        ...m.activity.map((a) => say(E, look, `${a.text}${a.age ? `  ${a.age}` : ""}`, { tone: a.tone, truncate: true })),
+      ]),
+    );
   }
 
-  return el.Box({
-    flexDirection: "column",
-    width,
-    children: [header, tabs, el.Box({ flexDirection: "column", flexGrow: 1, children: body }), footer],
-  });
+  if (m.time) {
+    const t = m.time;
+    const act = t.running
+      ? on.onTrackStop && button(E, look, { key: "track-stop", label: "Stop clock", onPress: on.onTrackStop })
+      : on.onTrackStart && button(E, look, { key: "track-start", label: "Start clock", onPress: on.onTrackStart });
+    sections.push(
+      column(E, "time", [
+        caption(E, look, "Time"),
+        row(E, "time-row", [say(E, look, t.line, { tone: t.tone }), act || null], 2),
+        ...t.notes.map((n) => say(E, look, n, { tone: "warn" })),
+      ]),
+    );
+  }
+
+  sections.push(
+    column(E, "browse", [
+      caption(E, look, "Read in Mental"),
+      row(
+        E,
+        "browse-row",
+        BROWSE.map((b) => button(E, look, { key: `browse-${b.type.toLowerCase()}`, label: b.label, onPress: () => on.onBrowse(b.type) })),
+      ),
+      m.handoffFile ? button(E, look, { key: "browse-handoff", label: "Last hand-off ›", onPress: () => on.onOpenItem(m.handoffFile, "Last hand-off") }) : null,
+      dashboardOf(E, look, on),
+    ]),
+  );
+
+  sections.push(footerOf(E, look, m, on));
+  return column(E, "pane", sections, 1);
+}
+
+/** "Needs you": one button per item that opens it, then one that asks Claude to walk through them. */
+function needsSectionOf(E, look, needs, on) {
+  const { items, total, later } = needs;
+  if (!total) {
+    return column(E, "needs", [
+      caption(E, look, "Needs you"),
+      say(E, look, "✓ Nothing is waiting on you.", { tone: "ok" }),
+      later ? say(E, look, `${later} parked for later`, { tone: "muted" }) : null,
+    ]);
+  }
+  const room = roomOf(look);
+  const rows = items.map((x, i) =>
+    button(E, look, {
+      key: `need-${i}`,
+      label: clip(`${x.label}: ${x.title}`, room),
+      ...(i < 9 ? { hotkey: String(i + 1) } : {}),
+      onPress: x.path ? () => on.onOpenItem(x.path, x.title) : on.onAskNeeds,
+    }),
+  );
+  const unlisted = total - items.length;
+  return column(E, "needs", [
+    say(E, look, needsLabelOf(total).toUpperCase(), { tone: items.some((x) => x.tone === "danger") ? "danger" : "warn", size: "caption", strong: true }),
+    ...rows,
+    unlisted > 0 ? button(E, look, { key: "need-more", label: `${unlisted} more in Threads ›`, quiet: true, onPress: () => on.onBrowse("Attention") }) : null,
+    later ? say(E, look, `${later} parked for later`, { tone: "muted" }) : null,
+    button(E, look, { key: "needs-ask", label: "Walk me through these", onPress: on.onAskNeeds }),
+  ]);
+}
+
+/** The dashboard: a native link when one runs (it serves every project), else a button that starts one. */
+function dashboardOf(E, look, on) {
+  const dash = look.dash;
+  if (!dash || !on.onDashboard) return null;
+  if (dash.state === "running" && dash.href && E.Link) return E.Link({ href: dash.href, label: "Open the dashboard ↗" });
+  if (dash.state === "starting") return say(E, look, "Starting the dashboard — it opens in your browser…", { tone: "muted" });
+  return button(E, look, { key: "dashboard", label: dash.state === "running" ? "Open the dashboard ↗" : "Start the dashboard", onPress: on.onDashboard });
+}
+
+function footerOf(E, look, m, on) {
+  return row(E, "foot", [m.updated ? say(E, look, m.updated, { tone: "muted" }) : null, button(E, look, { key: "refresh", label: "Refresh", hotkey: "r", quiet: true, onPress: on.onRefresh })], 2);
+}
+
+const dateOfPath = (p) => String(p || "").match(/\d{4}-\d{2}-\d{2}/)?.[0] || "";
+
+/**
+ * A list of one kind of entry, or one entry's body, with a Back button.
+ * @param {Elements} E
+ * @param {any} route
+ * @param {{ onBack: () => void, onOpenItem: (path: string, title?: string) => void }} on
+ * @param {Look} look
+ */
+export function renderRoute(E, route, on, look) {
+  const children = [
+    row(E, "route-back", [
+      button(E, look, { key: "back", label: "‹ Back", hotkey: "b", onPress: on.onBack }),
+      say(E, look, route.view === "list" ? "Mental" : route.crumb || "Mental", { tone: "muted", truncate: true }),
+    ]),
+  ];
+  const note = (text, tone = "muted") => say(E, look, text, { tone });
+  if (route.view === "list") {
+    const label = route.type === "Attention" ? "Threads" : `${TYPE_LABEL[route.type] || route.type}s`;
+    const items = (route.items || []).slice();
+    if (route.type === "Journal") items.sort((a, b) => String(b.path).localeCompare(String(a.path)));
+    const shown = items.slice(0, MAX_LIST);
+    children.push(
+      column(E, "route-head", [say(E, look, label, { size: "title", strong: true }), route.status === "ok" ? note(`${route.total ?? items.length} in Mental`) : null]),
+    );
+    if (route.status === "loading") children.push(note("Reading…"));
+    else if (route.status === "error") children.push(note("Couldn't read that. Go back and try again.", "danger"));
+    else if (!shown.length) children.push(note(`No ${label.toLowerCase()} yet.`));
+    else {
+      const room = roomOf(look);
+      shown.forEach((it, i) => {
+        const meta = [it.status, dateOfPath(it.path)].filter(Boolean).join(" · ");
+        const title = oneLine(it.title) || it.path;
+        children.push(
+          button(E, look, { key: `open-${i}`, label: clip(meta ? `${title} — ${meta}` : title, room), onPress: () => on.onOpenItem(it.path, oneLine(it.title)) }),
+        );
+      });
+      if (items.length > shown.length) children.push(note(`Showing the newest ${shown.length} of ${route.total ?? items.length}. The dashboard has the rest.`));
+    }
+    return column(E, "route", children, 1);
+  }
+  const doc = route.doc;
+  const fm = doc?.frontmatter || {};
+  const kind = TYPE_LABEL[fm.type] || fm.type || "";
+  const meta = [kind, fm.status, dateOfPath(route.path) || String(fm.timestamp || "").slice(0, 10), Array.isArray(fm.tags) ? fm.tags.slice(0, 4).join(" ") : ""]
+    .filter(Boolean)
+    .join(" · ");
+  children.push(column(E, "route-head", [say(E, look, oneLine(fm.title || route.title || route.path), { size: "title", strong: true }), meta ? note(meta) : null]));
+  if (route.status === "loading") children.push(note("Reading…"));
+  else if (route.status === "error" || !doc) children.push(note("Couldn't open that. Go back and try again.", "danger"));
+  else {
+    if (fm.description) children.push(say(E, look, oneLine(fm.description)));
+    children.push(bodyOf(E, look, doc.body));
+    const backlinks = Array.isArray(doc.backlinks) ? doc.backlinks.length : 0;
+    if (backlinks) children.push(note(`${backlinks} other entr${backlinks === 1 ? "y links" : "ies link"} here.`));
+  }
+  return column(E, "route", children, 1);
+}
+
+/** A note's body: the host's own Markdown where it has one, else plain lines. */
+function bodyOf(E, look, body) {
+  const text = String(body || "")
+    .replace(/\r\n?/g, "\n")
+    // Markdown takes tab and newline as its only control characters.
+    .replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "");
+  if (look.typography && E.Markdown) {
+    return E.Markdown({ text: text.length > MARKDOWN_MAX ? `${text.slice(0, MARKDOWN_MAX - 1)}…` : text });
+  }
+  return column(
+    E,
+    "route-body",
+    markdownLines(text).map((l) => say(E, look, l.text || " ", { strong: !!l.bold, tone: l.dim ? "muted" : "" })),
+  );
+}
+
+/**
+ * The band above the prompt: status, the resume point, what needs you, and
+ * one line of news. On rich hosts "N need you" is a button that opens the pane.
+ * @param {Elements} E
+ * @param {ReturnType<typeof import("./model.mjs").bandModelOf>} m
+ * @param {{ onNeeds?: () => void, onDismiss?: () => void }} on
+ * @param {Look & { maxRows?: number, frame?: number }} look
+ */
+export function renderBand(E, m, on, look) {
+  const cols = Math.max(40, Number(look.columns) || 100);
+  const needs = m.needs ? needsLabelOf(m.needs) : "";
+  const pulse = m.working && !look.rich ? `${BREATH[(look.frame || 0) % BREATH.length]} ` : "● ";
+  const fixed = 9 + m.status.label.length + 3 + (needs ? needs.length + 4 : 0) + (m.hideable && on.onDismiss ? 8 : 0);
+  const head = row(E, "band-head", [
+    look.rich && E.Svg ? E.Svg({ source: logoSvg(16), alt: "Mental", width: 16, height: 16 }) : say(E, look, "◆", { tone: "accent" }),
+    say(E, look, "Mental", { strong: true }),
+    say(E, look, `${pulse}${m.status.label}`, { tone: m.status.tone }),
+    E.Box({ key: "band-msg", flexGrow: 1, flexShrink: 1, children: [say(E, look, clip(m.message, Math.max(8, cols - fixed)), { tone: "muted", truncate: true })] }),
+    needs && on.onNeeds
+      ? button(E, look, { key: "band-needs", label: `${needs} ›`, onPress: on.onNeeds })
+      : needs
+        ? say(E, look, needs, { tone: "warn", strong: true })
+        : null,
+    m.hideable && on.onDismiss ? button(E, look, { key: "band-dismiss", label: "Hide", onPress: on.onDismiss }) : null,
+  ]);
+  const rows = [head];
+  if (m.second && (look.maxRows ?? 2) >= 2) rows.push(say(E, look, clip(m.second.text, cols), { tone: m.second.tone, truncate: true }));
+  return column(E, "band", rows);
+}
+
+/**
+ * The persistent opener in the Desktop prompt footer (the `SessionMode` site):
+ * logo and the button that opens or hides the pane, with the status and what
+ * needs you when the band is not showing them. Keeps the host's mode labels.
+ * @param {Elements} E
+ * @param {{ band: ReturnType<typeof import("./model.mjs").bandModelOf>, isOpen: boolean, bandSeen: boolean, modes: string[] }} m
+ * @param {{ onToggle: () => void, onDismiss?: () => void }} on
+ * @param {Look} look
+ */
+export function renderFooter(E, m, on, look) {
+  const parts = ["Mental"];
+  if (!m.bandSeen) {
+    parts.push(m.band.status.label);
+    if (m.band.needs) parts.push(needsLabelOf(m.band.needs));
+  }
+  return row(E, "mental-foot", [
+    E.Svg ? E.Svg({ source: logoSvg(16), alt: "Mental", width: 16, height: 16 }) : null,
+    button(E, look, { key: "mental-toggle", label: `${parts.join(" · ")}  ${m.isOpen ? "◧" : "◨"}`, onPress: on.onToggle }),
+    !m.bandSeen && m.band.hideable && on.onDismiss ? button(E, look, { key: "mental-dismiss", label: "Hide", onPress: on.onDismiss }) : null,
+    m.modes.length ? say(E, look, m.modes.join(" & "), { tone: "muted" }) : null,
+  ]);
 }

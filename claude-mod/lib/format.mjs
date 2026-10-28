@@ -4,8 +4,6 @@
  */
 
 export const ELLIPSIS = "…";
-export const DIAL = ["○", "◔", "◑", "◕", "●"];
-export const SPARK = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
 
 /** @param {unknown} value */
 export function oneLine(value) {
@@ -45,51 +43,6 @@ export function clockOf(ms) {
   return `${h}:${String(m).padStart(2, "0")}`;
 }
 
-/** @param {number | null | undefined} pct */
-export function dialOf(pct) {
-  if (pct == null || !Number.isFinite(pct)) return DIAL[0];
-  const p = Math.min(100, Math.max(0, pct));
-  return DIAL[Math.min(DIAL.length - 1, Math.floor(p / 25))];
-}
-
-/**
- * @param {number | null | undefined} pct
- * @param {number} width
- */
-export function barOf(pct, width) {
-  const w = Math.max(1, Math.floor(width));
-  const p = pct == null || !Number.isFinite(pct) ? 0 : Math.min(100, Math.max(0, pct));
-  const full = Math.round((p / 100) * w);
-  return `${"━".repeat(full)}${"┄".repeat(w - full)}`;
-}
-
-/**
- * @param {readonly number[]} values
- * @param {number} width
- */
-export function sparklineOf(values, width) {
-  const w = Math.max(0, Math.floor(width));
-  if (w === 0) return "";
-  const tail = values.slice(-w);
-  if (tail.length === 0) return "";
-  const max = Math.max(...tail);
-  if (max <= 0) return SPARK[0].repeat(tail.length);
-  return tail
-    .map((v) => SPARK[Math.min(SPARK.length - 1, Math.round((Math.max(0, v) / max) * (SPARK.length - 1)))])
-    .join("");
-}
-
-/**
- * @param {string} path
- * @param {string | null | undefined} cwd
- */
-export function relPathOf(path, cwd) {
-  const p = String(path || "").replace(/\\/g, "/");
-  const base = String(cwd || "").replace(/\\/g, "/").replace(/\/+$/, "");
-  if (base && p.toLowerCase().startsWith(`${base.toLowerCase()}/`)) return p.slice(base.length + 1);
-  return p;
-}
-
 /**
  * Local wall time of a handoff (`when.date` + `when.time`, no zone).
  * @param {{ when?: { date?: string, time?: string } } | null | undefined} handoff
@@ -111,28 +64,6 @@ export function msOf(value) {
   if (typeof value !== "string" || !value) return null;
   const ms = Date.parse(value);
   return Number.isFinite(ms) ? ms : null;
-}
-
-/**
- * Drop the lowest-priority segments until the strip fits `columns`
- * (segments joined by `sep`). Display order is kept.
- * @template {{ text: string, priority?: number }} T
- * @param {readonly T[]} segments
- * @param {number} columns
- * @param {string} [sep]
- * @returns {T[]}
- */
-export function fitSegments(segments, columns, sep = "  ") {
-  const kept = segments.filter((s) => s && s.text);
-  const width = () => kept.reduce((n, s) => n + s.text.length, 0) + Math.max(0, kept.length - 1) * sep.length;
-  while (kept.length > 1 && width() > columns) {
-    let drop = 0;
-    for (let i = 1; i < kept.length; i++) {
-      if ((kept[i].priority ?? 0) <= (kept[drop].priority ?? 0)) drop = i;
-    }
-    kept.splice(drop, 1);
-  }
-  return kept;
 }
 
 /**
@@ -194,4 +125,9 @@ export function textOf(v) {
   } catch {
     return "";
   }
+}
+
+/** Characters of `size`px text that fit in `px` (rough; no font metrics here). */
+export function fitChars(px, size, mono = false) {
+  return Math.max(4, Math.floor(px / (size * (mono ? 0.61 : 0.55))));
 }

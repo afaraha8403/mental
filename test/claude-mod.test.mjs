@@ -1,34 +1,28 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { ageOf, clip, clockOf, handoffMsOf, wrapLines } from "../claude-mod/lib/format.mjs";
 import {
-  ageOf,
-  barOf,
-  clip,
-  clockOf,
-  dialOf,
-  fitSegments,
-  handoffMsOf,
-  relPathOf,
-  sparklineOf,
-  wrapLines,
-} from "../claude-mod/lib/format.mjs";
-import {
+  bandModelOf,
   bandStateOf,
   isWriteCommand,
+  markdownLines,
+  needsOf,
+  paneModelOf,
   mentalCommandOf,
   newSession,
   noteContext,
   noteEdit,
+  noteReceipt,
   noteTurnComplete,
   receiptOf,
   receiptTitleOf,
-  topFiles,
   viewModelOf,
+  visibleNeedsOf,
   RECEIPT_MS,
 } from "../claude-mod/lib/model.mjs";
-import { bandView, paneView, TABS } from "../claude-mod/lib/views.mjs";
-import { heartbeatArgvs, heartbeatOf, register } from "../claude-mod/mental-mod.mjs";
+import { renderBand, renderPane, renderRoute } from "../claude-mod/lib/views.mjs";
+import { heartbeatArgvs, heartbeatOf, register, versionAtLeast } from "../claude-mod/mental-mod.mjs";
 
 // Fake element constructors: plain `{ type, props }` trees, like `$.ui.resolve(e)`.
 const el = {
@@ -37,15 +31,17 @@ const el = {
   Button: (props) => ({ type: "Button", props }),
   Svg: (props) => ({ type: "Svg", props }),
   Link: (props) => ({ type: "Link", props }),
+  Markdown: (props) => ({ type: "Markdown", props }),
 };
 
 // Mirrors BoxProps / TextProps / ButtonProps / SvgProps in the Mods types: Text and Svg take no `key`.
 const ALLOWED = {
   Box: new Set(["key", "flexDirection", "justifyContent", "alignItems", "width", "gap", "flexGrow", "flexShrink", "paddingX", "paddingY", "backgroundColor", "children"]),
-  Text: new Set(["color", "bold", "italic", "dimColor", "wrap", "children"]),
-  Button: new Set(["key", "label", "hotkey", "plain", "dimColor", "onPress"]),
+  Text: new Set(["color", "bold", "italic", "dimColor", "wrap", "size", "weight", "children"]),
+  Button: new Set(["key", "label", "hotkey", "plain", "dimColor", "variant", "onPress"]),
   Svg: new Set(["source", "alt", "width", "height", "isInteractive"]),
   Link: new Set(["href", "label"]),
+  Markdown: new Set(["key", "text", "dimColor"]),
 };
 
 /** Walk a tree, asserting every prop is allowlisted and typed as the Mods API wants. */
@@ -69,6 +65,11 @@ function assertValidTree(tree) {
       if (k === "wrap") assert.equal(v, "truncate-end");
       if (k === "hotkey") assert.match(v, /^[a-z0-9]$/);
       if (k === "isInteractive") assert.equal(v, true, "Svg isInteractive must be `true` or absent");
+      if (k === "variant") assert.ok(["primary", "secondary"].includes(v), "Button variant is primary or secondary");
+      if (k === "size") assert.ok(["caption", "footnote", "body", "heading", "title"].includes(v));
+      if (k === "weight") assert.ok(["regular", "medium", "semibold", "bold"].includes(v));
+      if (k === "color") assert.doesNotMatch(String(v), /^#/, "no fixed hex: the host's theme decides");
+      assert.notEqual(v, undefined, `${node.type} prop ${k} is undefined`);
     }
     if (node.type === "Svg") {
       assert.ok(node.props.alt, "Svg needs alt");
@@ -91,7 +92,8 @@ function textOf(node) {
   if (typeof node === "string" || typeof node === "number") return String(node);
   if (Array.isArray(node)) return node.map(textOf).join("");
   if (node.type === "Svg") return node.props.alt;
-  if (node.type === "Button") return node.props.label;
+  if (node.type === "Button" || node.type === "Link") return node.props.label;
+  if (node.type === "Markdown") return node.props.text;
   if (node.type === "Box" && node.props.flexDirection === "column") {
     return [node.props.children].flat(Infinity).map(textOf).filter(Boolean).join("\n");
   }
@@ -136,37 +138,12 @@ test("format helpers", () => {
   assert.equal(ageOf(3 * 3600_000), "3h");
   assert.equal(ageOf(72 * 3600_000), "3d");
   assert.equal(clockOf(75 * 60_000), "1:15");
-  assert.equal(dialOf(0), "○");
-  assert.equal(dialOf(60), "◑");
-  assert.equal(dialOf(100), "●");
-  assert.equal(barOf(50, 10), "━━━━━┄┄┄┄┄");
-  assert.equal(sparklineOf([0, 4, 8], 8), "▁▅█");
-  assert.equal(sparklineOf([0, 0], 8), "▁▁");
-  assert.equal(relPathOf("C:\\repo\\src\\a.mjs", "C:\\repo"), "src/a.mjs");
-  assert.equal(relPathOf("/elsewhere/a.mjs", "/repo"), "/elsewhere/a.mjs");
   assert.equal(handoffMsOf({ when: { date: "2026-05-12", time: "14:20" } }), new Date(2026, 4, 12, 14, 20).getTime());
   assert.equal(handoffMsOf({ when: {} }), null);
   const lines = wrapLines("one two three four five six", 9, 2);
   assert.equal(lines.length, 2);
   assert.ok(lines[1].endsWith("…"));
   assert.ok(lines.every((l) => l.length <= 9));
-});
-
-test("fitSegments drops lowest priority first and keeps order", () => {
-  const segs = [
-    { text: "aaaa", priority: 3 },
-    { text: "bbbb", priority: 1 },
-    { text: "cccc", priority: 9 },
-  ];
-  assert.deepEqual(
-    fitSegments(segs, 10).map((s) => s.text),
-    ["aaaa", "cccc"],
-  );
-  assert.deepEqual(
-    fitSegments(segs, 4).map((s) => s.text),
-    ["cccc"],
-  );
-  assert.equal(fitSegments(segs, 100).length, 3);
 });
 
 test("mentalCommandOf reads MCP, Bash, npx and node cli calls", () => {
@@ -260,45 +237,53 @@ test("session stats and band state priority", () => {
   noteEdit(t, "");
   noteTurnComplete(t);
   assert.equal(t.edits, 3);
-  assert.deepEqual(t.perTurn, [3]);
-  assert.equal(t.editsThisTurn, 0);
-  assert.deepEqual(topFiles(t, 1), [{ path: "a.mjs", count: 2 }]);
+  assert.equal(t.files.size, 2);
+  assert.equal(t.turns, 1);
+  for (let i = 0; i < 12; i++) noteReceipt(t, { glyph: "◆", label: "Parked", title: `t${i}`, at: i });
+  assert.equal(t.log.length, 8, "activity log keeps the last 8");
 });
 
-test("bandView: valid props, fits width, covers every state", () => {
+test("renderBand: one tree for terminal and Desktop, every state", () => {
   const vm = viewModelOf(heartbeat(), NOW);
   const cases = [
     [null, newSession(NOW)],
     [{ linked: false }, newSession(NOW)],
     [vm, newSession(NOW)],
     [{ ...vm, handoffAge: 1000 }, newSession(NOW)],
-    [vm, { ...newSession(NOW), working: true, perTurn: [1, 3, 0], turns: 3 }],
+    [vm, { ...newSession(NOW), working: true, turns: 3 }],
     [vm, { ...newSession(NOW), edits: 40 }],
     [vm, { ...newSession(NOW), compacting: true }],
     [vm, { ...newSession(NOW), receipt: { kind: "note", label: "Note", tone: "green", glyph: "○", title: "x", at: NOW } }],
   ];
-  for (const [v, s] of cases) {
-    for (const columns of [24, 80, 200]) {
-      const tree = bandView(el, { vm: v, s, now: NOW, columns, maxRows: 2, frame: 1 });
-      assertValidTree(tree);
-      const rows = textOf(tree).split("\n").filter(Boolean);
-      assert.ok(rows.length >= 1 && rows.length <= 2);
-      if (columns >= 80) for (const row of rows) assert.ok(row.length <= columns, `row too wide: ${row}`);
+  for (const look of [{ rich: false }, { rich: true, typography: true }]) {
+    for (const [v, s] of cases) {
+      for (const columns of [24, 80, 200]) {
+        const tree = renderBand(el, bandModelOf({ vm: v, s, now: NOW }), {}, { ...look, columns, maxRows: 2, frame: 1 });
+        assertValidTree(tree);
+        const rows = textOf(tree).split("\n").filter(Boolean);
+        assert.ok(rows.length >= 1 && rows.length <= 2);
+        if (columns >= 80) for (const row of rows) assert.ok(row.length <= columns, `row too wide: ${row}`);
+      }
     }
   }
-  const calm = textOf(bandView(el, { vm, s: newSession(NOW), now: NOW, columns: 120 }));
-  assert.match(calm, /◆ mental/);
+  const calm = textOf(renderBand(el, bandModelOf({ vm, s: newSession(NOW), now: NOW }), {}, { columns: 120 }));
+  assert.match(calm, /Mental/);
   assert.match(calm, /Wire the band into session\.start/);
-  assert.match(calm, /\/mental/);
-  const one = bandView(el, { vm, s: newSession(NOW), now: NOW, columns: 120, maxRows: 1 });
+  assert.match(calm, /2 need you/, "the band counts what needs you");
+  const one = renderBand(el, bandModelOf({ vm, s: newSession(NOW), now: NOW }), {}, { columns: 120, maxRows: 1 });
   assert.equal(textOf(one).split("\n").filter(Boolean).length, 1);
+  let svgs = 0;
+  walk(renderBand(el, bandModelOf({ vm, s: newSession(NOW), now: NOW }), {}, { columns: 120 }), (n) => n.type === "Svg" && svgs++);
+  assert.equal(svgs, 0, "the terminal band draws no Svg");
 });
-
-test("paneView: every tab draws valid props with keyed buttons", () => {
+test("renderPane: one tree for every surface, resume and needs above the fold", () => {
   const vm = viewModelOf(
     heartbeat({
-      needsEyes: [{ title: "Check the docked width" }],
-      needsEyesCount: 1,
+      attention: [
+        { title: "Check the docked width", kind: "verify", status: "open", path: "attention/w.md" },
+        { title: "Verify docked pane at 110 cols", kind: "thread", status: "open", path: "attention/p.md" },
+      ],
+      attentionCount: 2,
       track: { enabled: true, runningCount: 1, focusedId: "t", running: [{ id: "t", started: new Date(NOW - 3600_000).toISOString() }], unclocked: true },
     }),
     NOW,
@@ -307,50 +292,88 @@ test("paneView: every tab draws valid props with keyed buttons", () => {
   noteEdit(s, "C:/repo/claude-mod/a.mjs");
   noteTurnComplete(s);
   noteContext(s, { percent: 42 });
-  let tabbed = null;
-  for (const t of TABS) {
-    const tree = paneView(el, {
-      vm,
-      s,
-      now: NOW,
-      columns: 100,
-      rows: 20,
-      tab: t.id,
-      updatedAt: NOW - 5000,
-      cwd: "C:/repo",
-      onTab: (id) => (tabbed = id),
-      onPark() {},
-      onHandoff() {},
-      onRefresh() {},
-    });
+  const pressed = [];
+  const on = {
+    onPark: () => pressed.push("park"),
+    onHandoff: () => pressed.push("handoff"),
+    onAskNeeds: () => pressed.push("ask"),
+    onOpenItem: (path) => pressed.push(`open:${path}`),
+    onBrowse: (type) => pressed.push(`browse:${type}`),
+    onRefresh: () => pressed.push("refresh"),
+    onTrackStart: () => pressed.push("start"),
+    onTrackStop: () => pressed.push("stop"),
+  };
+  const model = paneModelOf({ vm, s, now: NOW, updatedAt: NOW - 5000 });
+  for (const look of [{ rich: false, typography: false, columns: 100 }, { rich: true, typography: true, columns: 48 }]) {
+    const tree = renderPane(el, model, on, look);
     const keys = assertValidTree(tree);
-    for (const k of ["park", "handoff", "refresh", ...TABS.map((x) => `tab-${x.id}`)]) assert.ok(keys.has(k), k);
-    assert.ok(textOf(tree).split("\n").filter(Boolean).length <= 20 + 2);
+    for (const k of ["park", "handoff", "refresh", "need-0", "need-1", "needs-ask", "browse-journal", "browse-decision", "track-stop"]) assert.ok(keys.has(k), k);
+    const text = textOf(tree);
+    const order = ["PICK UP HERE", "Wire the band", "Park", "NEED YOU", "Needs eyes: Check the docked width", "THIS SESSION", "TIME", "READ IN MENTAL"].map((x) => text.indexOf(x));
+    assert.ok(order.every((i, n) => i >= 0 && (n === 0 || i > order[n - 1])), `sections in order: ${order}`);
+    assert.match(text, /Clock running · 1:00/);
+    assert.match(text, /1 turn · 1 file edited · context 42%/);
+    assert.doesNotMatch(text, /more\b.*\+|\+\d+ more/, "the pane scrolls; nothing is cut to +N more");
+    let svgs = 0;
+    let typed = 0;
+    walk(tree, (n) => {
+      if (n.type === "Svg") svgs++;
+      if ("size" in n.props || "weight" in n.props || "variant" in n.props) typed++;
+    });
+    assert.equal(svgs, look.rich ? 1 : 0, "one logo accent on rich hosts, none in the terminal");
+    assert.equal(typed > 0, look.typography, "size/weight/variant only where the host draws them");
   }
-  const now = textOf(paneView(el, { vm, s, now: NOW, columns: 100, rows: 30, tab: "now", updatedAt: NOW, onTab() {}, onPark() {}, onHandoff() {}, onRefresh() {} }));
-  assert.match(now, /RESUME/);
-  assert.match(now, /NEEDS EYES/);
-  assert.match(now, /feat\/panel/);
-  const session = textOf(paneView(el, { vm, s, now: NOW, columns: 100, rows: 30, tab: "session", updatedAt: NOW, cwd: "C:/repo", onTab() {}, onPark() {}, onHandoff() {}, onRefresh() {} }));
-  assert.match(session, /claude-mod\/a\.mjs/);
-  const time = textOf(paneView(el, { vm, s, now: NOW, columns: 100, rows: 30, tab: "time", updatedAt: NOW, onTab() {}, onPark() {}, onHandoff() {}, onRefresh() {} }));
-  assert.match(time, /1:00/);
+  const tree = renderPane(el, model, on, { columns: 100 });
+  for (const key of ["need-0", "needs-ask", "browse-decision", "park", "track-stop"]) {
+    walk(tree, (n) => n.type === "Button" && n.props.key === key && n.props.onPress());
+  }
+  assert.deepEqual(pressed, ["open:attention/w.md", "ask", "browse:Decision", "park", "stop"]);
 
-  const tree = paneView(el, { vm, s, now: NOW, columns: 100, rows: 20, tab: "now", updatedAt: NOW, onTab: (id) => (tabbed = id), onPark() {}, onHandoff() {}, onRefresh() {} });
-  let pressed = false;
-  walk(tree, (n) => {
-    if (!pressed && n.type === "Button" && n.props.key === "tab-decisions") {
-      n.props.onPress();
-      pressed = true;
-    }
-  });
-  assert.equal(tabbed, "decisions");
+  const typed = renderPane(el, model, on, { typography: true });
+  let primary = "";
+  walk(typed, (n) => n.type === "Button" && n.props.variant === "primary" && (primary = n.props.key));
+  assert.equal(primary, "park", "Park is the primary action at rest");
+  const full = newSession(NOW);
+  noteContext(full, { percent: 90 });
+  let urgent = "";
+  walk(renderPane(el, paneModelOf({ vm, s: full, now: NOW }), on, { typography: true }), (n) => n.type === "Button" && n.props.variant === "primary" && (urgent = n.props.key));
+  assert.equal(urgent, "handoff", "near the context limit, Hand off leads");
 
   for (const v of [null, { linked: false }]) {
-    assertValidTree(paneView(el, { vm: v, s, now: NOW, columns: 60, rows: 10, tab: "now", updatedAt: null, onTab() {}, onPark() {}, onHandoff() {}, onRefresh() {} }));
+    const t = renderPane(el, paneModelOf({ vm: v, s, now: NOW, error: "mental: not found" }), on, { columns: 60 });
+    assertValidTree(t);
+    assert.match(textOf(t), /mental: not found/, "the real error, in full");
   }
 });
 
+test("renderRoute: Markdown where the host has it, plain lines before 2.1.299", () => {
+  const route = { view: "item", path: "decisions/2026-05-01-a.md", status: "ok", doc: { frontmatter: { type: "Decision", title: "Use SQLite", status: "accepted" }, body: "# Why\r\n\n- fast\u0007\n", backlinks: ["x"] } };
+  const on = { onBack() {}, onOpenItem() {} };
+  const rich = renderRoute(el, route, on, { typography: true });
+  assertValidTree(rich);
+  let md;
+  walk(rich, (n) => n.type === "Markdown" && (md = n.props.text));
+  assert.equal(md, "# Why\n\n- fast\n", "control characters other than tab and newline are dropped");
+  const plain = renderRoute(el, route, on, {});
+  assertValidTree(plain);
+  let any = false;
+  walk(plain, (n) => n.type === "Markdown" && (any = true));
+  assert.ok(!any);
+  assert.match(textOf(plain), /• fast/);
+  assert.match(textOf(plain), /Decision · accepted · 2026-05-01/);
+  const list = renderRoute(el, { view: "list", type: "Attention", status: "ok", total: 1, items: [{ path: "a.md", title: "One", status: "open" }] }, on, {});
+  assert.ok(assertValidTree(list).has("open-0"));
+  assert.match(textOf(list), /Threads/);
+});
+
+test("versionAtLeast gates the typography props", () => {
+  assert.ok(versionAtLeast("2.1.312", "2.1.299"));
+  assert.ok(versionAtLeast("2.1.299", "2.1.299"));
+  assert.ok(versionAtLeast("2.2.0", "2.1.299"));
+  assert.ok(!versionAtLeast("2.1.298", "2.1.299"));
+  assert.ok(!versionAtLeast("2.1.290-dev.20260920.t1.sha1", "2.1.299"));
+  assert.ok(!versionAtLeast("", "2.1.299"));
+});
 test("heartbeat argv and stdout parsing", () => {
   assert.deepEqual(heartbeatArgvs("/p/mental/")[0], ["node", "/p/mental/bin/cli.mjs", "heartbeat", "--json", "--passive"]);
   assert.equal(heartbeatArgvs("")[0][0], "mental");
@@ -360,7 +383,7 @@ test("heartbeat argv and stdout parsing", () => {
 });
 
 /** A fake engine: collects hooks, records `$` calls, runs timers by hand. */
-function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dashId = null, submitFails = false, openFails = false } = {}) {
+function fakeEngine({ hb = heartbeat(), fail = false, surfaces, version, store = {}, dashId = null, submitFails = false, openFails = false } = {}) {
   const hooks = [];
   const calls = [];
   const timers = [];
@@ -372,7 +395,7 @@ function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dash
   register(on);
   const $ = {
     plugin: { root: "/plugins/mental" },
-    ...(surfaces ? { session: { surfaces: async () => surfaces } } : {}),
+    ...(surfaces ? { session: { surfaces: async () => surfaces, ...(version ? { version: async () => ({ version }) } : {}) } } : {}),
     clock: {
       after: (ms, fn) => {
         const t = { ms, fn, once: true, cancelled: false, cancel: () => (t.cancelled = true) };
@@ -479,7 +502,8 @@ test("register wires session.start, band, pane, receipts and cleanup", async () 
 
   const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "terminal", props: { bodyColumns: 100, scroll: { bodyRows: 16 } } });
   assertValidTree(pane);
-  assert.match(textOf(pane), /OPEN · 1/, "stored tab (decisions) restored");
+  assert.match(textOf(pane), /PICK UP HERE/);
+  assert.match(textOf(pane), /Open decision: Band height: 2 rows/, "decisions are in Needs you");
 
   const narrow = await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: true, columns: 90 } });
   assert.ok(eng.calls.some((c) => c[0] === "close"), "second /mental closes the pane");
@@ -544,27 +568,23 @@ test("Claude Desktop: footer opener, rich card pane, silent /mental, remembered 
   await eng.fire("tool.call", { tool: "Edit", file_path: "/repo/a.mjs" }, { text: "ok" });
   const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48, scroll: { bodyRows: 40 } } });
   const paneKeys = assertValidTree(pane);
-  assert.ok(paneKeys.has("park-btn") && paneKeys.has("handoff-btn") && paneKeys.has("refresh-btn"));
-  assert.match(textOf(pane), /save my place/, "each button says what it does");
-  assert.ok(paneKeys.has("needs-ask-btn"), "needs card comes with an ask button");
+  assert.ok(paneKeys.has("park") && paneKeys.has("handoff") && paneKeys.has("refresh"));
+  assert.match(textOf(pane), /Park saves where you are/, "the actions say what they do");
+  assert.ok(paneKeys.has("needs-ask"), "needs come with an ask button");
   const svgs = [];
   walk(pane, (n) => n.type === "Svg" && svgs.push(n));
-  assert.ok(svgs.length >= 4, "hero, session, needs, files cards");
-  assert.match(textOf(pane), /Wire the band/, "resume point in the hero");
-  assert.match(svgs.map((x) => x.props.source).join(""), /a\.mjs/, "touched file shows up");
+  assert.equal(svgs.length, 1, "native elements; the logo is the one Svg");
+  assert.equal(svgs[0].props.isInteractive, undefined, "image mode keeps the logo");
+  assert.match(textOf(pane), /Wire the band/, "resume point first");
+  assert.match(textOf(pane), /1 file edited/, "this session in one line");
   assert.ok(paneKeys.has("dashboard"), "dashboard button lives in the pane");
+  assert.match(textOf(pane), /Start the dashboard/, "dashboard probe reads stopped");
   assert.ok(!paneKeys.has("track-start"), "no clock buttons when tracking is off");
-  assert.match(svgs.map((x) => x.props.source).join(""), /Not running/, "dashboard probe reads stopped");
-  for (const x of svgs) {
-    assert.equal(x.props.isInteractive, undefined, "image mode keeps the logo");
-    assert.equal(typeof x.props.width, "number");
-    assert.equal(x.props.height, undefined, "height left to the slot so cards keep their ratio");
-  }
 
   // Park sends a real message; if the host refuses, it falls back to filling the prompt.
   let park;
   walk(pane, (n) => {
-    if (n.type === "Button" && n.props.key === "park-btn") park = n.props.onPress;
+    if (n.type === "Button" && n.props.key === "park") park = n.props.onPress;
   });
   park();
   await eng.flush();
@@ -586,11 +606,8 @@ test("Claude Desktop: footer opener, rich card pane, silent /mental, remembered 
   assert.equal(started[2].cwd, "/repo");
   assert.ok(eng.timers.some((t) => t.once && t.ms === 2500), "re-probes while it starts");
   const starting = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
-  let label = "";
-  walk(starting, (n) => {
-    if (n.type === "Button" && n.props.key === "dashboard") label = n.props.label;
-  });
-  assert.match(label, /Starting/);
+  assert.match(textOf(starting), /Starting the dashboard/);
+  assert.ok(!assertValidTree(starting).has("dashboard"), "no second start while it warms up");
 
   // /mental on Desktop toggles silently (no chat text).
   const hidden = await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
@@ -624,20 +641,17 @@ test("Claude Desktop: clock buttons and an already-serving dashboard", async () 
   await eng.flush();
   const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
   const keys = assertValidTree(pane);
-  assert.ok(keys.has("track-stop-btn") && !keys.has("track-start-btn"), "running clock offers stop");
-  const sources = [];
-  walk(pane, (n) => n.type === "Svg" && sources.push(n.props.source));
-  assert.match(sources.join(""), /Clock running/);
-  assert.match(sources.join(""), /Serving/);
+  assert.ok(keys.has("track-stop") && !keys.has("track-start"), "running clock offers stop");
+  assert.match(textOf(pane), /Clock running/);
   const presses = {};
   walk(pane, (n) => n.type === "Button" && (presses[n.props.key] = n.props));
   let link;
   walk(pane, (n) => n.type === "Link" && (link = n.props));
   assert.equal(link?.href, "http://localhost:3847/#/today?p=mental", "a running dashboard opens through a native Link");
-  assert.match(link.label, /Open dashboard/);
+  assert.match(link.label, /Open the dashboard/);
   assert.ok(!presses.dashboard, "no process round trip to open it");
   assert.ok(!eng.calls.some((c) => c[0] === "run" && c[1][2] === "start"), "never starts a second server");
-  presses["track-stop-btn"].onPress();
+  presses["track-stop"].onPress();
   await eng.flush();
   assert.ok(eng.calls.some((c) => c[0] === "submit" && /Stop the Mental time clock/.test(c[1].text)));
 
@@ -649,7 +663,7 @@ test("Claude Desktop: clock buttons and an already-serving dashboard", async () 
   await eng2.flush();
   const pane2 = await eng2.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
   let stop2;
-  walk(pane2, (n) => n.type === "Button" && n.props.key === "track-stop-btn" && (stop2 = n.props.onPress));
+  walk(pane2, (n) => n.type === "Button" && n.props.key === "track-stop" && (stop2 = n.props.onPress));
   stop2();
   await eng2.flush();
   await eng2.flush();
@@ -669,17 +683,16 @@ test("Claude Desktop: 'needs you' opens the pane and lights the needs card", asy
   assert.ok(eng.calls.some((c) => c[0] === "open"), "opens the pane when closed");
   assert.ok(eng.calls.some((c) => c[0] === "toast" && /Needs you/.test(c[1])), "toast names the items");
   const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
-  const sources = [];
-  walk(pane, (n) => n.type === "Svg" && sources.push(n.props.source));
-  assert.match(sources.join(""), /<animate attributeName="stroke-opacity"/, "needs card pulses");
-  assert.match(sources[1], /needs you/i, "needs card sits right under the hero");
-  // Already open: pressing again flashes without closing.
+  const keys = assertValidTree(pane);
+  assert.ok(keys.has("need-0") && keys.has("need-1"), "one button per item");
+  assert.match(textOf(pane), /Needs eyes: Verify docked pane at 110 cols/);
+  // Already open: pressing again keeps it open.
   needs();
   await eng.flush();
   assert.ok(!eng.calls.some((c) => c[0] === "close"));
 });
 
-test("Claude Desktop: open pane ticks live, shows the refresh dial, stops on close", async () => {
+test("Claude Desktop: open pane re-reads Mental on a beat, never repaints idle, stops on close", async () => {
   const eng = fakeEngine({ surfaces: ["desktop"] });
   await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
   await eng.flush();
@@ -691,10 +704,8 @@ test("Claude Desktop: open pane ticks live, shows the refresh dial, stops on clo
   const live = eng.timers.find((t) => !t.once && t.ms === 5000);
   assert.ok(live && !live.cancelled, "5s live tick starts with the pane");
   const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
-  const src = [];
-  walk(pane, (n) => n.type === "Svg" && src.push(n.props.source));
-  assert.match(src.join(""), /<animate/, "cards animate");
-  assert.match(src[0], /live/i, "hero foot shows the live state");
+  walk(pane, (n) => n.type === "Svg" && assert.doesNotMatch(n.props.source, /<animate/, "no endless animation"));
+  assert.match(textOf(pane), /Updated just now/);
   const before = eng.calls.filter((c) => c[0] === "invalidate").length;
   live.fn();
   await eng.flush();
@@ -733,16 +744,16 @@ test("Claude Desktop: browse Decisions, open an item, go Back", async () => {
   press(await paneOf(), "browse-decision");
   await eng.flush();
   let tree = assertValidTreeKeys(await paneOf());
-  assert.ok(tree.keys.has("back") && tree.keys.has("open-0-btn"), "list shows Back and rows");
+  assert.ok(tree.keys.has("back") && tree.keys.has("open-0"), "list shows Back and rows");
   assert.match(textOf(tree.node), /Use SQLite/);
-  press(tree.node, "open-0-btn");
+  press(tree.node, "open-0");
   await eng.flush();
   tree = assertValidTreeKeys(await paneOf());
   assert.match(textOf(tree.node), /fast/, "item body is readable");
   press(tree.node, "back");
   await eng.flush();
   tree = assertValidTreeKeys(await paneOf());
-  assert.ok(tree.keys.has("open-0-btn"), "Back returns to the list");
+  assert.ok(tree.keys.has("open-0"), "Back returns to the list");
   press(tree.node, "back");
   await eng.flush();
   tree = assertValidTreeKeys(await paneOf());
@@ -771,7 +782,6 @@ test("Claude Desktop: Hide drops the concern from the footer only, and it is rem
 });
 
 test("markdownLines turns notes into readable lines", async () => {
-  const { markdownLines } = await import("../claude-mod/lib/desktop.mjs");
   const lines = markdownLines("# Title\n\n- **bold** item\n\n\n\nSee [link](http://x) and `code`.");
   assert.equal(lines[0].bold, true);
   assert.ok(lines.some((l) => l.text.startsWith("•") && !l.text.includes("**")));
@@ -812,38 +822,10 @@ test("Claude Desktop: no dashboard running → the button starts one, once", asy
   assert.ok(eng.calls.some((c) => c[0] === "run" && c[1][2] === "probe" && c[1].length === 3), "probe takes no port: it reads the port file first");
 });
 
-test("desktop cards escape text and stay under the Svg cap", async () => {
-  const { esc, heroSvg, sessionSvg, filesSvg, activitySvg, guardrailsSvg, needsSvg, trackSvg, dashSvg, SVG_MAX } = await import("../claude-mod/lib/desktop.mjs");
-  const { noteReceipt, newSession } = await import("../claude-mod/lib/model.mjs");
-  assert.equal(esc(`<a href="x">&'`), "&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
-  const s = newSession(0);
-  for (let i = 0; i < 12; i++) noteReceipt(s, { glyph: "◆", label: "Parked", title: `t${i}`, at: i });
-  assert.equal(s.log.length, 8, "activity log keeps the last 8");
-  for (let i = 0; i < 400; i++) s.files.set(`/repo/src/${"x".repeat(60)}${i}.mjs`, 1);
-  const vm = { linked: true, resume: "<script>alert(1)</script>".repeat(40), attention: [], decisions: [], needsEyes: [], guardrails: [] };
-  const width = 420;
-  const cards = [
-    heroSvg({ vm, s, now: 10, width }),
-    sessionSvg({ s, now: 10, width }),
-    filesSvg({ s, cwd: "/repo", width }),
-    activitySvg({ log: s.log, now: 10, width }),
-    guardrailsSvg({ vm, width }),
-    needsSvg({ vm, now: 10, width }),
-    trackSvg({ vm: { ...vm, track: { runningCount: 3, staleCount: 1, unclocked: false, startedAt: 0, stale: false } }, now: 7_200_000, width }),
-    dashSvg({ width, dash: { state: "running", url: "http://localhost:3847/<x>" } }),
-    dashSvg({ width, dash: { state: "stopped" } }),
-  ].filter(Boolean);
-  assert.ok(cards.some((c) => /3 clocks running/.test(c.source)), "track card renders");
-  assert.ok(cards.some((c) => /&lt;x&gt;/.test(c.source)), "dashboard url escaped");
-  for (const c of cards) {
-    assert.ok(c.source.length <= SVG_MAX);
-    assert.doesNotMatch(c.source, /<script/);
-  }
-});
-
 test("toolCardOf reads mental shell calls and themes the chat row", async () => {
   const { toolCardOf } = await import("../claude-mod/lib/toolcard.mjs");
-  const { toolRowDesktop, themed } = await import("../claude-mod/lib/desktop.mjs");
+  const { toolRowDesktop, themed, esc } = await import("../claude-mod/lib/desktop.mjs");
+  assert.equal(esc(`<a href="x">&'`), "&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
   assert.equal(toolCardOf({ tool: "Bash", input: { command: "ls -la" }, output: "x" }), null);
   assert.equal(toolCardOf({ tool: "Bash", input: null, output: null }), null);
   assert.equal(toolCardOf({ tool: "Write", input: { command: "mental park" }, output: "ok" }), null, "only shell tools run mental");
@@ -858,6 +840,7 @@ test("toolCardOf reads mental shell calls and themes the chat row", async () => 
   const row = toolRowDesktop({ Svg: el("Svg"), Box: el("Box") }, { model: { ...park, title: "<b>&" }, theme: "auto" });
   const svg = row.props.children[0].props;
   assert.match(svg.source, /prefers-color-scheme:light/);
+  assert.doesNotMatch(svg.source, /<animate/, "no endless animation in the chat row");
   assert.doesNotMatch(svg.source, /<b>/);
   assert.ok(svg.source.length <= 131072);
   assert.ok(typeof themed === "function");
@@ -880,7 +863,7 @@ test("register degrades when heartbeat cannot run", async () => {
   await eng.flush();
   assert.equal(eng.calls.filter((c) => c[0] === "run").length, 1, "the plugin's own CLI only: no slow PATH fallbacks");
   const band = await eng.fire("ui.render", { component: "AbovePrompt", surface: "terminal", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } });
-  assert.match(textOf(band), /not linked here/);
+  assert.match(textOf(band), /Can't read Mental: ENOENT/, "the band says why, not 'not linked'");
   await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
   const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "terminal", props: { bodyColumns: 100, scroll: { bodyRows: 16 } } });
   assert.match(textOf(pane), /ENOENT/, "shows the real error");
@@ -933,7 +916,6 @@ test("register: gating hooks pass through when they fail, and presses never reje
 });
 
 test("needsOf: verify items once, counts from heartbeat, keyed on path", async () => {
-  const { needsOf, visibleNeedsOf } = await import("../claude-mod/lib/desktop.mjs");
   const verify = { title: "Check the pane", kind: "verify", status: "open", path: "attention/v.md" };
   const vm = viewModelOf(
     heartbeat({
@@ -957,26 +939,61 @@ test("needsOf: verify items once, counts from heartbeat, keyed on path", async (
   assert.equal(shown.total, 10);
 });
 
-test("theme: terminal and native Desktop text never use a fixed hex", async () => {
-  const { C } = await import("../claude-mod/lib/views.mjs");
-  const { nativeTone, T } = await import("../claude-mod/lib/desktop.mjs");
-  for (const v of Object.values(C)) assert.doesNotMatch(v, /^#/);
-  assert.deepEqual(nativeTone(T.amber), { color: "yellow" });
-  assert.deepEqual(nativeTone(T.ink), {});
-  assert.deepEqual(nativeTone(T.ink3), { dimColor: true });
+test("theme: no fixed hex on any surface; tones are colour names", async () => {
   const s = newSession(NOW);
   const vm = viewModelOf(heartbeat(), NOW);
-  const trees = [
-    bandView(el, { vm, s, now: NOW, columns: 120, maxRows: 2 }),
-    ...TABS.map((t) => paneView(el, { vm, s, now: NOW, columns: 100, rows: 30, tab: t.id, updatedAt: NOW, onTab() {}, onPark() {}, onHandoff() {}, onRefresh() {} })),
-  ];
+  const on = { onPark() {}, onHandoff() {}, onAskNeeds() {}, onOpenItem() {}, onBrowse() {}, onRefresh() {} };
+  const trees = [];
+  for (const look of [{}, { rich: true, typography: true }]) {
+    trees.push(renderBand(el, bandModelOf({ vm, s, now: NOW }), {}, { ...look, columns: 120 }));
+    trees.push(renderPane(el, paneModelOf({ vm, s, now: NOW }), on, look));
+  }
   const engine = fakeEngine({ surfaces: ["desktop"] });
   await engine.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
   await engine.flush();
-  trees.push(await engine.fire("ui.render", { component: "AbovePrompt", surface: "desktop", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } }));
+  trees.push(await engine.fire("ui.render", { component: "SessionMode", surface: "desktop", props: { modes: [] } }));
+  const colors = new Set();
   for (const tree of trees) {
-    walk(tree, (n) => {
-      if (n.type === "Text" && "color" in n.props) assert.doesNotMatch(String(n.props.color), /^#/, `Text color ${n.props.color}`);
-    });
+    assertValidTree(tree);
+    walk(tree, (n) => n.type === "Text" && n.props.color && colors.add(n.props.color));
   }
+  for (const c of colors) assert.ok(["magenta", "green", "cyan", "yellow", "red"].includes(c), `colour name ${c}`);
+});
+
+test("Claude Desktop 2.1.299+: typography and a primary Park; older builds draw plain", async () => {
+  for (const [version, typed] of [["2.1.312", true], ["2.1.290", false]]) {
+    const eng = fakeEngine({ surfaces: ["desktop"], version });
+    await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+    await eng.flush();
+    await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
+    await eng.flush();
+    const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
+    assertValidTree(pane);
+    let variant = "";
+    let weights = 0;
+    walk(pane, (n) => {
+      if (n.type === "Button" && n.props.key === "park" && n.props.variant) variant = n.props.variant;
+      if ("weight" in n.props) weights++;
+    });
+    assert.equal(variant, typed ? "primary" : "", version);
+    assert.equal(weights > 0, typed, version);
+  }
+});
+
+test("terminal: Park fills the prompt; Browse opens the same list view as Desktop", async () => {
+  const eng = fakeEngine();
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: true, columns: 160 } });
+  const paneOf = () => eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "terminal", props: { bodyColumns: 100, scroll: { bodyRows: 16 } } });
+  const press = (tree, key) => walk(tree, (n) => n.type === "Button" && n.props.key === key && n.props.onPress());
+  press(await paneOf(), "park");
+  await eng.flush();
+  assert.ok(eng.calls.some((c) => c[0] === "fill" && /Park this session/.test(c[1].text)));
+  assert.ok(!eng.calls.some((c) => c[0] === "submit"), "the terminal never sends on the person's behalf");
+  press(await paneOf(), "browse-decision");
+  await eng.flush();
+  const list = await paneOf();
+  assertValidTree(list);
+  assert.match(textOf(list), /Use SQLite/);
 });

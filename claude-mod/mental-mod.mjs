@@ -1,12 +1,12 @@
 /**
  * Mental for Claude Code — the in-session panel (Claude Code mods, 2.1.287+).
  *
- * Draws a two-row band above the prompt (resume point, live session pulse,
- * residue counts, context dial, receipts when Mental writes) and a `/mental`
- * pane with Now / Residue / Decisions / Session / Time tabs. On Claude Desktop
- * (and other surfaces that draw `Svg`) the pane is a column of rich cards and a
- * persistent Mental button sits in the prompt footer, and cards can be opened
- * to read journals, decisions and notes (read-only `mental list` / `mental show`).
+ * Draws a band above the prompt (status, resume point, what needs you, a
+ * receipt when Mental writes) and a `/mental` pane: where to pick up, Park and
+ * Hand off, what needs you, this session, the clock, and read-only browsing of
+ * journals, decisions and notes (`mental list` / `mental show`). Every surface
+ * draws the same native tree (`lib/views.mjs` over `lib/model.mjs`); Claude
+ * Desktop adds the logo and a Mental button in the prompt footer.
  * It reads the thread through `mental heartbeat --json --passive` and never
  * writes itself: Park and Hand off send a prompt (Desktop) or fill it (terminal)
  * so the agent records them through the skill. Hide only silences the footer.
@@ -15,20 +15,24 @@
  */
 
 import {
+  bandModelOf,
   isWriteCommand,
   mentalCommandOf,
+  needsOf,
   newSession,
   noteContext,
   noteEdit,
   noteReceipt,
   noteTurnComplete,
+  paneModelOf,
   receiptOf,
   viewModelOf,
+  visibleNeedsOf,
   EDIT_TOOLS,
   RECEIPT_MS,
 } from "./lib/model.mjs";
-import { bandView, paneView, TABS } from "./lib/views.mjs";
-import { bandDesktop, footerDesktop, needsOf, paneDesktop, toolRowDesktop, visibleNeedsOf } from "./lib/desktop.mjs";
+import { renderBand, renderFooter, renderPane, renderRoute } from "./lib/views.mjs";
+import { toolRowDesktop } from "./lib/desktop.mjs";
 import { toolCardOf } from "./lib/toolcard.mjs";
 
 const PANE_ID = "mental";
@@ -46,14 +50,10 @@ const FRAME_MS = 600;
 // While the pane is open: redraw this often (clocks, "ago"), re-read Mental this often.
 const LIVE_MS = 5_000;
 const REFRESH_MS = 20_000;
-// Cards animate in for this long after the pane opens, then hold still between redraws.
-const INTRO_MS = 1_600;
 const HEARTBEAT_TIMEOUT_MS = 10_000;
-const STORE_TAB_KEY = "tab";
 const STORE_OPEN_KEY = "open";
 const STORE_DISMISSED_KEY = "dismissed";
 const REOPEN_MS = 800;
-const NEEDS_FLASH_MS = 7000;
 const PARK_PROMPT = "Park this session in Mental";
 const HANDOFF_PROMPT = "Hand off this session in Mental";
 const TRACK_START_PROMPT = "Start the Mental time clock for this work";
@@ -63,6 +63,10 @@ const NEEDS_PROMPT =
 const DASH_TIMEOUT_MS = 8_000;
 const DASH_RECHECK_MS = 2_500;
 const DASH_STARTING_MS = 20_000;
+
+// `Text` size/weight, `Button` variant and `Markdown` draw from this release;
+// on an older one a tree that sets them does not draw at all.
+const TYPOGRAPHY_SINCE = "2.1.299";
 
 const COMMAND_SPEC = {
   name: "mental",
@@ -101,6 +105,20 @@ function firstLineOf(text) {
       .map((l) => l.trim())
       .find(Boolean) || ""
   );
+}
+
+/**
+ * True when `version` (as `claude --version` prints it) is `min` or later.
+ * @param {string} version
+ * @param {string} min
+ */
+export function versionAtLeast(version, min) {
+  const parse = (v) => (String(v).match(/^(\d+)\.(\d+)\.(\d+)/) || []).slice(1).map(Number);
+  const a = parse(version);
+  const b = parse(min);
+  if (a.length !== 3) return false;
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] > b[i];
+  return true;
 }
 
 /** @param {string} root */
@@ -168,12 +186,11 @@ export const register = (on) => {
   let vm = null;
   let updatedAt = null;
   let error = "";
-  let tab = "now";
   let isPaneOpen = false;
   let isFullscreen = false;
   let isRich = false;
+  let typography = false;
   let bandSeen = false;
-  let flashUntil = 0;
   /** @type {string | null} */
   let projectId = null;
   /** @type {{ state: "running" | "starting" | "stopped" | "unknown", url: string, since: number }} */
@@ -421,7 +438,7 @@ export const register = (on) => {
 
   function setWorking(isWorking) {
     s.working = isWorking;
-    // Rich surfaces animate in SVG; rebuilding their frames each tick would flicker.
+    // Only the terminal band breathes; a Desktop redraw every tick would fight scrolling.
     if (isWorking && !breath && host && !isRich) {
       breath = host.every(FRAME_MS, () => {
         frame += 1;
@@ -557,10 +574,9 @@ export const register = (on) => {
     }
   }
 
-  /** The band's "needs you": always bring the pane up, and light the card. */
+  /** The band's "needs you": always bring the pane up, and name what is waiting. */
   async function showNeeds() {
     if (!host) return;
-    flashUntil = nowOf() + NEEDS_FLASH_MS;
     clearRoute();
     if (!isPaneOpen) {
       isFullscreen = true;
@@ -572,7 +588,6 @@ export const register = (on) => {
       host.toast(`Needs you: ${shown.map((x) => `${x.label} — ${x.title}`).join(" · ")}${total > shown.length ? ` · +${total - shown.length} more` : ""}`);
     }
     redraw();
-    host.after(NEEDS_FLASH_MS, () => redraw());
   }
 
   on("session.start", async ($, e, next) => {
@@ -592,10 +607,10 @@ export const register = (on) => {
     root = typeof $.plugin.root === "string" ? $.plugin.root : "";
     s = newSession(nowOf());
     try {
-      const saved = await $.store.get(STORE_TAB_KEY);
-      if (typeof saved === "string" && TABS.some((t) => t.id === saved)) tab = saved;
+      const v = await $.session.version();
+      typography = versionAtLeast(v?.version || "", TYPOGRAPHY_SINCE);
     } catch {
-      /* no store */
+      /* older build: plain text styles */
     }
     try {
       await $.command.register(COMMAND_SPEC);
@@ -632,20 +647,17 @@ export const register = (on) => {
   on("ui.render", { component: "SessionMode" }, async ($, e, next) => {
     if (!host || !RICH_SURFACES.includes(e.surface)) return next(e);
     noteSurface(e.surface);
-    const { Box, Text, Button, Svg } = await $.ui.resolve(e);
-    return footerDesktop(
-      { Box, Text, Button, Svg },
+    const E = await $.ui.resolve(e);
+    return renderFooter(
+      E,
       {
-        vm,
-        s,
-        now: nowOf(),
+        band: bandModelOf({ vm, s, now: nowOf(), dismissed, error }),
         isOpen: isPaneOpen,
         bandSeen,
-        dismissed,
-        onDismiss: () => dismissNeeds(),
         modes: Array.isArray(e.props.modes) ? e.props.modes : [],
-        onToggle: safely(togglePane),
       },
+      { onToggle: safely(togglePane), onDismiss: () => dismissNeeds() },
+      { rich: true, typography },
     );
   });
 
@@ -656,34 +668,13 @@ export const register = (on) => {
     // or every render invalidates and the next render repeats it.
     const working = !!e.props.isWorking;
     if (working !== s.working) setWorking(working);
-    if (isRich) {
-      bandSeen = true;
-      const { Box, Text, Button, Svg } = await $.ui.resolve(e);
-      return bandDesktop(
-        { Box, Text, Button, Svg },
-        {
-          vm,
-          s,
-          now: nowOf(),
-          columns: e.props.bodyColumns,
-          maxRows: Math.min(2, e.props.maxRows || 2),
-          onNeeds: safely(showNeeds),
-          dismissed,
-          onDismiss: () => dismissNeeds(),
-        },
-      );
-    }
-    const { Box, Text, Button } = await $.ui.resolve(e);
-    return bandView(
-      { Box, Text, Button },
-      {
-        vm,
-        s,
-        now: nowOf(),
-        columns: e.props.bodyColumns,
-        maxRows: Math.min(2, e.props.maxRows || 2),
-        frame,
-      },
+    if (isRich) bandSeen = true;
+    const E = await $.ui.resolve(e);
+    return renderBand(
+      E,
+      bandModelOf({ vm, s, now: nowOf(), dismissed: isRich ? dismissed : undefined, error }),
+      isRich ? { onNeeds: safely(showNeeds), onDismiss: () => dismissNeeds() } : {},
+      { rich: isRich, typography, columns: e.props.bodyColumns, maxRows: Math.min(2, e.props.maxRows || 2), frame },
     );
   });
 
@@ -706,63 +697,31 @@ export const register = (on) => {
   on("ui.render", { component: "Pane" }, async ($, e, next) => {
     if (e.requestId !== PANE_ID || !host) return next(e);
     noteSurface(e.surface);
-    if (isRich) {
-      const { Box, Text, Button, Svg, Link } = await $.ui.resolve(e);
-      return paneDesktop(
-        { Box, Text, Button, Svg, Link },
-        {
-          vm,
-          s,
-          now: nowOf(),
-          columns: e.props.bodyColumns,
-          updatedAt,
-          nextAt: Math.max(lastTryAt, openedAt) + REFRESH_MS,
-          intro: nowOf() - openedAt < INTRO_MS && !route,
-          cwd,
-          log: s.log,
-          error,
-          dash: { ...dash, href: dash.state === "running" ? dashHrefOf(dash.url, projectId) : "" },
-          flash: nowOf() < flashUntil,
-          route,
-          onOpen: (path) => safely(() => go({ view: "item", path, crumb: "Mental" }))(),
-          onOpenItem: (path, title) => safely(() => go({ view: "item", path, title, crumb: route?.view === "list" ? `Mental › ${route.type}` : "Mental" }))(),
-          onBrowse: (type) => safely(() => go({ view: "list", type }))(),
-          onBack: () => goBack(),
-          onPark: safely(() => send(PARK_PROMPT, "Asking Claude to park this session…")),
-          onHandoff: safely(() => send(HANDOFF_PROMPT, "Asking Claude to write the hand-off…")),
-          onAskNeeds: safely(() => send(NEEDS_PROMPT, "Asking Claude what needs you…")),
-          onRefresh: () => {
-            host.toast("Refreshing…");
-            void refresh();
-          },
-          onTrackStart: safely(() => send(TRACK_START_PROMPT, "Asking Claude to start the clock…")),
-          onTrackStop: safely(() => send(TRACK_STOP_PROMPT, "Asking Claude to stop the clock…")),
-          onDashboard: safely(onDashboard),
-        },
-      );
-    }
-    const { Box, Text, Button } = await $.ui.resolve(e);
-    return paneView(
-      { Box, Text, Button },
+    const E = await $.ui.resolve(e);
+    const look = { rich: isRich, typography, columns: e.props.bodyColumns };
+    const openItem = (path, title) =>
+      safely(() => go({ view: "item", path, title, crumb: route?.view === "list" ? `Mental › ${route.type}` : "Mental" }))();
+    if (route) return renderRoute(E, route, { onBack: () => goBack(), onOpenItem: openItem }, look);
+    // Desktop sends the request as a turn; the terminal fills the prompt so the person sends it.
+    const ask = (text, toast) => (isRich ? safely(() => send(text, toast)) : safely(() => fill(text)));
+    return renderPane(
+      E,
+      paneModelOf({ vm, s, now: nowOf(), error, updatedAt }),
       {
-        vm,
-        s,
-        now: nowOf(),
-        columns: e.props.bodyColumns,
-        rows: e.props.scroll?.bodyRows,
-        tab,
-        updatedAt,
-        error,
-        cwd,
-        onTab: (id) => {
-          tab = id;
-          void host.storeSet(STORE_TAB_KEY, id).catch(() => undefined);
-          redraw();
+        onPark: ask(PARK_PROMPT, "Asking Claude to park this session…"),
+        onHandoff: ask(HANDOFF_PROMPT, "Asking Claude to write the hand-off…"),
+        onAskNeeds: ask(NEEDS_PROMPT, "Asking Claude what needs you…"),
+        onOpenItem: openItem,
+        onBrowse: (type) => safely(() => go({ view: "list", type }))(),
+        onRefresh: () => {
+          host.toast("Refreshing…");
+          void refresh();
         },
-        onPark: safely(() => fill(PARK_PROMPT)),
-        onHandoff: safely(() => fill(HANDOFF_PROMPT)),
-        onRefresh: () => void refresh(),
+        onTrackStart: ask(TRACK_START_PROMPT, "Asking Claude to start the clock…"),
+        onTrackStop: ask(TRACK_STOP_PROMPT, "Asking Claude to stop the clock…"),
+        ...(isRich ? { onDashboard: safely(onDashboard) } : {}),
       },
+      { ...look, dash: isRich ? { state: dash.state, href: dash.state === "running" ? dashHrefOf(dash.url, projectId) : "" } : null },
     );
   });
 

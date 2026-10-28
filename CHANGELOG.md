@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The Mental panel in Claude Desktop and Claude Code is redesigned around what you need next. The top of the pane is where to pick up, Park and Hand off (Hand off leads when the context is nearly full), and what needs you as one button per item that opens it. Below are this session in one line, the clock, recent receipts, and Journal, Decisions, Notes and Threads to read in the panel. The terminal and Desktop now draw the same native panel instead of separate tab and card designs, the terminal pane scrolls instead of cutting to "+N more", and the terminal can browse and open entries too. Desktop uses the host's own text sizes, a primary button and Markdown on Claude Code 2.1.299 or later, keeps the logo as the only image, and drops the stat cards and looping animations.
+- When Mental cannot be read, the band says why instead of "Not linked here".
+
 ### Fixed
 - The Claude panel kept working after `/clear`, `/resume` or `/branch` only until then: those commands end the conversation, not the session, and the panel stopped its refresh timer. It now starts a fresh session view and keeps refreshing.
 - A commit message, `echo` or heredoc that mentioned `mental park` or `mental decide` no longer shows a false "Parked" or "Decision" receipt or resets the edit count. Only a real `mental …` call at the start of a command (or after `&&`, `;`, `|`) counts, and the inline chat card appears only on shell tool rows.
