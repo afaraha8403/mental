@@ -19,20 +19,25 @@ import {
 } from "./format.mjs";
 import { bandStateOf, pressureReasonOf, topFiles } from "./model.mjs";
 
-/** Dashboard palette (dark). */
+/**
+ * Terminal palette. Accents are ANSI color names, which the terminal maps to
+ * its own light or dark theme; `""` leaves text the terminal's own color and
+ * `"dim"` draws it with `dimColor`. Never a fixed hex: on a light terminal a
+ * near-white ink vanishes.
+ */
 export const C = {
-  violet: "#a78bfa",
-  violetDeep: "#8b5cf6",
-  sky: "#38bdf8",
-  amber: "#f59e0b",
-  green: "#10b981",
-  purple: "#a855f7",
-  rose: "#e11d48",
-  zinc: "#71717a",
-  ink: "#ededf0",
-  ink2: "#a1a1aa",
-  ink3: "#6e6e78",
-  rule: "#3f3f46",
+  violet: "magenta",
+  violetDeep: "magenta",
+  sky: "cyan",
+  amber: "yellow",
+  green: "green",
+  purple: "magenta",
+  rose: "red",
+  zinc: "dim",
+  ink: "",
+  ink2: "dim",
+  ink3: "dim",
+  rule: "dim",
 };
 
 const TONE = { violet: C.violet, purple: C.purple, sky: C.sky, amber: C.amber, green: C.green, zinc: C.ink2 };
@@ -53,7 +58,8 @@ export const TABS = [
 
 /** @param {Elements} el */
 function span(el, color, children, extra = {}) {
-  return el.Text({ color, ...extra, children });
+  const tone = color === "dim" ? { dimColor: true } : color ? { color } : {};
+  return el.Text({ ...tone, ...extra, children });
 }
 
 /** @param {Elements} el */
@@ -356,7 +362,7 @@ export function paneView(el, input) {
         vm?.linked ? span(el, C.ink, `  ${clip(vm.id, Math.max(6, width - 34))}`, { bold: true }) : null,
         vm?.linked && vm.branch ? span(el, C.ink3, `  ⎇ ${clip(vm.branch, 18)}`) : null,
       ]),
-      span(el, error ? C.rose : C.ink3, error ? "△ heartbeat failed" : updated),
+      span(el, error ? C.rose : C.ink3, error ? `△ ${clip(error, Math.max(12, width - 30))}` : updated),
     ],
   });
 

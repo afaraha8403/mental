@@ -176,3 +176,22 @@ export function wrapLines(value, width, maxLines = Infinity) {
 export function plural(n, one, many) {
   return `${n} ${n === 1 ? one : many || `${one}s`}`;
 }
+
+/**
+ * The text of a tool result: a string, or the first string field of an
+ * object (`stdout`, `text`, …), else its JSON.
+ * @param {unknown} v
+ */
+export function textOf(v) {
+  if (typeof v === "string") return v;
+  if (!v || typeof v !== "object") return "";
+  const o = /** @type {any} */ (v);
+  for (const k of ["stdout", "text", "output", "content", "result"]) {
+    if (typeof o[k] === "string") return o[k];
+  }
+  try {
+    return JSON.stringify(v);
+  } catch {
+    return "";
+  }
+}

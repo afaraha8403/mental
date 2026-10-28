@@ -38,7 +38,8 @@ const DOCK_MIN_COLUMNS = 110;
 // a Desktop build that raises it too gets the rich band).
 const BAND_SURFACES = ["terminal", "desktop"];
 // Surfaces that draw `Svg`, so they get the rich cards instead of text rows.
-const RICH_SURFACES = ["desktop", "vscode", "mobile"];
+// `mobile` is left alone: the host draws its own.
+const RICH_SURFACES = ["desktop", "vscode"];
 const DEBOUNCE_MS = 15_000;
 const POLL_MS = 60_000;
 const FRAME_MS = 600;
@@ -47,7 +48,7 @@ const LIVE_MS = 5_000;
 const REFRESH_MS = 20_000;
 // Cards animate in for this long after the pane opens, then hold still between redraws.
 const INTRO_MS = 1_600;
-const HEARTBEAT_TIMEOUT_MS = 20_000;
+const HEARTBEAT_TIMEOUT_MS = 10_000;
 const STORE_TAB_KEY = "tab";
 const STORE_OPEN_KEY = "open";
 const STORE_DISMISSED_KEY = "dismissed";
@@ -59,8 +60,6 @@ const TRACK_START_PROMPT = "Start the Mental time clock for this work";
 const TRACK_STOP_PROMPT = "Stop the Mental time clock";
 const NEEDS_PROMPT =
   "In Mental, list everything that needs me right now (open threads, concerns, decisions). Walk me through them one at a time and help me settle each.";
-const DASH_PORT = 3847;
-const DASH_URL = `http://localhost:${DASH_PORT}/`;
 const DASH_TIMEOUT_MS = 8_000;
 const DASH_RECHECK_MS = 2_500;
 const DASH_STARTING_MS = 20_000;
@@ -83,12 +82,25 @@ export function heartbeatOf(stdout) {
   }
 }
 
-/** @param {string} root @param {string[]} tail */
+/**
+ * Launchers for a Mental command. The plugin ships the CLI (no dependencies),
+ * so with a plugin root only that runs; without one, the global install.
+ * @param {string} root
+ * @param {string[]} tail
+ */
 export function cliArgvs(root, tail) {
-  const out = [];
-  if (root) out.push(["node", `${String(root).replace(/[\\/]+$/, "")}/bin/cli.mjs`, ...tail]);
-  out.push(["mental", ...tail], ["mental.cmd", ...tail]);
-  return out;
+  if (root) return [["node", `${String(root).replace(/[\\/]+$/, "")}/bin/cli.mjs`, ...tail]];
+  return [["mental", ...tail], ["mental.cmd", ...tail]];
+}
+
+/** The first non-empty line of process output. */
+function firstLineOf(text) {
+  return (
+    String(text || "")
+      .split("\n")
+      .map((l) => l.trim())
+      .find(Boolean) || ""
+  );
 }
 
 /** @param {string} root */
@@ -107,17 +119,26 @@ export function dashArgv(root, args) {
 }
 
 /**
- * What the probe says about port 3847 for this project.
+ * What `dash.mjs probe` found: any running dashboard serves every project.
  * @param {{ exitCode: number, stdout: string } | null} r
- * @param {string | null} projectId
- * @returns {"running" | "other" | "stopped"}
+ * @returns {{ state: "running" | "stopped", url: string }}
  */
-export function dashStateOf(r, projectId) {
-  if (!r || r.exitCode !== 0) return "stopped";
-  const got = heartbeatOf(r.stdout);
-  if (!got || got.serving !== true) return "stopped";
-  if (projectId && got.id && got.id !== projectId) return "other";
-  return "running";
+export function dashProbeOf(r) {
+  const got = r && r.exitCode === 0 ? heartbeatOf(r.stdout) : null;
+  if (!got || got.serving !== true || typeof got.url !== "string") return { state: "stopped", url: "" };
+  return { state: "running", url: got.url };
+}
+
+/**
+ * The browser address of this project's Today view on a running dashboard.
+ * Spelled with `localhost`, the only `http:` host a Desktop `Link` opens.
+ * @param {string} url the dashboard root, e.g. `http://127.0.0.1:3847/`
+ * @param {string | null} projectId
+ */
+export function dashHrefOf(url, projectId) {
+  if (!url) return "";
+  const base = url.replace(/^http:\/\/(?:127\.0\.0\.1|\[::1\])(?=[:/])/, "http://localhost");
+  return projectId ? `${base}#/today?p=${encodeURIComponent(projectId)}` : base;
 }
 
 /**
@@ -155,8 +176,8 @@ export const register = (on) => {
   let flashUntil = 0;
   /** @type {string | null} */
   let projectId = null;
-  /** @type {{ state: "running" | "starting" | "stopped" | "other" | "unknown", url: string, since: number }} */
-  let dash = { state: "unknown", url: DASH_URL, since: 0 };
+  /** @type {{ state: "running" | "starting" | "stopped" | "unknown", url: string, since: number }} */
+  let dash = { state: "unknown", url: "", since: 0 };
   let frame = 0;
   let inFlight = false;
   let queued = false;
@@ -191,6 +212,21 @@ export const register = (on) => {
     }
   }
 
+  /** A press handler that never leaves a rejection behind: a failure becomes a toast. */
+  function safely(task) {
+    return () => {
+      Promise.resolve()
+        .then(task)
+        .catch((err) => {
+          try {
+            host?.toast(`Mental: ${err instanceof Error ? err.message : String(err)}`);
+          } catch {
+            /* the session may be gone */
+          }
+        });
+    };
+  }
+
   async function runHeartbeat() {
     let lastError = "";
     for (const argv of heartbeatArgvs(root)) {
@@ -198,13 +234,14 @@ export const register = (on) => {
         const init = cwd ? { cwd, timeoutMs: HEARTBEAT_TIMEOUT_MS } : { timeoutMs: HEARTBEAT_TIMEOUT_MS };
         const r = await host.run(argv, init);
         const hb = heartbeatOf(r.stdout);
+        if (hb?.ok === false) return { hb: null, error: String(hb.error?.message || hb.error?.code || "Mental reported an error") };
         if (hb) return { hb, error: "" };
-        lastError = (r.stderr || "").trim().split("\n")[0] || `exit ${r.exitCode}`;
+        lastError = firstLineOf(r.stderr) || firstLineOf(r.stdout) || `mental exited with code ${r.exitCode}`;
       } catch (err) {
         lastError = err instanceof Error ? err.message : String(err);
       }
     }
-    return { hb: null, error: lastError || "heartbeat failed" };
+    return { hb: null, error: lastError || "Mental did not answer" };
   }
 
   async function refresh() {
@@ -257,8 +294,8 @@ export const register = (on) => {
   /** Forget hidden needs that are gone, so a concern that comes back shows again. */
   function pruneDismissed() {
     if (!dismissed.size || !vm?.linked) return;
-    const live = new Set(needsOf(vm).items.map((x) => x.key));
-    const kept = [...dismissed].filter((k) => live.has(k));
+    const listed = new Set(needsOf(vm).items.map((x) => x.key));
+    const kept = [...dismissed].filter((k) => listed.has(k));
     if (kept.length === dismissed.size) return;
     dismissed = new Set(kept);
     void host?.storeSet(STORE_DISMISSED_KEY, kept).catch(() => undefined);
@@ -267,7 +304,7 @@ export const register = (on) => {
   /** Hide what the footer and band show now. The panel and Mental keep everything. */
   function dismissNeeds() {
     if (!host || !vm?.linked) return;
-    const keys = visibleNeedsOf(vm, dismissed).map((x) => x.key);
+    const keys = visibleNeedsOf(vm, dismissed).items.map((x) => x.key);
     if (!keys.length) return;
     dismissed = new Set([...dismissed, ...keys]);
     void host.storeSet(STORE_DISMISSED_KEY, [...dismissed]).catch(() => undefined);
@@ -294,7 +331,7 @@ export const register = (on) => {
   /** Show a list or an entry in the pane, remembering where we came from. */
   async function go(next) {
     if (!host) return;
-    if (route) nav.push({ ...route, crumb: route.crumb });
+    if (route) nav.push(route);
     const seq = ++routeSeq;
     route = { ...next, status: "loading" };
     redraw();
@@ -330,13 +367,16 @@ export const register = (on) => {
 
   async function probeDash() {
     if (!root) return;
-    const next = dashStateOf(await runDash(["probe", String(DASH_PORT)]), projectId);
+    const next = dashProbeOf(await runDash(["probe"]));
     // While a launch is warming up, "stopped" just means "not yet".
-    if (dash.state === "starting" && next === "stopped" && nowOf() - dash.since < DASH_STARTING_MS) return;
-    dash = { state: next, url: DASH_URL, since: nowOf() };
+    if (dash.state === "starting" && next.state === "stopped" && nowOf() - dash.since < DASH_STARTING_MS) return;
+    dash = { ...next, since: nowOf() };
   }
 
-  /** Open the dashboard if this project's is serving; otherwise start one (it opens the browser). */
+  /**
+   * Open a running dashboard (any project's: it serves them all), or start
+   * one when none runs. Where a `Link` is drawn, it opens a running one itself.
+   */
   async function onDashboard() {
     if (!host) return;
     if (!root) {
@@ -346,8 +386,9 @@ export const register = (on) => {
     if (dash.state === "starting") return;
     await probeDash();
     if (dash.state === "running") {
-      const r = await runDash(["open", dash.url]);
-      if (!r || r.exitCode !== 0) host.toast(`Open ${dash.url} in your browser`);
+      const href = dashHrefOf(dash.url, projectId);
+      const r = await runDash(["open", href]);
+      if (!r || r.exitCode !== 0) host.toast(`Open ${href} in your browser`);
       redraw();
       return;
     }
@@ -356,7 +397,7 @@ export const register = (on) => {
       host.toast("Couldn't start the dashboard — run `mental dashboard` in a terminal");
       return;
     }
-    dash = { state: "starting", url: DASH_URL, since: nowOf() };
+    dash = { state: "starting", url: "", since: nowOf() };
     host.toast("Starting the Mental dashboard — it opens in your browser");
     redraw();
     const recheck = () =>
@@ -406,7 +447,12 @@ export const register = (on) => {
       ? { id: PANE_ID, title: PANE_TITLE, holdToasts: true, closeOnEscape: true, rows: 18, focus: true }
       : { id: PANE_ID, title: PANE_TITLE, holdToasts: true };
     /** @type {any} */
-    const opened = await host.open(args);
+    let opened;
+    try {
+      opened = await host.open(args);
+    } catch {
+      return false;
+    }
     if (opened && typeof opened === "object" && opened.isPlaced === false) {
       await host.close({ id: PANE_ID }).catch(() => undefined);
       return false;
@@ -460,6 +506,20 @@ export const register = (on) => {
     if (!ok) host.toast("Claude couldn't place the Mental panel — widen the window and try again");
   }
 
+  /** A fresh conversation after `/clear`, `/resume` or `/branch`: same timers, new stats. */
+  function restartSession() {
+    resetSession();
+    clearRoute();
+    if (host && !poll) poll = host.every(POLL_MS, () => void refresh());
+    void refresh();
+  }
+
+  /** The session is really over: stop every timer. */
+  function teardown() {
+    for (const t of [debounce, poll, breath, receiptTimer, live]) t?.cancel();
+    debounce = poll = breath = receiptTimer = live = null;
+  }
+
   /** Read once per draw: the surface tells us whether Svg cards are available. */
   function noteSurface(surface) {
     if (!isRich && RICH_SURFACES.includes(surface)) {
@@ -506,9 +566,10 @@ export const register = (on) => {
       isFullscreen = true;
       await openPane();
     }
-    const { items } = needsOf(vm);
+    const { items, total } = needsOf(vm);
     if (items.length) {
-      host.toast(`Needs you: ${items.slice(0, 2).map((x) => `${x.label} — ${x.title}`).join(" · ")}${items.length > 2 ? ` · +${items.length - 2} more` : ""}`);
+      const shown = items.slice(0, 2);
+      host.toast(`Needs you: ${shown.map((x) => `${x.label} — ${x.title}`).join(" · ")}${total > shown.length ? ` · +${total - shown.length} more` : ""}`);
     }
     redraw();
     host.after(NEEDS_FLASH_MS, () => redraw());
@@ -542,7 +603,7 @@ export const register = (on) => {
       /* a built-in or another plugin holds /mental; the band still works */
     }
     poll?.cancel();
-    poll = $.clock.every(POLL_MS, () => void refresh());
+    poll = host.every(POLL_MS, () => void refresh());
     void refresh();
     try {
       const got = await $.session.surfaces();
@@ -583,7 +644,7 @@ export const register = (on) => {
         dismissed,
         onDismiss: () => dismissNeeds(),
         modes: Array.isArray(e.props.modes) ? e.props.modes : [],
-        onToggle: () => void togglePane(),
+        onToggle: safely(togglePane),
       },
     );
   });
@@ -606,7 +667,7 @@ export const register = (on) => {
           now: nowOf(),
           columns: e.props.bodyColumns,
           maxRows: Math.min(2, e.props.maxRows || 2),
-          onNeeds: () => void showNeeds(),
+          onNeeds: safely(showNeeds),
           dismissed,
           onDismiss: () => dismissNeeds(),
         },
@@ -628,7 +689,10 @@ export const register = (on) => {
 
   on("ui.render", { component: "ToolUse" }, async ($, e, next) => {
     if (!RICH_SURFACES.includes(e.surface)) return next(e);
-    const model = toolCardOf({ input: e.props?.input, output: e.props?.output });
+    /** @type {any} */
+    const props = e.props;
+    // `output` is the stored result; newer builds may name it `result`.
+    const model = toolCardOf({ tool: props?.tool, input: props?.input, output: props?.result ?? props?.output });
     if (!model) return next(e);
     try {
       const { Box, Svg } = await $.ui.resolve(e);
@@ -643,38 +707,37 @@ export const register = (on) => {
     if (e.requestId !== PANE_ID || !host) return next(e);
     noteSurface(e.surface);
     if (isRich) {
-      const { Box, Text, Button, Svg } = await $.ui.resolve(e);
+      const { Box, Text, Button, Svg, Link } = await $.ui.resolve(e);
       return paneDesktop(
-        { Box, Text, Button, Svg },
+        { Box, Text, Button, Svg, Link },
         {
           vm,
           s,
           now: nowOf(),
           columns: e.props.bodyColumns,
           updatedAt,
-          refreshing: false,
           nextAt: Math.max(lastTryAt, openedAt) + REFRESH_MS,
           intro: nowOf() - openedAt < INTRO_MS && !route,
           cwd,
           log: s.log,
           error,
-          dash,
+          dash: { ...dash, href: dash.state === "running" ? dashHrefOf(dash.url, projectId) : "" },
           flash: nowOf() < flashUntil,
           route,
-          onOpen: (path) => void go({ view: "item", path, crumb: "Mental" }),
-          onOpenItem: (path, title) => void go({ view: "item", path, title, crumb: route?.view === "list" ? `Mental › ${route.type}` : "Mental" }),
-          onBrowse: (type) => void go({ view: "list", type }),
+          onOpen: (path) => safely(() => go({ view: "item", path, crumb: "Mental" }))(),
+          onOpenItem: (path, title) => safely(() => go({ view: "item", path, title, crumb: route?.view === "list" ? `Mental › ${route.type}` : "Mental" }))(),
+          onBrowse: (type) => safely(() => go({ view: "list", type }))(),
           onBack: () => goBack(),
-          onPark: () => void send(PARK_PROMPT, "Asking Claude to park this session…"),
-          onHandoff: () => void send(HANDOFF_PROMPT, "Asking Claude to write the hand-off…"),
-          onAskNeeds: () => void send(NEEDS_PROMPT, "Asking Claude what needs you…"),
+          onPark: safely(() => send(PARK_PROMPT, "Asking Claude to park this session…")),
+          onHandoff: safely(() => send(HANDOFF_PROMPT, "Asking Claude to write the hand-off…")),
+          onAskNeeds: safely(() => send(NEEDS_PROMPT, "Asking Claude what needs you…")),
           onRefresh: () => {
             host.toast("Refreshing…");
             void refresh();
           },
-          onTrackStart: () => void send(TRACK_START_PROMPT, "Asking Claude to start the clock…"),
-          onTrackStop: () => void send(TRACK_STOP_PROMPT, "Asking Claude to stop the clock…"),
-          onDashboard: () => void onDashboard(),
+          onTrackStart: safely(() => send(TRACK_START_PROMPT, "Asking Claude to start the clock…")),
+          onTrackStop: safely(() => send(TRACK_STOP_PROMPT, "Asking Claude to stop the clock…")),
+          onDashboard: safely(onDashboard),
         },
       );
     }
@@ -696,8 +759,8 @@ export const register = (on) => {
           void host.storeSet(STORE_TAB_KEY, id).catch(() => undefined);
           redraw();
         },
-        onPark: () => void fill(PARK_PROMPT),
-        onHandoff: () => void fill(HANDOFF_PROMPT),
+        onPark: safely(() => fill(PARK_PROMPT)),
+        onHandoff: safely(() => fill(HANDOFF_PROMPT)),
         onRefresh: () => void refresh(),
       },
     );
@@ -735,7 +798,7 @@ export const register = (on) => {
       };
     }
     return isFullscreen && !inDesktop ? { text: "Mental panel shown" } : {};
-  });
+  }).catch(($, e, next) => (next.called ? undefined : { text: "The Mental panel hit an error — try /mental again" }));
 
   on("ui.close", { id: PANE_ID }, async ($, e, next) => {
     const r = await next(e);
@@ -746,14 +809,7 @@ export const register = (on) => {
       redraw();
     }
     return r;
-  });
-
-  on("command.run", { command: ["clear", "resume"] }, async ($, e, next) => {
-    const r = await next(e);
-    resetSession();
-    void refresh();
-    return r;
-  });
+  }).catch(($, e, next) => next(e));
 
   on("turn.start", ($, e, next) => {
     setWorking(true);
@@ -783,7 +839,7 @@ export const register = (on) => {
       s.compacting = false;
       redraw();
     }
-  });
+  }).catch(($, e, next) => next(e));
 
   on("tool.call", async ($, e, next) => {
     const r = await next(e);
@@ -816,12 +872,13 @@ export const register = (on) => {
       /* never break a tool call over the panel */
     }
     return r;
-  });
+  }).catch(($, e, next) => next(e));
 
+  // `/clear`, `/resume` and `/branch` end the conversation, not the session:
+  // `session.start` does not fire again, so the timers must survive them.
   on("session.end", ($, e, next) => {
-    for (const t of [debounce, poll, breath, receiptTimer, live]) t?.cancel();
-    live = null;
-    debounce = poll = breath = receiptTimer = null;
+    if (e.reason === "clear" || e.reason === "resume") restartSession();
+    else teardown();
     return next(e);
   });
 };

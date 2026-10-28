@@ -36,6 +36,7 @@ const el = {
   Text: (props) => ({ type: "Text", props }),
   Button: (props) => ({ type: "Button", props }),
   Svg: (props) => ({ type: "Svg", props }),
+  Link: (props) => ({ type: "Link", props }),
 };
 
 // Mirrors BoxProps / TextProps / ButtonProps / SvgProps in the Mods types: Text and Svg take no `key`.
@@ -44,6 +45,7 @@ const ALLOWED = {
   Text: new Set(["color", "bold", "italic", "dimColor", "wrap", "children"]),
   Button: new Set(["key", "label", "hotkey", "plain", "dimColor", "onPress"]),
   Svg: new Set(["source", "alt", "width", "height", "isInteractive"]),
+  Link: new Set(["href", "label"]),
 };
 
 /** Walk a tree, asserting every prop is allowlisted and typed as the Mods API wants. */
@@ -176,6 +178,15 @@ test("mentalCommandOf reads MCP, Bash, npx and node cli calls", () => {
   assert.equal(mentalCommandOf({ tool: "PowerShell", command: "node bin/cli.mjs heartbeat --json" }), "heartbeat");
   assert.equal(mentalCommandOf({ tool: "Bash", command: "echo mentality" }), null);
   assert.equal(mentalCommandOf({ tool: "Edit", command: "mental park" }), null);
+  assert.equal(mentalCommandOf({ tool: "Bash", command: "git status; mental decide --json" }), "decide");
+  assert.equal(mentalCommandOf({ tool: "Bash", command: "MENTAL_X=1 mental attention --json" }), "attention");
+  assert.equal(mentalCommandOf({ tool: "Bash", command: "mental heartbeat --json | jq .data" }), "heartbeat");
+  assert.equal(mentalCommandOf({ tool: "PowerShell", command: "& mental.cmd park --json" }), "park");
+  // Text that merely mentions a command is not a call.
+  assert.equal(mentalCommandOf({ tool: "Bash", command: 'git commit -m "Run mental park before mental handoff"' }), null);
+  assert.equal(mentalCommandOf({ tool: "Bash", command: "echo 'then mental decide' && ls" }), null);
+  assert.equal(mentalCommandOf({ tool: "Bash", command: "git commit -m \"$(cat <<'EOF'\nfix: mental park receipts\n\nmental handoff too\nEOF\n)\"" }), null);
+  assert.equal(mentalCommandOf({ tool: "Bash", command: "grep -rn mental park src/" }), null);
   assert.ok(isWriteCommand("park"));
   assert.ok(!isWriteCommand("heartbeat"));
   assert.ok(!isWriteCommand(null));
@@ -192,6 +203,7 @@ test("receipts come from successful writes only", () => {
   assert.equal(receiptOf("decide", { text, isError: true }, NOW), null);
   assert.equal(receiptOf("decide", { text: '{"ok": false}' }, NOW), null);
   assert.equal(receiptOf("heartbeat", { text }, NOW), null);
+  assert.equal(receiptOf("decide", { result: { stdout: text, stderr: "" } }, NOW)?.title, "Use mods, not MCP", "reads `result` when `text` is absent");
 });
 
 test("viewModelOf maps heartbeat and handles unlinked folders", () => {
@@ -206,6 +218,8 @@ test("viewModelOf maps heartbeat and handles unlinked folders", () => {
   assert.equal(vm.attentionCount, 1);
   assert.equal(vm.decisionCount, 1);
   assert.equal(vm.track, null);
+  assert.equal(viewModelOf(heartbeat({ laterCount: 4 }), NOW).laterCount, 4);
+  assert.ok(!("hopsToday" in vm), "no stat dump fields");
   const tracked = viewModelOf(
     heartbeat({
       track: {
@@ -346,11 +360,15 @@ test("heartbeat argv and stdout parsing", () => {
 });
 
 /** A fake engine: collects hooks, records `$` calls, runs timers by hand. */
-function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dashId = null, submitFails = false } = {}) {
+function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dashId = null, submitFails = false, openFails = false } = {}) {
   const hooks = [];
   const calls = [];
   const timers = [];
-  const on = (event, matcher, fn) => hooks.push({ event, matcher: fn ? matcher : null, fn: fn || matcher });
+  const on = (event, matcher, fn) => {
+    const hook = { event, matcher: fn ? matcher : null, fn: fn || matcher, onError: null };
+    hooks.push(hook);
+    return { catch: (handler) => void (hook.onError = handler) };
+  };
   register(on);
   const $ = {
     plugin: { root: "/plugins/mental" },
@@ -374,7 +392,7 @@ function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dash
         if (String(argv[1]).endsWith("dash.mjs")) {
           if (argv[2] === "probe") {
             const serving = dashId != null;
-            return { exitCode: 0, stdout: JSON.stringify({ serving, id: dashId, url: "http://localhost:3847/" }), stderr: "" };
+            return { exitCode: 0, stdout: JSON.stringify({ serving, url: serving ? "http://127.0.0.1:3847/" : null }), stderr: "" };
           }
           return { exitCode: 0, stdout: "{}", stderr: "" };
         }
@@ -400,7 +418,10 @@ function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dash
     ui: {
       invalidate: () => calls.push(["invalidate"]),
       resolve: async () => el,
-      open: async (args) => calls.push(["open", args]),
+      open: async (args) => {
+        if (openFails) throw new Error("no room");
+        calls.push(["open", args]);
+      },
       close: async (args) => calls.push(["close", args]),
       toast: (text) => calls.push(["toast", text]),
     },
@@ -426,7 +447,8 @@ function fakeEngine({ hb = heartbeat(), fail = false, surfaces, store = {}, dash
     return run(0, e);
   }
   const flush = () => new Promise((r) => setTimeout(r, 0));
-  return { hooks, calls, timers, fire, flush };
+  const catchesOf = (event) => hooks.filter((h) => h.event === event).map((h) => h.onError);
+  return { hooks, calls, timers, fire, flush, catchesOf };
 }
 
 test("register wires session.start, band, pane, receipts and cleanup", async () => {
@@ -473,7 +495,7 @@ test("register wires session.start, band, pane, receipts and cleanup", async () 
   assert.match(textOf(after), /Handed off › Test on 2\.1\.287/);
   assert.ok(eng.timers.some((t) => t.once && t.ms === 1500), "refreshes soon after a write");
 
-  await eng.fire("session.end", {});
+  await eng.fire("session.end", { reason: "prompt_input_exit" });
   assert.ok(eng.timers.filter((t) => !t.once).every((t) => t.cancelled), "intervals cancelled at session end");
 });
 
@@ -609,12 +631,11 @@ test("Claude Desktop: clock buttons and an already-serving dashboard", async () 
   assert.match(sources.join(""), /Serving/);
   const presses = {};
   walk(pane, (n) => n.type === "Button" && (presses[n.props.key] = n.props));
-  assert.match(presses.dashboard.label, /Open dashboard/);
-  presses.dashboard.onPress();
-  await eng.flush();
-  await eng.flush();
-  const opened = eng.calls.find((c) => c[0] === "run" && c[1][2] === "open");
-  assert.deepEqual(opened[1].slice(1), ["/plugins/mental/claude-mod/dash.mjs", "open", "http://localhost:3847/"]);
+  let link;
+  walk(pane, (n) => n.type === "Link" && (link = n.props));
+  assert.equal(link?.href, "http://localhost:3847/#/today?p=mental", "a running dashboard opens through a native Link");
+  assert.match(link.label, /Open dashboard/);
+  assert.ok(!presses.dashboard, "no process round trip to open it");
   assert.ok(!eng.calls.some((c) => c[0] === "run" && c[1][2] === "start"), "never starts a second server");
   presses["track-stop-btn"].onPress();
   await eng.flush();
@@ -758,14 +779,37 @@ test("markdownLines turns notes into readable lines", async () => {
   assert.ok(lines.filter((l) => l.text === "").length <= 2, "blank runs collapse");
 });
 
-test("dashStateOf tells this project's dashboard from another's", async () => {
-  const { dashStateOf } = await import("../claude-mod/mental-mod.mjs");
+test("dashboard probe and link: any running dashboard serves this project", async () => {
+  const { dashProbeOf, dashHrefOf } = await import("../claude-mod/mental-mod.mjs");
   const ok = (body) => ({ exitCode: 0, stdout: JSON.stringify(body) });
-  assert.equal(dashStateOf(null, "a"), "stopped");
-  assert.equal(dashStateOf({ exitCode: 1, stdout: "" }, "a"), "stopped");
-  assert.equal(dashStateOf(ok({ serving: false }), "a"), "stopped");
-  assert.equal(dashStateOf(ok({ serving: true, id: "a" }), "a"), "running");
-  assert.equal(dashStateOf(ok({ serving: true, id: "b" }), "a"), "other");
+  assert.deepEqual(dashProbeOf(null), { state: "stopped", url: "" });
+  assert.deepEqual(dashProbeOf({ exitCode: 1, stdout: "" }), { state: "stopped", url: "" });
+  assert.deepEqual(dashProbeOf(ok({ serving: false, url: null })), { state: "stopped", url: "" });
+  assert.deepEqual(dashProbeOf(ok({ serving: true, url: "http://127.0.0.1:51234/" })), { state: "running", url: "http://127.0.0.1:51234/" });
+  const href = dashHrefOf("http://127.0.0.1:51234/", "0b9d-4c");
+  assert.equal(href, "http://localhost:51234/#/today?p=0b9d-4c", "Desktop Link only opens http://localhost");
+  assert.equal(new URL(href).href, href, "spelled as URL normalises it");
+  assert.equal(dashHrefOf("http://[::1]:3847/", null), "http://localhost:3847/");
+  assert.equal(dashHrefOf("", "x"), "");
+});
+
+test("Claude Desktop: no dashboard running → the button starts one, once", async () => {
+  const eng = fakeEngine({ surfaces: ["desktop"] });
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
+  await eng.flush();
+  await eng.flush();
+  const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "desktop", props: { bodyColumns: 48 } });
+  let start;
+  walk(pane, (n) => n.type === "Button" && n.props.key === "dashboard" && (start = n.props.onPress));
+  start();
+  for (let i = 0; i < 4; i++) await eng.flush();
+  start();
+  for (let i = 0; i < 4; i++) await eng.flush();
+  const starts = eng.calls.filter((c) => c[0] === "run" && c[1][2] === "start");
+  assert.equal(starts.length, 1, "a second press while starting does not spawn another server");
+  assert.ok(eng.calls.some((c) => c[0] === "run" && c[1][2] === "probe" && c[1].length === 3), "probe takes no port: it reads the port file first");
 });
 
 test("desktop cards escape text and stay under the Svg cap", async () => {
@@ -787,7 +831,7 @@ test("desktop cards escape text and stay under the Svg cap", async () => {
     needsSvg({ vm, now: 10, width }),
     trackSvg({ vm: { ...vm, track: { runningCount: 3, staleCount: 1, unclocked: false, startedAt: 0, stale: false } }, now: 7_200_000, width }),
     dashSvg({ width, dash: { state: "running", url: "http://localhost:3847/<x>" } }),
-    dashSvg({ width, dash: { state: "other" } }),
+    dashSvg({ width, dash: { state: "stopped" } }),
   ].filter(Boolean);
   assert.ok(cards.some((c) => /3 clocks running/.test(c.source)), "track card renders");
   assert.ok(cards.some((c) => /&lt;x&gt;/.test(c.source)), "dashboard url escaped");
@@ -800,13 +844,16 @@ test("desktop cards escape text and stay under the Svg cap", async () => {
 test("toolCardOf reads mental shell calls and themes the chat row", async () => {
   const { toolCardOf } = await import("../claude-mod/lib/toolcard.mjs");
   const { toolRowDesktop, themed } = await import("../claude-mod/lib/desktop.mjs");
-  assert.equal(toolCardOf({ input: { command: "ls -la" }, output: "x" }), null);
-  assert.equal(toolCardOf({ input: null, output: null }), null);
-  const park = toolCardOf({ input: { command: 'mental park --title "Ship <it>"' }, output: "ok" });
+  assert.equal(toolCardOf({ tool: "Bash", input: { command: "ls -la" }, output: "x" }), null);
+  assert.equal(toolCardOf({ tool: "Bash", input: null, output: null }), null);
+  assert.equal(toolCardOf({ tool: "Write", input: { command: "mental park" }, output: "ok" }), null, "only shell tools run mental");
+  assert.equal(toolCardOf({ input: { command: "mental park" }, output: "ok" }), null, "no tool name, no card");
+  assert.equal(toolCardOf({ tool: "Bash", input: { command: 'git commit -m "mental park"' }, output: "ok" }), null);
+  const park = toolCardOf({ tool: "Bash", input: { command: 'mental park --title "Ship <it>"' }, output: "ok" });
   assert.equal(park?.state, "done");
   assert.ok(park?.title);
-  assert.equal(toolCardOf({ input: { command: 'mental park --title "x"' }, output: "" })?.state, "running");
-  assert.equal(toolCardOf({ input: '{"command":"mental heartbeat --json"}', output: "" })?.kind.length > 0, true);
+  assert.equal(toolCardOf({ tool: "Bash", input: { command: 'mental park --title "x"' }, output: "" })?.state, "running");
+  assert.equal(toolCardOf({ tool: "Bash", input: '{"command":"mental heartbeat --json"}', output: "" })?.kind.length > 0, true);
   const el = (type) => (props) => ({ type, props });
   const row = toolRowDesktop({ Svg: el("Svg"), Box: el("Box") }, { model: { ...park, title: "<b>&" }, theme: "auto" });
   const svg = row.props.children[0].props;
@@ -817,9 +864,13 @@ test("toolCardOf reads mental shell calls and themes the chat row", async () => 
   const eng = fakeEngine({});
   await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
   await eng.flush();
-  const hit = await eng.fire("ui.render", { component: "ToolUse", surface: "desktop", props: { input: { command: 'mental park --title "x"' }, output: "ok" } });
-  assert.ok(hit && hit !== undefined, "mental call gets a card");
-  const miss = await eng.fire("ui.render", { component: "ToolUse", surface: "terminal", props: { input: { command: 'mental park --title "x"' }, output: "ok" } });
+  const hit = await eng.fire("ui.render", { component: "ToolUse", surface: "desktop", props: { tool: "Bash", input: { command: 'mental park --title "x"' }, output: "ok" } }, "PASSED");
+  assert.notEqual(hit, "PASSED", "mental call gets a card");
+  const viaResult = await eng.fire("ui.render", { component: "ToolUse", surface: "desktop", props: { tool: "Bash", input: { command: "mental decide --json" }, result: { stdout: '{"ok":true,"data":{"title":"Pick SQLite"}}' } } }, "PASSED");
+  assert.match(JSON.stringify(viaResult), /Pick SQLite/, "reads `result` when the row carries it");
+  const other = await eng.fire("ui.render", { component: "ToolUse", surface: "desktop", props: { tool: "Read", input: { command: "mental park" }, output: "ok" } }, "PASSED");
+  assert.equal(other, "PASSED", "other tools keep their own row");
+  const miss = await eng.fire("ui.render", { component: "ToolUse", surface: "terminal", props: { tool: "Bash", input: { command: 'mental park --title "x"' }, output: "ok" } });
   assert.ok(!miss || !JSON.stringify(miss).includes("prefers-color-scheme"), "terminal untouched");
 });
 
@@ -827,10 +878,105 @@ test("register degrades when heartbeat cannot run", async () => {
   const eng = fakeEngine({ fail: true });
   await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
   await eng.flush();
-  assert.equal(eng.calls.filter((c) => c[0] === "run").length, 3, "tries node cli, mental, mental.cmd");
+  assert.equal(eng.calls.filter((c) => c[0] === "run").length, 1, "the plugin's own CLI only: no slow PATH fallbacks");
   const band = await eng.fire("ui.render", { component: "AbovePrompt", surface: "terminal", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } });
   assert.match(textOf(band), /not linked here/);
   await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: false, columns: 80 } });
   const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "terminal", props: { bodyColumns: 100, scroll: { bodyRows: 16 } } });
-  assert.match(textOf(pane), /heartbeat failed/);
+  assert.match(textOf(pane), /ENOENT/, "shows the real error");
+});
+
+test("register: /clear and /resume keep the timers; the next poll still fires", async () => {
+  const eng = fakeEngine();
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  await eng.fire("tool.call", { tool: "Edit", file_path: "/repo/a.mjs" }, { text: "ok" });
+  for (const reason of ["clear", "resume"]) {
+    await eng.fire("session.end", { reason });
+    await eng.flush();
+    const polls = eng.timers.filter((t) => !t.once && t.ms === 60_000 && !t.cancelled);
+    assert.equal(polls.length, 1, `one live poll after /${reason}`);
+    const before = eng.calls.filter((c) => c[0] === "run").length;
+    polls[0].fn();
+    await eng.flush();
+    assert.equal(eng.calls.filter((c) => c[0] === "run").length, before + 1, `the poll re-reads Mental after /${reason}`);
+  }
+  const band = await eng.fire("ui.render", { component: "AbovePrompt", surface: "terminal", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } });
+  assert.doesNotMatch(textOf(band), /1 file/, "the new conversation starts with fresh stats");
+  await eng.fire("session.end", { reason: "logout" });
+  assert.ok(eng.timers.every((t) => t.once || t.cancelled), "a real end stops the poll");
+});
+
+test("register: gating hooks pass through when they fail, and presses never reject", async () => {
+  const eng = fakeEngine({ surfaces: ["desktop"], openFails: true });
+  for (const event of ["tool.call", "ui.close", "session.compact", "command.run"]) {
+    assert.ok(eng.catchesOf(event).every((h) => typeof h === "function"), `${event} has a .catch`);
+  }
+  const [toolCatch] = eng.catchesOf("tool.call");
+  assert.equal(await toolCatch({}, { tool: "Bash" }, Object.assign(async () => "NEXT", { called: false })), "NEXT");
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const unhandled = [];
+  const onUnhandled = (err) => unhandled.push(err);
+  process.on("unhandledRejection", onUnhandled);
+  try {
+    const footer = await eng.fire("ui.render", { component: "SessionMode", surface: "desktop", props: { modes: [] } });
+    let toggle;
+    walk(footer, (n) => n.type === "Button" && n.props.key === "mental-toggle" && (toggle = n.props.onPress));
+    toggle();
+    for (let i = 0; i < 4; i++) await eng.flush();
+  } finally {
+    process.off("unhandledRejection", onUnhandled);
+  }
+  assert.deepEqual(unhandled, [], "a host.open that throws does not reject unhandled");
+  assert.ok(eng.calls.some((c) => c[0] === "toast" && /couldn't place/i.test(c[1])), "the person hears why");
+});
+
+test("needsOf: verify items once, counts from heartbeat, keyed on path", async () => {
+  const { needsOf, visibleNeedsOf } = await import("../claude-mod/lib/desktop.mjs");
+  const verify = { title: "Check the pane", kind: "verify", status: "open", path: "attention/v.md" };
+  const vm = viewModelOf(
+    heartbeat({
+      attention: [verify, { title: "Later thing", kind: "thread", status: "later", path: "attention/l.md" }],
+      needsEyes: [verify],
+      attentionCount: 9,
+      laterCount: 1,
+      openDecisions: [{ title: "Pick a store", path: "decisions/s.md" }],
+      openDecisionCount: 3,
+    }),
+    NOW,
+  );
+  const { items, total, later } = needsOf(vm);
+  assert.equal(items.filter((x) => x.title === "Check the pane").length, 1, "a verify item is listed once");
+  assert.equal(items[0].label, "Needs eyes");
+  assert.equal(total, 8 + 3, "open attention minus later, plus decisions: not the capped list length");
+  assert.equal(later, 1);
+  assert.equal(items[0].key, "attention/v.md");
+  const shown = visibleNeedsOf(vm, new Set(["attention/v.md"]));
+  assert.equal(shown.items.length, 1);
+  assert.equal(shown.total, 10);
+});
+
+test("theme: terminal and native Desktop text never use a fixed hex", async () => {
+  const { C } = await import("../claude-mod/lib/views.mjs");
+  const { nativeTone, T } = await import("../claude-mod/lib/desktop.mjs");
+  for (const v of Object.values(C)) assert.doesNotMatch(v, /^#/);
+  assert.deepEqual(nativeTone(T.amber), { color: "yellow" });
+  assert.deepEqual(nativeTone(T.ink), {});
+  assert.deepEqual(nativeTone(T.ink3), { dimColor: true });
+  const s = newSession(NOW);
+  const vm = viewModelOf(heartbeat(), NOW);
+  const trees = [
+    bandView(el, { vm, s, now: NOW, columns: 120, maxRows: 2 }),
+    ...TABS.map((t) => paneView(el, { vm, s, now: NOW, columns: 100, rows: 30, tab: t.id, updatedAt: NOW, onTab() {}, onPark() {}, onHandoff() {}, onRefresh() {} })),
+  ];
+  const engine = fakeEngine({ surfaces: ["desktop"] });
+  await engine.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await engine.flush();
+  trees.push(await engine.fire("ui.render", { component: "AbovePrompt", surface: "desktop", props: { hasSurvey: false, isWorking: false, maxRows: 4, bodyColumns: 120 } }));
+  for (const tree of trees) {
+    walk(tree, (n) => {
+      if (n.type === "Text" && "color" in n.props) assert.doesNotMatch(String(n.props.color), /^#/, `Text color ${n.props.color}`);
+    });
+  }
 });

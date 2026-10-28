@@ -5,7 +5,7 @@
  */
 
 import { RECEIPT_KINDS, mentalCommandOf, receiptTitleOf } from "./model.mjs";
-import { oneLine } from "./format.mjs";
+import { oneLine, textOf } from "./format.mjs";
 
 const PLAIN = {
   heartbeat: "Read the thread",
@@ -14,21 +14,6 @@ const PLAIN = {
   doctor: "Checked the setup",
   dashboard: "Dashboard",
 };
-
-/** @param {unknown} v */
-function textOf(v) {
-  if (typeof v === "string") return v;
-  if (!v || typeof v !== "object") return "";
-  const o = /** @type {any} */ (v);
-  for (const k of ["stdout", "text", "output", "content", "result"]) {
-    if (typeof o[k] === "string") return o[k];
-  }
-  try {
-    return JSON.stringify(v);
-  } catch {
-    return "";
-  }
-}
 
 /** The shell command string out of a ToolUse `input` (an object, a string, or JSON text). */
 export function commandOfInput(input) {
@@ -64,12 +49,11 @@ function envelopeOf(text) {
 
 /**
  * A card model for a ToolUse of Mental, or null when the row is anything else.
- * @param {{ input?: unknown, output?: unknown }} props
+ * @param {{ tool?: string, input?: unknown, output?: unknown }} props
  * @returns {{ command: string, kind: string, tone: string, title: string, detail: string, state: "running" | "done" | "failed" } | null}
  */
 export function toolCardOf(props) {
-  const raw = commandOfInput(props?.input);
-  const command = mentalCommandOf({ tool: "Bash", command: raw });
+  const command = mentalCommandOf({ tool: props?.tool, command: commandOfInput(props?.input) });
   if (!command) return null;
   const out = textOf(props?.output);
   const env = envelopeOf(out);

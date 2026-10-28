@@ -112,6 +112,37 @@ const MAX_ITEMS = 6;
 
 const toneOf = (tone) =>
   ({ violet: T.violet2, purple: T.purple, sky: T.sky, amber: T.amber, green: T.emerald, zinc: T.ink2 })[tone];
+const NATIVE_BY_TOKEN = {
+  violet: "magenta",
+  violet2: "magenta",
+  lilac: "magenta",
+  purple: "magenta",
+  sky: "cyan",
+  amber: "yellow",
+  green: "green",
+  emerald: "green",
+  rose: "red",
+};
+
+/**
+ * Props that color a native `Text` like a card token, on any host theme. A
+ * native `Text` sits on the host's own chrome, so it never takes the cards'
+ * hex: accents become color names the host maps to its theme, greys become
+ * `dimColor`, and primary ink keeps the host's color.
+ * @param {string} hex a palette value (`T.amber`, …) or ""
+ */
+export function nativeTone(hex) {
+  if (!hex) return {};
+  for (const palette of [DARK, LIGHT]) {
+    for (const [token, value] of Object.entries(palette)) {
+      if (value !== hex) continue;
+      if (NATIVE_BY_TOKEN[token]) return { color: NATIVE_BY_TOKEN[token] };
+      return token === "ink" ? {} : { dimColor: true };
+    }
+  }
+  return { dimColor: true };
+}
+
 const KIND_LABEL = {
   thread: "Open thread",
   concern: "Concern",
@@ -182,14 +213,11 @@ export function eyebrow(x, y, label, fill = T.ink3) {
 /** Entry animation state for the card being built (set by `paneDesktop`). */
 export const FX = { intro: false, delay: 0 };
 
-/** A small dial that fills as the next refresh nears, and spins while one runs. */
-function refreshDial(cx, cy, { refreshing, now, nextAt }) {
+/** A small dial that fills as the next refresh nears. */
+function refreshDial(cx, cy, { now, nextAt }) {
   const r = 5.5;
   const c = r1(2 * Math.PI * r);
   const track = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${T.border}" stroke-width="2"/>`;
-  if (refreshing) {
-    return `${track}<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${T.violet2}" stroke-width="2" stroke-linecap="round" stroke-dasharray="${r1(c * 0.3)} ${c}"><animateTransform attributeName="transform" type="rotate" from="0 ${cx} ${cy}" to="360 ${cx} ${cy}" dur="0.8s" repeatCount="indefinite"/></circle>`;
-  }
   const left = Math.max(0.5, (nextAt - now) / 1000);
   const total = 20;
   const start = r1(c * Math.max(0, Math.min(1, 1 - left / total)));
@@ -286,7 +314,7 @@ function branchGlyph(x, y, color) {
  * Hero: logo, live status, the resume point, last outcome, git.
  * @returns {{ source: string, height: number, alt: string }}
  */
-export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null, refreshing = false, nextAt = null }) {
+export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null, nextAt = null }) {
   const id = "h";
   const inner = W - PAD * 2;
   const st = statusOf(vm, s, now);
@@ -364,7 +392,7 @@ export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null, re
     y += 24;
     // Git foot: branch · changed files · when Mental last read the thread.
     const live = nextAt != null;
-    const right = refreshing ? "Refreshing" : updatedAt ? (live ? "Live" : `↻ ${agoOf(now - updatedAt)}`) : "";
+    const right = updatedAt ? (live ? "Live" : `↻ ${agoOf(now - updatedAt)}`) : "";
     const rightW = right ? right.length * 6.4 + 8 + (live ? 20 : 0) : 0;
     const dirtyText = vm.dirty ? `${vm.changed || ""} changed`.trim() : "clean";
     const dirtyW = dirtyText.length * 6.6 + 18;
@@ -382,7 +410,7 @@ export function heroSvg({ vm, s, now, width: W, error = "", updatedAt = null, re
           anchor: "end",
         }),
       );
-      if (live) body.push(refreshDial(W - PAD - right.length * 6.4 - 14, y - 4, { refreshing, now, nextAt }));
+      if (live) body.push(refreshDial(W - PAD - right.length * 6.4 - 14, y - 4, { now, nextAt }));
     }
     y += 4;
     alt += ` Branch ${vm.branch || "none"}, ${dirtyText}.`;
@@ -424,7 +452,7 @@ export function sessionSvg({ s, now, width: W }) {
   const tiles = [
     { value: clockOf(now - s.startedAt), label: "Elapsed" },
     { value: String(s.turns + (s.working ? 1 : 0)), label: s.working ? "Turn now" : s.turns === 1 ? "Turn" : "Turns" },
-    { value: String(s.files.size), label: s.files.size === 1 ? "File" : "Files", sub: s.edits ? plural(s.edits, "edit") : "" },
+    { value: String(s.files.size), label: s.files.size === 1 ? "File" : "Files" },
   ];
   const tw = tilesW / tiles.length;
   tiles.forEach((t, i) => {
@@ -482,37 +510,45 @@ export function sessionSvg({ s, now, width: W }) {
 }
 
 /**
- * Items that need the user: needs-eyes, open attention, open decisions.
- * @returns {{ items: { kind: string, label: string, color: string, title: string, at: number | null }[], later: number }}
+ * Items that need the user: open attention (verify items read "Needs eyes")
+ * and open decisions. Heartbeat caps both lists, so `total` comes from its
+ * counts. Each item is keyed on its file path, which survives a retitle.
+ * @returns {{ items: { key: string, kind: string, label: string, color: string, title: string, at: number | null, path: string }[], total: number, later: number }}
  */
 export function needsOf(vm) {
-  if (!vm?.linked) return { items: [], later: 0 };
+  if (!vm?.linked) return { items: [], total: 0, later: 0 };
   const titleOf = (x) => oneLine(x?.title || x?.question || x?.description || x?.file || "");
   const items = [
-    ...(vm.needsEyes || []).map((x) => ({ kind: "eyes", label: "Needs eyes", color: T.rose, title: titleOf(x), at: msOf(x?.timestamp), path: x?.path || "" })),
     ...(vm.attention || [])
       .filter((x) => x?.status !== "later")
       .map((x) => ({
-        kind: x?.kind || "thread", path: x?.path || "",
-        label: KIND_LABEL[x?.kind] || "Attention",
-        color: T.amber,
+        kind: x?.kind === "verify" ? "eyes" : x?.kind || "thread",
+        path: x?.path || "",
+        label: x?.kind === "verify" ? "Needs eyes" : KIND_LABEL[x?.kind] || "Attention",
+        color: x?.kind === "verify" ? T.rose : T.amber,
         title: titleOf(x),
         at: msOf(x?.timestamp),
       })),
     ...(vm.decisions || []).map((x) => ({ kind: "decision", label: "Open decision", color: T.sky, title: titleOf(x), at: msOf(x?.timestamp), path: x?.path || "" })),
-  ].filter((x) => x.title).map((x) => ({ ...x, key: `${x.kind}|${x.title}` }));
-  const later = (vm.attention || []).filter((x) => x?.status === "later").length;
-  return { items, later: Math.max(later, Number(vm.laterCount) || 0) };
+  ]
+    .filter((x) => x.title)
+    .map((x) => ({ ...x, key: x.path || `${x.kind}|${x.title}` }));
+  const later = Math.max((vm.attention || []).filter((x) => x?.status === "later").length, Number(vm.laterCount) || 0);
+  const counted = Math.max(0, (Number(vm.attentionCount) || 0) - later) + (Number(vm.decisionCount) || 0);
+  return { items, total: Math.max(items.length, counted), later };
 }
 
 /**
- * `needsOf` minus what the person hid from the footer and band.
+ * `needsOf` minus what the person hid from the footer and band. `total`
+ * still counts the items heartbeat did not list.
  * @param {any} vm
  * @param {Set<string> | string[] | undefined} dismissed
  */
 export function visibleNeedsOf(vm, dismissed) {
   const hide = dismissed instanceof Set ? dismissed : new Set(dismissed || []);
-  return needsOf(vm).items.filter((x) => !hide.has(x.key));
+  const { items, total } = needsOf(vm);
+  const shown = items.filter((x) => !hide.has(x.key));
+  return { items: shown, total: total - (items.length - shown.length) };
 }
 
 /**
@@ -522,10 +558,10 @@ export function visibleNeedsOf(vm, dismissed) {
 export function needsSvg({ vm, now, width: W, flash = false }) {
   const id = "n";
   const inner = W - PAD * 2;
-  const { items, later } = needsOf(vm);
+  const { items, total, later } = needsOf(vm);
   const body = [eyebrow(PAD, 30, "Needs you")];
   if (items.length) {
-    const n = String(items.length);
+    const n = String(total);
     body.push(`<rect x="${PAD + 74}" y="19" width="${10 + n.length * 7}" height="16" rx="8" fill="${T.amber}" fill-opacity="0.16"/>`);
     body.push(txt(PAD + 79 + n.length * 3.5, 31, n, { size: 10.5, weight: 700, fill: T.amber, anchor: "middle" }));
   }
@@ -557,9 +593,9 @@ export function needsSvg({ vm, now, width: W, flash = false }) {
       body.push("</g>");
       y = top + h;
     });
-    if (items.length > MAX_ITEMS) {
+    if (total > MAX_ITEMS) {
       y += 18;
-      body.push(txt(PAD + 14, y, esc(`+ ${items.length - MAX_ITEMS} more`), { size: 12, fill: T.ink3 }));
+      body.push(txt(PAD + 14, y, esc(`+ ${total - Math.min(items.length, MAX_ITEMS)} more`), { size: 12, fill: T.ink3 }));
     }
   }
   let height = Math.round(y + PAD - 2);
@@ -777,7 +813,7 @@ export function trackSvg({ vm, now, width: W }) {
 
 /**
  * The dashboard: what it is, and whether it is serving right now.
- * @param {{ width: number, dash?: { state: "running" | "starting" | "stopped" | "other" | "unknown", url?: string } }} o
+ * @param {{ width: number, dash?: { state: "running" | "starting" | "stopped" | "unknown", url?: string } }} o
  * @returns {{ source: string, height: number, alt: string }}
  */
 export function dashSvg({ width: W, dash = { state: "unknown" } }) {
@@ -787,9 +823,7 @@ export function dashSvg({ width: W, dash = { state: "unknown" } }) {
       ? { label: "Serving", color: T.green, pulse: true }
       : dash.state === "starting"
         ? { label: "Starting", color: T.violet2, pulse: true }
-        : dash.state === "other"
-          ? { label: "Port in use", color: T.amber, pulse: false }
-          : { label: "Not running", color: T.ink3, pulse: false };
+        : { label: "Not running", color: T.ink3, pulse: false };
   const H = 112;
   const art = W - PAD - 92;
   // A small living graph: journals, decisions, residue, as on the dashboard.
@@ -826,9 +860,7 @@ export function dashSvg({ width: W, dash = { state: "unknown" } }) {
   const where =
     dash.state === "running"
       ? (dash.url || "localhost:3847").replace(/^https?:\/\//, "").replace(/\/$/, "")
-      : dash.state === "other"
-        ? "another project is on 3847"
-        : "opens in your browser";
+      : "opens in your browser";
   body.push(`<circle cx="${PAD + 4}" cy="${96}" r="3.5" fill="${st.color}"/>`);
   if (st.pulse) {
     body.push(
@@ -886,7 +918,7 @@ export function paneDesktop(E, ctx) {
   // What this person needs next depends on where the session is: near the
   // context limit the way out goes first; mid-work the live numbers do.
   const nothingYet = s.turns === 0 && s.files.size === 0 && !s.working;
-  const hero = svg(() => heroSvg({ vm, s, now, width, error, updatedAt, refreshing: !!ctx.refreshing, nextAt: ctx.nextAt ?? null }));
+  const hero = svg(() => heroSvg({ vm, s, now, width, error, updatedAt, nextAt: ctx.nextAt ?? null }));
   const needs = linked ? svg(() => needsSvg({ vm, now, width, flash })) : null;
   const askNeeds =
     hasNeeds && ctx.onAskNeeds
@@ -949,13 +981,19 @@ export function paneDesktop(E, ctx) {
       : dashState === "starting"
         ? "warming up — it opens by itself"
         : "start it and open it in your browser";
+  // A running dashboard opens through the host's own Link (no process round
+  // trip); the button only starts one.
+  const dashOpen =
+    dashState === "running" && E.Link && dash?.href
+      ? E.Link({ href: dash.href, label: dashLabel })
+      : Button({ key: "dashboard", label: dashLabel, onPress: ctx.onDashboard });
   const dashAction = Box({
     key: "dash",
     flexDirection: "row",
     alignItems: "center",
     gap: 2,
     children: [
-      Button({ key: "dashboard", label: dashLabel, onPress: ctx.onDashboard }),
+      dashOpen,
       Text({ dimColor: true, wrap: "truncate-end", children: [dashHint] }),
     ],
   });
@@ -1060,7 +1098,7 @@ function routeDesktop(E, ctx, svg, width) {
       Text({ dimColor: true, wrap: "truncate-end", children: [route.view === "list" ? "Mental" : route.crumb || "Mental"] }),
     ],
   });
-  const note = (text, color) => Text(color ? { color, children: [text] } : { dimColor: true, children: [text] });
+  const note = (text, color) => Text(color ? { ...nativeTone(color), children: [text] } : { dimColor: true, children: [text] });
   const children = [back];
   if (route.view === "list") {
     const meta = TYPE_META[route.type] || { label: route.type };
@@ -1117,8 +1155,8 @@ function routeDesktop(E, ctx, svg, width) {
           }),
         }),
       );
-      const back = Array.isArray(doc.backlinks) ? doc.backlinks.length : 0;
-      if (back) children.push(note(`${back} other entr${back === 1 ? "y links" : "ies link"} here.`));
+      const backlinks = Array.isArray(doc.backlinks) ? doc.backlinks.length : 0;
+      if (backlinks) children.push(note(`${backlinks} other entr${backlinks === 1 ? "y links" : "ies link"} here.`));
     }
   }
   return Box({ flexDirection: "column", alignItems: "stretch", gap: 1, paddingX: 2, paddingY: 1, children: children.filter(Boolean) });
@@ -1135,13 +1173,13 @@ export function footerDesktop(E, ctx) {
   const { Box, Text, Button, Svg } = E;
   const { vm, s, now, isOpen, modes = [], bandSeen = false } = ctx;
   const st = statusOf(vm, s, now);
-  const items = visibleNeedsOf(vm, ctx.dismissed);
+  const { items, total } = visibleNeedsOf(vm, ctx.dismissed);
   // With the band above the prompt already showing status, the footer is just
   // the opener; without it, the footer carries the status itself.
   const parts = ["Mental"];
   if (!bandSeen) {
     parts.push(st.label);
-    if (items.length) parts.push(`${items.length} need${items.length === 1 ? "s" : ""} you`);
+    if (total) parts.push(`${total} need${total === 1 ? "s" : ""} you`);
   }
   const children = [
     Svg ? Svg({ source: logoSvg(16), alt: "Mental", width: 16, height: 16 }) : null,
@@ -1171,10 +1209,10 @@ export function bandDesktop(E, ctx) {
   const { vm, s, now, columns, maxRows = 2 } = ctx;
   const st = statusOf(vm, s, now);
   const cols = Math.max(40, Number(columns) || 100);
-  const items = visibleNeedsOf(vm, ctx.dismissed);
+  const { items, total } = visibleNeedsOf(vm, ctx.dismissed);
   // The band sits on the host's own chrome (light or dark), so primary text
   // takes the host's color and only accents carry a hex.
-  const needs = items.length ? `${items.length} need${items.length === 1 ? "s" : ""} you` : "";
+  const needs = total ? `${total} need${total === 1 ? "s" : ""} you` : "";
   const needsColor = items.some((x) => x.kind === "eyes") ? T.rose : T.amber;
   let message = "";
   if (st.state === "absent") message = "Not linked here. Ask the agent to link this folder.";
@@ -1189,7 +1227,7 @@ export function bandDesktop(E, ctx) {
     children: [
       Svg ? Svg({ source: logoSvg(16), alt: "Mental", width: 16, height: 16 }) : Text({ children: ["🧠"] }),
       Text({ bold: true, children: ["Mental"] }),
-      Text({ color: st.color, children: [`● ${st.label}`] }),
+      Text({ ...nativeTone(st.color), children: [`● ${st.label}`] }),
       Box({
         key: "msg",
         flexGrow: 1,
@@ -1199,7 +1237,7 @@ export function bandDesktop(E, ctx) {
       needs && Button && ctx.onNeeds
         ? Button({ key: "band-needs", label: `${needs} ›`, onPress: ctx.onNeeds })
         : needs
-          ? Text({ color: needsColor, bold: true, children: [needs] })
+          ? Text({ ...nativeTone(needsColor), bold: true, children: [needs] })
           : null,
       needs && Button && ctx.onDismiss ? Button({ key: "band-dismiss", label: "✕ Hide", onPress: ctx.onDismiss }) : null,
     ].filter(Boolean),
@@ -1216,12 +1254,12 @@ export function bandDesktop(E, ctx) {
     second = "Compacting context. The resume point is safe in Mental.";
     secondColor = T.violet2;
   } else if (items.length) {
-    second = `${items[0].label} · ${items[0].title}${items.length > 1 ? `  +${items.length - 1} more` : ""}`;
+    second = `${items[0].label} · ${items[0].title}${total > 1 ? `  +${total - 1} more` : ""}`;
     secondColor = items[0].color;
   }
   const rows = [head];
   if (second && maxRows >= 2) {
-    rows.push(Text({ color: secondColor, wrap: "truncate-end", children: [clip(second, cols)] }));
+    rows.push(Text({ ...nativeTone(secondColor), wrap: "truncate-end", children: [clip(second, cols)] }));
   }
   return Box({ flexDirection: "column", children: rows });
 }

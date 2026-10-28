@@ -3,7 +3,7 @@
  * band state picker, and receipt parsing from tool calls. No Node APIs.
  */
 
-import { handoffMsOf, msOf, oneLine } from "./format.mjs";
+import { handoffMsOf, msOf, oneLine, textOf } from "./format.mjs";
 
 export const PRESSURE_CONTEXT_PCT = 75;
 export const PRESSURE_EDITS = 25;
@@ -140,11 +140,30 @@ export function mentalCommandOf(call) {
   const mcp = /^mcp__(.+)__([a-z_]+)$/.exec(tool);
   if (mcp) return /mental/i.test(mcp[1]) ? mcp[2] : null;
   if (tool !== "Bash" && tool !== "PowerShell") return null;
-  const cmd = String(call?.command || "");
-  const m =
-    /(?:^|[\s;&|(])(?:npx\s+(?:-y\s+)?)?(?:@balacode\/)?mental(?:\.cmd)?\s+([a-z][a-z-]*)/i.exec(cmd) ||
-    /(?:^|[\s;&|(])node\s+\S*bin[\\/]cli\.mjs\s+([a-z][a-z-]*)/i.exec(cmd);
-  return m ? m[1].toLowerCase() : null;
+  for (const segment of commandSegmentsOf(String(call?.command || ""))) {
+    const m =
+      /^(?:npx\s+(?:-y\s+)?)?(?:@balacode\/)?mental(?:\.cmd)?\s+([a-z][a-z-]*)/i.exec(segment) ||
+      /^node\s+\S*bin[\\/]cli\.mjs\s+([a-z][a-z-]*)/i.exec(segment);
+    if (m) return m[1].toLowerCase();
+  }
+  return null;
+}
+
+/**
+ * The simple commands of a shell line, each trimmed, with quoted strings and
+ * heredoc bodies blanked out first. A `mental park` inside a commit message or
+ * an `echo "…"` is text, not a call, so it must never start a segment.
+ * @param {string} cmd
+ * @returns {string[]}
+ */
+export function commandSegmentsOf(cmd) {
+  const bare = cmd
+    .replace(/<<-?\s*(['"]?)(\w+)\1[^\n]*\n[\s\S]*?\n\s*\2(?=\s|$)/g, " ")
+    .replace(/'[^']*'|"(?:[^"\\`]|\\[\s\S])*"/g, '""');
+  return bare
+    .split(/&&|\|\||[;|\n]/)
+    .map((part) => part.trim().replace(/^(?:[({]\s*)+/, "").replace(/^&\s+/, "").replace(/^(?:\w+=\S*\s+)+/, ""))
+    .filter(Boolean);
 }
 
 /** @param {string | null} command */
@@ -179,14 +198,15 @@ export function receiptTitleOf(text) {
 /**
  * Build a receipt chip for a finished Mental write, or null.
  * @param {string | null} command
- * @param {{ text?: string, isError?: boolean } | undefined} result
+ * @param {{ text?: string, result?: unknown, isError?: boolean } | undefined} result
  * @param {number} now
  * @returns {Receipt | null}
  */
 export function receiptOf(command, result, now) {
   if (!command || !RECEIPT_KINDS[command]) return null;
   if (!result || result.isError) return null;
-  const text = typeof result.text === "string" ? result.text : "";
+  // `text` is set by core on a tool's own result; a hook's answer may carry only `result`.
+  const text = textOf(result.text ?? result.result);
   if (/"ok"\s*:\s*false/.test(text)) return null;
   const kind = RECEIPT_KINDS[command];
   return { kind: command, ...kind, title: receiptTitleOf(text), at: now };
@@ -225,9 +245,9 @@ export function viewModelOf(hb, now) {
     decisionCount: Number(d.openDecisionCount) || 0,
     needsEyes: Array.isArray(d.needsEyes) ? d.needsEyes : [],
     needsEyesCount: Number(d.needsEyesCount) || 0,
+    laterCount: Number(d.laterCount) || 0,
     guardrails: Array.isArray(d.guardrails) ? d.guardrails : [],
     guardrailCount: Number(d.guardrailCount) || 0,
-    hopsToday: Number(d.hopsToday) || 0,
     delta: d.delta || null,
     track: track
       ? {
