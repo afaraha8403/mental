@@ -13,6 +13,7 @@ import { drift } from "../scripts/sync-project-skills.mjs";
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SKILLS = [
   "claude-desktop-mods",
+  "claude-code-mods-guide",
   "claude-desktop-plugins",
   "claude-desktop-extensions",
   "codex-desktop-extensions",

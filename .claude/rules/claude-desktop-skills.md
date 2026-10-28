@@ -5,6 +5,7 @@ When the task is to create or debug something for Claude Desktop, read the match
 | Build a... | Skill |
 | --- | --- |
 | Mod (JS module in Claude Code: hooks, panes, UI) | `.claude/skills/claude-desktop-mods/SKILL.md` |
+| Mod recipes (Token Weather, Blast Radius, Replay Theater; mod vs hook/skill/MCP) | `.claude/skills/claude-code-mods-guide/SKILL.md` |
 | Plugin (skills, commands, agents, hooks, MCP/LSP; requirements, publishing) | `.claude/skills/claude-desktop-plugins/SKILL.md` |
 | Extension (`.mcpb` local MCP server bundle) | `.claude/skills/claude-desktop-extensions/SKILL.md` |
 
