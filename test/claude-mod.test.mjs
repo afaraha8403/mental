@@ -890,6 +890,19 @@ test("register: /clear and /resume keep the timers; the next poll still fires", 
   assert.ok(eng.timers.every((t) => t.once || t.cancelled), "a real end stops the poll");
 });
 
+test("register: subagent turns do not count as session turns", async () => {
+  const eng = fakeEngine();
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  await eng.fire("turn.start", {});
+  await eng.fire("turn.start", { agentId: "sub-1" });
+  await eng.fire("turn.complete", { agentId: "sub-1" });
+  await eng.fire("turn.complete", {});
+  await eng.fire("command.run", { command: "mental", presentation: { isFullscreen: true, columns: 160 } });
+  const pane = await eng.fire("ui.render", { component: "Pane", requestId: "mental", surface: "terminal", props: { bodyColumns: 100, scroll: { bodyRows: 40 } } });
+  assert.match(textOf(pane), /\b1\sturn\b/, "only the main turn is counted");
+});
+
 test("register: gating hooks pass through when they fail, and presses never reject", async () => {
   const eng = fakeEngine({ surfaces: ["desktop"], openFails: true });
   for (const event of ["tool.call", "ui.close", "session.compact", "command.run"]) {

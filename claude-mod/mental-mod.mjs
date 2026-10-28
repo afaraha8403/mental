@@ -770,13 +770,17 @@ export const register = (on) => {
     return r;
   }).catch(($, e, next) => next(e));
 
+  // Subagent turns carry `agentId`; counting them would end "working" while the
+  // main turn is still running and inflate the session's turn count.
   on("turn.start", ($, e, next) => {
+    if (e.agentId) return next(e);
     setWorking(true);
     return next(e);
   });
 
   on("turn.complete", async ($, e, next) => {
     const r = await next(e);
+    if (e.agentId) return r;
     noteTurnComplete(s);
     setWorking(false);
     refreshSoon();

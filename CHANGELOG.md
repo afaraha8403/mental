@@ -7,21 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- `mental serve` now speaks the MCP stdio transport that real clients use: one JSON-RPC message per line (newline-delimited JSON). It previously framed messages with LSP-style `Content-Length` headers, so Claude Code, Cursor and Codex could not talk to it. Input with `Content-Length` headers is still accepted, and a client that sends it gets replies framed the same way.
-- The MCP `initialize` reply negotiates the protocol version: it echoes the client's requested version when supported (`2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`) and otherwise offers the newest one, instead of always answering `2024-11-05`.
-- MCP error handling follows JSON-RPC: a malformed line gets a `-32700` parse error, an unknown tool a `-32602` error, an unknown method `-32601`, and notifications (including unknown ones) are never answered. Batched requests are answered as a batch.
-- On Windows, `mental install --mcp` and `mental option mcp on` register the server as `cmd /c mental serve`. Hosts start MCP servers without a shell, so the npm-installed `mental.cmd` shim could not be launched from a bare `mental` command. Other platforms keep `mental serve`, and `mental uninstall` / `option mcp off` recognise both forms.
-
-### Changes
-- MCP tool definitions now close their input schemas (`additionalProperties: false`) and carry `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) derived from each command's effects. Tool results include `structuredContent` with the same JSON as the text content, which is kept for older clients. Tool names are unchanged.
-- `mental install --mcp` and `mental option mcp on` also register the server in Codex (`~/.codex/config.toml`, `[mcp_servers.mental]`) when `~/.codex` exists. Other tables in that file are left untouched, and turning MCP off removes only Mental's table.
 ### Features
 - `mental dashboard` writes `~/.mental/dashboard.json` (`port`, `pid`, `url`, `startedAt`) once it is listening and removes it on a clean exit, so launchers such as the Claude Desktop panel can find a dashboard that fell back to another port instead of assuming 3847. A second dashboard owns the file until it exits; the first one never deletes it.
 - `mental dashboard --idle-exit <minutes>` stops the server after that long with no requests, for detached launches that should not linger.
 - The dashboard has an embed mode for editor panels and iframes: open it with `?embed=1` (for example `http://127.0.0.1:3847/?embed=1#/today`) to hide the sidebar and tab bar, compact the top bar, stack lanes in one column, and skip the refresh on returning to the tab.
 
-### Fixed
+### Fixes
+- The Mental panel no longer counts a subagent's turns as turns of the session, so "This session" shows how many times you and Claude went back and forth.
+- `mental serve` now speaks the MCP stdio transport that real clients use: one JSON-RPC message per line (newline-delimited JSON). It previously framed messages with LSP-style `Content-Length` headers, so Claude Code, Cursor and Codex could not talk to it. Input with `Content-Length` headers is still accepted, and a client that sends it gets replies framed the same way.
+- The MCP `initialize` reply negotiates the protocol version: it echoes the client's requested version when supported (`2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`) and otherwise offers the newest one, instead of always answering `2024-11-05`.
+- MCP error handling follows JSON-RPC: a malformed line gets a `-32700` parse error, an unknown tool a `-32602` error, an unknown method `-32601`, and notifications (including unknown ones) are never answered. Batched requests are answered as a batch.
+- On Windows, `mental install --mcp` and `mental option mcp on` register the server as `cmd /c mental serve`. Hosts start MCP servers without a shell, so the npm-installed `mental.cmd` shim could not be launched from a bare `mental` command. Other platforms keep `mental serve`, and `mental uninstall` / `option mcp off` recognise both forms.
 - The dashboard can be shown inside the Claude Code panel, VS Code webviews and loopback iframes. Its Content-Security-Policy no longer forbids all framing; it allows loopback pages and editor webviews, and the Host check still blocks DNS-rebinding.
 - The dashboard no longer hangs on "Loading…" in sandboxed webviews. Theme, sidebar and pin preferences fall back to defaults when storage is blocked, and a startup failure shows an error with a Try again button.
 - Today shows the real branch and recent commits when a project is opened by id. The dashboard used the first path in `bindings.json`, which can be a checkout from another machine (`/home/...` on Windows), so git read nothing and showed "detached". It now uses the checkout that contains the working directory, else the first path that exists here, and shows "no git" when there is none.
@@ -32,14 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Markdown links that hide a `javascript:` scheme behind a tab or newline are dropped, and Map tooltips escape titles, descriptions and tags.
 - The Map is drawn once per visit instead of twice, follows the OS theme in "Match system", and an unknown view address is rewritten to Today so Back does not bounce through it.
 - `openBrowser` only launches plain loopback dashboard URLs, so `&`, `%` or quotes can never reach `cmd start` on Windows.
-
-### Changed
-- Dashboard styles define each colour once with `light-dark()` instead of a duplicated dark-theme block, and the remaining hard-coded colours are tokens, so the light theme has no dark-only colours. The project picker fits narrow panels, full-height areas use dynamic viewport units, and there is a phone breakpoint at 480px.
-### Changed
-- The Mental panel in Claude Desktop and Claude Code is redesigned around what you need next. The top of the pane is where to pick up, Park and Hand off (Hand off leads when the context is nearly full), and what needs you as one button per item that opens it. Below are this session in one line, the clock, recent receipts, and Journal, Decisions, Notes and Threads to read in the panel. The terminal and Desktop now draw the same native panel instead of separate tab and card designs, the terminal pane scrolls instead of cutting to "+N more", and the terminal can browse and open entries too. Desktop uses the host's own text sizes, a primary button and Markdown on Claude Code 2.1.299 or later, keeps the logo as the only image, and drops the stat cards and looping animations.
-- When Mental cannot be read, the band says why instead of "Not linked here".
-
-### Fixed
 - The Claude panel kept working after `/clear`, `/resume` or `/branch` only until then: those commands end the conversation, not the session, and the panel stopped its refresh timer. It now starts a fresh session view and keeps refreshing.
 - A commit message, `echo` or heredoc that mentioned `mental park` or `mental decide` no longer shows a false "Parked" or "Decision" receipt or resets the edit count. Only a real `mental …` call at the start of a command (or after `&&`, `;`, `|`) counts, and the inline chat card appears only on shell tool rows.
 - The panel's Dashboard button no longer starts a second dashboard when one is already running for another project. It finds the running server from `~/.mental/dashboard.json` (falling back to port 3847), opens this project's Today view with a native link, and only starts a server when none answers.
@@ -48,13 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Needs you" counts every open item, not just the first few the heartbeat lists, and no longer lists each verify item twice. Hiding an item is remembered by its file, so a retitle does not bring it back.
 - Panel text is readable on light terminals and light Desktop themes: primary text keeps the host's colour, secondary text is dimmed, and accents use theme colour names instead of a fixed dark palette.
 - The panel shows the real error when Mental cannot be read, instead of "heartbeat failed", and no longer waits up to a minute trying `mental` and `mental.cmd` on PATH when the plugin's own CLI fails.
-### Fixes
 - Writes from Claude Code, Codex and OpenCode are no longer labelled as Cursor. The rule and skill told every host to pass `--via cursor`; `mental install` now writes each host's own token into its copy (`claude-code` in `~/.claude`, `codex` in `~/.codex/AGENTS.md`, `opencode` in OpenCode's dirs, `cursor` in Cursor's), and copies several hosts share (`~/.agents`, `.github/skills`) say `--via <host>` next to the token list. Re-running `install` rewrites older copies even when the skill version has not changed.
 - Session-start hooks now survive a Node reinstall or nvm switch and work in Cursor on Windows. `mental hooks on` writes `mental hooks session-start <host>` (resolved through PATH; `mental.cmd` on Windows) instead of an absolute path to `hooks/session-start.sh`.
 - Session-start hooks now emit what each host reads: `additional_context` for Cursor and `hookSpecificOutput.additionalContext` for Claude Code, instead of raw status JSON that Cursor ignored. Output stays valid JSON under 4,000 characters by shortening long lists and strings rather than cutting bytes mid-token.
 - Cursor no longer loads the Mental rule twice when the Mental Cursor plugin is installed: `mental install` skips and removes `~/.cursor/rules/mental.mdc`, and `mental doctor` warns while both are present.
 
 ### Changes
+- MCP tool definitions now close their input schemas (`additionalProperties: false`) and carry `annotations` (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) derived from each command's effects. Tool results include `structuredContent` with the same JSON as the text content, which is kept for older clients. Tool names are unchanged.
+- `mental install --mcp` and `mental option mcp on` also register the server in Codex (`~/.codex/config.toml`, `[mcp_servers.mental]`) when `~/.codex` exists. Other tables in that file are left untouched, and turning MCP off removes only Mental's table.
+- Dashboard styles define each colour once with `light-dark()` instead of a duplicated dark-theme block, and the remaining hard-coded colours are tokens, so the light theme has no dark-only colours. The project picker fits narrow panels, full-height areas use dynamic viewport units, and there is a phone breakpoint at 480px.
+- The Mental panel in Claude Desktop and Claude Code is redesigned around what you need next. The top of the pane is where to pick up, Park and Hand off (Hand off leads when the context is nearly full), and what needs you as one button per item that opens it. Below are this session in one line, the clock, recent receipts, and Journal, Decisions, Notes and Threads to read in the panel. The terminal and Desktop now draw the same native panel instead of separate tab and card designs, the terminal pane scrolls instead of cutting to "+N more", and the terminal can browse and open entries too. Desktop uses the host's own text sizes, a primary button and Markdown on Claude Code 2.1.299 or later, keeps the logo as the only image, and drops the stat cards and looping animations.
+- When Mental cannot be read, the band says why instead of "Not linked here".
 - `mental install` rewrites session-start hook entries left by 0.12.1 and older when hooks are on; the old `session-start.sh` still works and forwards to the new command. Claude Code no longer gets a `PreCompact` entry, since `SessionStart` already fires after compaction and `PreCompact` output never reaches the model.
 - `mental doctor` explains OpenCode's rule source: without `~/.config/opencode/AGENTS.md` it reads the Mental block in `~/.claude/CLAUDE.md`, and a new `rule-opencode-fallback` warning fires when `OPENCODE_DISABLE_CLAUDE_CODE` turns that fallback off. `install` still never creates that file, because doing so would stop OpenCode from reading `CLAUDE.md`.
 
