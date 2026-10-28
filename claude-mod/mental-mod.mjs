@@ -722,12 +722,19 @@ export const register = (on) => {
     /** @type {any} */
     const props = e.props;
     // `output` is the stored result; newer builds may name it `result`.
-    const model = toolCardOf({ tool: props?.tool, input: props?.input, output: props?.result ?? props?.output });
+    const model = toolCardOf({
+      tool: props?.tool,
+      input: props?.input,
+      output: props?.result ?? props?.output,
+      isRunning: !!props?.isRunning,
+      isErrored: !!props?.isErrored,
+      isInterrupted: !!props?.isInterrupted,
+    });
     if (!model) return next(e);
     try {
       const { Box, Svg } = await $.ui.resolve(e);
       if (!Svg) return next(e);
-      return toolRowDesktop({ Box, Svg }, { model, theme: "auto" }) || next(e);
+      return toolRowDesktop({ Box, Svg }, { model, columns: e.viewport?.columns || 0 });
     } catch {
       return next(e);
     }
