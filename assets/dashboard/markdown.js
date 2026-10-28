@@ -19,6 +19,8 @@ function safeHref(raw) {
   if (href.startsWith("<") && href.endsWith(">")) href = href.slice(1, -1);
   const titled = href.match(/^(\S+)\s+["']/);
   if (titled) href = titled[1];
+  // The URL parser drops tabs and newlines, so `java\tscript:` would still navigate as `javascript:`.
+  href = href.replace(/[\u0000-\u001f\u007f]/g, "");
   if (/^https?:\/\//i.test(href)) return href;
   if (/^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith("//")) return "";
   return href;

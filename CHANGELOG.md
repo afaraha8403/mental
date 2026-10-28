@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+- `mental dashboard` writes `~/.mental/dashboard.json` (`port`, `pid`, `url`, `startedAt`) once it is listening and removes it on a clean exit, so launchers such as the Claude Desktop panel can find a dashboard that fell back to another port instead of assuming 3847. A second dashboard owns the file until it exits; the first one never deletes it.
+- `mental dashboard --idle-exit <minutes>` stops the server after that long with no requests, for detached launches that should not linger.
+- The dashboard has an embed mode for editor panels and iframes: open it with `?embed=1` (for example `http://127.0.0.1:3847/?embed=1#/today`) to hide the sidebar and tab bar, compact the top bar, stack lanes in one column, and skip the refresh on returning to the tab.
+
+### Fixed
+- The dashboard can be shown inside the Claude Code panel, VS Code webviews and loopback iframes. Its Content-Security-Policy no longer forbids all framing; it allows loopback pages and editor webviews, and the Host check still blocks DNS-rebinding.
+- The dashboard no longer hangs on "Loading…" in sandboxed webviews. Theme, sidebar and pin preferences fall back to defaults when storage is blocked, and a startup failure shows an error with a Try again button.
+- Today shows the real branch and recent commits when a project is opened by id. The dashboard used the first path in `bindings.json`, which can be a checkout from another machine (`/home/...` on Windows), so git read nothing and showed "detached". It now uses the checkout that contains the working directory, else the first path that exists here, and shows "no git" when there is none.
+- When the dashboard server stops or fails, a banner says so with a Retry button, instead of views quietly showing "All quiet".
+- Returning to the dashboard tab no longer refetches and redraws every panel each time; it refreshes only when the data is more than 30 seconds old.
+- The dashboard starts faster. Projects and the opened project's heartbeat arrive in one request (`/api/boot`), and the server reuses the parsed catalog, graph and project list until a file in them changes.
+- "Copy resume line" in the command palette shows a confirmation, or a clear message when the clipboard is blocked.
+- Markdown links that hide a `javascript:` scheme behind a tab or newline are dropped, and Map tooltips escape titles, descriptions and tags.
+- The Map is drawn once per visit instead of twice, follows the OS theme in "Match system", and an unknown view address is rewritten to Today so Back does not bounce through it.
+- `openBrowser` only launches plain loopback dashboard URLs, so `&`, `%` or quotes can never reach `cmd start` on Windows.
+
+### Changed
+- Dashboard styles define each colour once with `light-dark()` instead of a duplicated dark-theme block, and the remaining hard-coded colours are tokens, so the light theme has no dark-only colours. The project picker fits narrow panels, full-height areas use dynamic viewport units, and there is a phone breakpoint at 480px.
+
 ## [0.12.1] - 2026-10-08
 
 ### Fixed

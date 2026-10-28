@@ -543,6 +543,7 @@ export const CATALOG = {
     flags: [
       v("port", { summary: "Loopback port (default 3847; busy port falls back unless --port is given)" }),
       b("no-open", { summary: "Print the URL; do not open a browser" }),
+      v("idle-exit", { summary: "Exit after this many minutes with no requests (for detached launches)" }),
     ],
     effects: "read_only",
   },

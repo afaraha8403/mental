@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import { createServer, request } from "node:http";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { run } from "../bin/cli.mjs";
 import { usage } from "../bin/lib/args.mjs";
-import { DASHBOARD_PORT, listenDashboard } from "../bin/lib/dashboard.mjs";
+import { DASHBOARD_PORT, isLaunchableUrl, listenDashboard } from "../bin/lib/dashboard.mjs";
 import { stringifyFrontmatter } from "../bin/lib/okf.mjs";
 import { watermarkPath } from "../bin/lib/watermark.mjs";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
@@ -390,4 +390,134 @@ test("dashboard --help lists the command", async () => {
   assert.equal(code, 0);
   assert.match(buf, /mental dashboard/);
   assert.doesNotMatch(buf, /standing dashboard/i);
+});
+
+test("CSP lets loopback pages and editor webviews frame the dashboard", async (t) => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const dash = await listenDashboard({ cwd: root, home, env: gitEnv(home), port: 0, open: false });
+  t.after(() => dash.close());
+  for (const path of ["", "api/where"]) {
+    const res = await fetch(`${dash.url}${path}`);
+    const csp = res.headers.get("content-security-policy") || "";
+    const ancestors = csp.match(/frame-ancestors ([^;]+)/)?.[1] || "";
+    assert.doesNotMatch(ancestors, /'none'/);
+    assert.match(ancestors, /'self'/);
+    assert.match(ancestors, /http:\/\/127\.0\.0\.1:\*/);
+    assert.match(ancestors, /http:\/\/localhost:\*/);
+    assert.match(ancestors, /vscode-webview:/);
+    assert.doesNotMatch(ancestors, /https?:\/\/\*|(^|\s)\*(\s|$)/, "no wildcard framers");
+    assert.match(csp, /script-src 'self';/);
+  }
+});
+
+test("heartbeat by id reads git from a checkout that exists on this machine", async (t) => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const seeded = mental(home, root, ["journal", "--json", "--title", "Seed", "--resume", "Continue"]);
+  assert.equal(seeded.status, 0, seeded.stderr || seeded.stdout);
+  const id = JSON.parse(seeded.stdout).data.id;
+  // Bindings sync between machines; put another PC's checkout first, as on a real synced home.
+  const file = join(home, ".mental", "bindings.json");
+  const bindings = JSON.parse(readFileSync(file, "utf8"));
+  const binding = bindings.bindings.find((b) => b.id === id);
+  binding.paths = [join(home, "elsewhere", "other-pc", "repo"), ...binding.paths];
+  writeFileSync(file, JSON.stringify(bindings, null, 2));
+  // cwd outside every checkout, as when a launcher starts the server from home.
+  const dash = await listenDashboard({ cwd: home, home, env: gitEnv(home), port: 0, open: false });
+  t.after(() => dash.close());
+  const body = await (await fetch(`${dash.url}api/heartbeat?id=${id}`)).json();
+  assert.equal(body.ok, true, JSON.stringify(body));
+  assert.equal(resolve(body.data.gitRoot), resolve(root));
+  assert.ok(body.data.git.branch, "branch comes from the real checkout");
+  assert.ok(body.data.git.recent.length > 0);
+});
+
+test("boot returns projects and the opened project's heartbeat in one response", async (t) => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const seeded = mental(home, root, ["journal", "--json", "--title", "Seed", "--resume", "Pick up the boot test"]);
+  const id = JSON.parse(seeded.stdout).data.id;
+  const dash = await listenDashboard({ cwd: root, home, env: gitEnv(home), port: 0, open: false });
+  t.after(() => dash.close());
+  const body = await (await fetch(`${dash.url}api/boot`)).json();
+  assert.equal(body.ok, true);
+  assert.equal(body.data.activeId, id);
+  assert.equal(body.data.id, id);
+  assert.ok(body.data.projects.some((p) => p.id === id));
+  assert.equal(body.data.heartbeat.handoff.resume, "Pick up the boot test");
+  const unknown = await (await fetch(`${dash.url}api/boot?id=not-a-project`)).json();
+  assert.equal(unknown.data.id, id, "unknown id falls back to the folder's project");
+});
+
+test("list sees a file written after the first request (memo invalidates)", async (t) => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  mental(home, root, ["journal", "--json", "--title", "Seed", "--resume", "Continue"]);
+  const dash = await listenDashboard({ cwd: root, home, env: gitEnv(home), port: 0, open: false });
+  t.after(() => dash.close());
+  const before = (await (await fetch(`${dash.url}api/list?type=Decision`)).json()).data.total;
+  const made = mental(home, root, ["decide", "--json", "--title", "Fresh decision", "--body", "Why it matters.", "--tag", "memo"]);
+  assert.equal(made.status, 0, made.stderr || made.stdout);
+  await new Promise((r) => setTimeout(r, 2100));
+  const after = (await (await fetch(`${dash.url}api/list?type=Decision`)).json()).data.total;
+  assert.equal(after, before + 1);
+});
+
+test("dashboard advertises itself in ~/.mental/dashboard.json and removes it on close", async () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const dash = await listenDashboard({ cwd: root, home, env: gitEnv(home), port: 0, open: false });
+  const file = join(home, ".mental", "dashboard.json");
+  assert.equal(dash.portFile, file);
+  const info = JSON.parse(readFileSync(file, "utf8"));
+  assert.equal(info.port, dash.port);
+  assert.equal(info.pid, process.pid);
+  assert.equal(info.url, dash.url);
+  assert.ok(!Number.isNaN(Date.parse(info.startedAt)));
+  await dash.close();
+  assert.equal(existsSync(file), false);
+});
+
+test("closing a dashboard leaves a newer dashboard's port file alone", async () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const dash = await listenDashboard({ cwd: root, home, env: gitEnv(home), port: 0, open: false });
+  const file = join(home, ".mental", "dashboard.json");
+  writeFileSync(file, JSON.stringify({ port: 1, pid: process.pid + 1, url: "http://127.0.0.1:1/", startedAt: new Date().toISOString() }));
+  await dash.close();
+  assert.equal(existsSync(file), true);
+});
+
+test("idle exit fires after the configured quiet period", async () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  let fired = false;
+  const dash = await listenDashboard({
+    cwd: root,
+    home,
+    env: gitEnv(home),
+    port: 0,
+    open: false,
+    idleExitMs: 150,
+    onIdle: () => {
+      fired = true;
+    },
+  });
+  try {
+    await new Promise((r) => setTimeout(r, 400));
+    assert.equal(fired, true);
+  } finally {
+    await dash.close();
+  }
+});
+
+test("openBrowser only launches plain loopback URLs", () => {
+  assert.equal(isLaunchableUrl("http://127.0.0.1:3847/"), true);
+  assert.equal(isLaunchableUrl("http://127.0.0.1:3847/?embed=1#/today?p=7927a458-75f3"), true);
+  assert.equal(isLaunchableUrl("http://localhost:4000/#/map"), true);
+  assert.equal(isLaunchableUrl("http://127.0.0.1:3847/&calc"), false);
+  assert.equal(isLaunchableUrl("http://127.0.0.1:3847/%COMSPEC%"), false);
+  assert.equal(isLaunchableUrl("https://example.com/"), false);
+  assert.equal(isLaunchableUrl("http://127.0.0.1:3847/\"x"), false);
 });

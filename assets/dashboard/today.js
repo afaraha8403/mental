@@ -63,16 +63,18 @@ export async function renderToday(el, ctx, _params, alive) {
 function hero(ctx, hb) {
   const ho = hb.handoff;
   const git = hb.git;
+  // No branch and no log means git could not read a checkout on this machine (or there is none).
+  const noGit = git && !git.branch && !(git.recent || []).length;
   const gitStrip = git
     ? h(
         "div.git-strip",
         null,
         h(
           "span.git-branch",
-          { title: git.dirty ? "Uncommitted changes" : "Working tree clean" },
+          { title: noGit ? "No git checkout for this project on this machine" : git.dirty ? "Uncommitted changes" : "Working tree clean" },
           icon("branch", 14),
-          h("span.mono", null, git.branch || "detached"),
-          h(`span.dirty-dot${git.dirty ? ".is-dirty" : ""}`, { "aria-label": git.dirty ? "dirty" : "clean" }),
+          h("span.mono", null, noGit ? "no git" : git.branch || "detached"),
+          noGit ? null : h(`span.dirty-dot${git.dirty ? ".is-dirty" : ""}`, { "aria-label": git.dirty ? "dirty" : "clean" }),
         ),
         h(
           "ol.git-commits",

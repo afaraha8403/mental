@@ -53,6 +53,12 @@
           <button type="button" class="icon-btn" id="theme-toggle" aria-label="Toggle theme" title="Toggle theme"></button>
         </header>
 
+        <div class="net-banner" id="net-banner" role="alert" hidden>
+          <span class="net-banner-dot" aria-hidden="true"></span>
+          <span id="net-banner-text">Can't reach the dashboard server.</span>
+          <button type="button" class="btn btn-ghost net-retry" id="net-retry">Retry</button>
+        </div>
+
         <main id="main" class="views" tabindex="-1">
           <section class="view" id="view-today" data-view="today" aria-labelledby="crumb-view" hidden></section>
           <section class="view" id="view-attention" data-view="attention" hidden></section>

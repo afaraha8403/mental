@@ -66,15 +66,56 @@ export const $ = (sel, root = document) => root.querySelector(sel);
 /** @param {string} sel */
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-/** @param {string} path */
+/**
+ * localStorage that never throws. Sandboxed webviews and some privacy modes deny storage
+ * entirely; preferences then simply do not persist.
+ */
+export const store = {
+  /** @param {string} key */
+  get(key) {
+    try {
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  /** @param {string} key @param {string} value */
+  set(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      // Storage denied or full.
+    }
+  },
+  /** @param {string} key */
+  remove(key) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // Storage denied.
+    }
+  },
+};
+
+/**
+ * Fetch a JSON API path. Never throws. Emits `mental:net` on `document` with
+ * `{ ok: false, offline }` when the server is unreachable or failed (5xx), `{ ok: true }` otherwise.
+ * @param {string} path
+ */
 export async function api(path) {
   try {
     const res = await fetch(path, { headers: { Accept: "application/json" } });
     const body = await res.json().catch(() => ({}));
+    netStatus(res.status < 500, false);
     return { status: res.status, body };
   } catch {
+    netStatus(false, true);
     return { status: 0, body: { ok: false, error: { code: "offline", message: "Dashboard server is not reachable." } } };
   }
+}
+
+function netStatus(ok, offline) {
+  document.dispatchEvent(new CustomEvent("mental:net", { detail: { ok, offline } }));
 }
 
 /** Type chip with emoji mark. */
