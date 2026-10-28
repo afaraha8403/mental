@@ -701,6 +701,23 @@ function commandPublic(c) {
   };
 }
 
+// `track discard` deletes a clock and `move` removes the source file after copying.
+const MCP_DESTRUCTIVE = new Set(["track", "move"]);
+
+/**
+ * MCP tool annotations derived from a command's catalog effects.
+ * Every tool is local-only, so `openWorldHint` is always false.
+ * @param {CatalogCommand} c
+ */
+export function mcpAnnotations(c) {
+  return {
+    readOnlyHint: c.effects === "read_only",
+    destructiveHint: MCP_DESTRUCTIVE.has(c.name),
+    idempotentHint: c.effects !== "non_idempotent",
+    openWorldHint: false,
+  };
+}
+
 /**
  * MCP tools from catalog rows with mcp: true (not aliases).
  */
@@ -711,6 +728,7 @@ export function mcpToolsFromCatalog() {
       name: c.name,
       description: c.summary,
       inputSchema: mcpInputSchema(c),
+      annotations: mcpAnnotations(c),
     }));
 }
 
@@ -748,8 +766,8 @@ export function mcpInputSchema(c) {
     properties[key] = prop;
     if (f.required) required.push(key);
   }
-  /** @type {{ type: "object", properties: object, required?: string[] }} */
-  const schema = { type: "object", properties };
+  /** @type {{ type: "object", properties: object, additionalProperties: false, required?: string[] }} */
+  const schema = { type: "object", properties, additionalProperties: false };
   if (required.length) schema.required = required;
   return schema;
 }

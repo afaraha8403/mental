@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { encode, handle, runTool, serveMcp } from "../bin/lib/mcp.mjs";
+import { mcpEntry } from "../bin/lib/mcp-hosts.mjs";
 import { gitEnv, initRepo, mental, tempHome } from "./helpers.mjs";
 import { CMD } from "../bin/lib/pkg.mjs";
 
@@ -53,12 +54,12 @@ test("install --mcp writes user MCP configs without enabling hooks", () => {
   assert.equal(r.status, 0, r.stderr || r.stdout);
   const body = JSON.parse(r.stdout);
   assert.equal(body.data.mcp.ok, true);
-  assert.equal(body.data.mcp.server.command, CMD);
-  assert.equal(body.data.mcp.server.args[0], "serve");
+  assert.deepEqual(body.data.mcp.server, mcpEntry());
+  assert.equal(body.data.mcp.server.args.at(-1), "serve");
   assert.doesNotMatch(JSON.stringify(body.data.mcp.server), /cli\.mjs/);
   for (const file of [join(home, ".cursor", "mcp.json"), join(home, ".claude.json")]) {
     const cfg = JSON.parse(readFileSync(file, "utf8"));
-    assert.deepEqual(cfg.mcpServers[CMD], { command: CMD, args: ["serve"] });
+    assert.deepEqual(cfg.mcpServers[CMD], mcpEntry());
     assert.doesNotMatch(cfg.mcpServers[CMD].command, /[/\\]|cli\.mjs/);
   }
   assert.equal(existsSync(join(home, ".cursor", "hooks.json")), false);
@@ -79,7 +80,7 @@ test("install --mcp preserves other MCP servers; uninstall removes only mental",
   assert.equal(r.status, 0, r.stderr || r.stdout);
   let cfg = JSON.parse(readFileSync(join(home, ".cursor", "mcp.json"), "utf8"));
   assert.equal(cfg.mcpServers.other.command, "other");
-  assert.equal(cfg.mcpServers.mental.command, "mental");
+  assert.deepEqual(cfg.mcpServers.mental, mcpEntry());
 
   const gone = mental(home, root, ["uninstall", "--json"]);
   assert.equal(gone.status, 0, gone.stderr || gone.stdout);

@@ -197,7 +197,7 @@ npm owns and upgrades the global `mental` executable. `mental install` refreshes
 Optional:
 
 ```bash
-mental install --mcp    # register `mental serve` in ~/.cursor/mcp.json + ~/.claude.json
+mental install --mcp    # register `mental serve` in ~/.cursor/mcp.json + ~/.claude.json (+ ~/.codex/config.toml if present)
 mental hooks on         # session-start hooks; default off
 mental option track on  # per-UUID sit-down clock; never from install paste unless the user asked
 mental doctor           # PATH, bindings, ignore, skills, npm update, host plugin lag, optionals[]

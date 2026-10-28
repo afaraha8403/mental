@@ -114,7 +114,7 @@ Default **off**. Skill + rule are enough for agents that can shell.
 
 ```bash
 mental serve            # stdio: heartbeat, pulse, where, status, search, list, show, park, handoff, journal, attention, decide, note
-mental install --mcp    # register in ~/.cursor/mcp.json + ~/.claude.json
+mental install --mcp    # register in ~/.cursor/mcp.json + ~/.claude.json (+ ~/.codex/config.toml if present)
 ```
 
 MCP is how tool-only agents (parallel sessions, orchestrators) re-pulse and record mid-chat. Tools wrap the same handlers as the CLI. Search/list accept `type` / `status` / `tag` / `kind`. Tool JSON is compact. `mental uninstall` removes only Mental’s MCP entry.
