@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-28
+
 ### Features
 - Heartbeat reports `needYouCount`, `agingCount` and `directionCount` next to `attentionCount`: open attention under 7 days old, open 7+ days, and standing directions. The dashboard nav badge, Today "In the air" lane, project cards, the Claude Desktop panel and the tool card now count what needs you instead of every open item, so they agree with the Attention page.
 - The Mental skill has an aging-triage recipe: an agent sorts old attention items into likely done (with the commit or file as evidence), still true and unclear, shows the list, and resolves only the likely-done group after the user says yes.
