@@ -856,7 +856,7 @@ test("Claude Desktop: no dashboard running → the button starts one, once", asy
 
 test("toolCardOf reads mental shell calls and themes the chat row", async () => {
   const { toolCardOf } = await import("../claude-mod/lib/toolcard.mjs");
-  const { toolRowDesktop, themed, esc } = await import("../claude-mod/lib/desktop.mjs");
+  const { toolRowDesktop, esc } = await import("../claude-mod/lib/desktop.mjs");
   assert.equal(esc(`<a href="x">&'`), "&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
   assert.equal(toolCardOf({ tool: "Bash", input: { command: "ls -la" }, output: "x" }), null);
   assert.equal(toolCardOf({ tool: "Bash", input: null, output: null }), null);
@@ -867,15 +867,20 @@ test("toolCardOf reads mental shell calls and themes the chat row", async () => 
   assert.equal(park?.state, "done");
   assert.ok(park?.title);
   assert.equal(toolCardOf({ tool: "Bash", input: { command: 'mental park --title "x"' }, output: "" })?.state, "running");
-  assert.equal(toolCardOf({ tool: "Bash", input: '{"command":"mental heartbeat --json"}', output: "" })?.kind.length > 0, true);
+  assert.equal(toolCardOf({ tool: "Bash", input: { command: "mental park" }, output: '{"ok":true}', isRunning: true })?.state, "running", "isRunning wins over a partial result");
+  assert.equal(toolCardOf({ tool: "Bash", input: '{"command":"mental heartbeat --json"}', output: "" })?.kind, "mental heartbeat");
   const el = (type) => (props) => ({ type, props });
-  const row = toolRowDesktop({ Svg: el("Svg"), Box: el("Box") }, { model: { ...park, title: "<b>&" }, theme: "auto" });
+  const row = toolRowDesktop({ Svg: el("Svg"), Box: el("Box") }, { model: { ...park, title: "<b>&" } });
   const svg = row.props.children[0].props;
   assert.match(svg.source, /prefers-color-scheme:light/);
-  assert.doesNotMatch(svg.source, /<animate/, "no endless animation in the chat row");
+  assert.match(svg.source, /#2dd4bf/, "dark console accent");
+  assert.match(svg.source, /#0d9488/, "light console accent");
+  assert.doesNotMatch(svg.source, /#a78bfa|#6d28d9|#a855f7|#9333ea|violet|purple/i, "no violet left in the card");
+  assert.doesNotMatch(svg.source, /<animate/, "a finished call does not animate");
   assert.doesNotMatch(svg.source, /<b>/);
   assert.ok(svg.source.length <= 131072);
-  assert.ok(typeof themed === "function");
+  const live = toolRowDesktop({ Svg: el("Svg"), Box: el("Box") }, { model: toolCardOf({ tool: "Bash", input: { command: "mental park" }, output: "", isRunning: true }) });
+  assert.match(live.props.children[0].props.source, /<animate/, "a running call shows a live dot");
   const eng = fakeEngine({});
   await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
   await eng.flush();
@@ -887,6 +892,74 @@ test("toolCardOf reads mental shell calls and themes the chat row", async () => 
   assert.equal(other, "PASSED", "other tools keep their own row");
   const miss = await eng.fire("ui.render", { component: "ToolUse", surface: "terminal", props: { tool: "Bash", input: { command: 'mental park --title "x"' }, output: "ok" } });
   assert.ok(!miss || !JSON.stringify(miss).includes("prefers-color-scheme"), "terminal untouched");
+});
+
+test("the chat card says what each mental call did", async () => {
+  const { toolCardOf } = await import("../claude-mod/lib/toolcard.mjs");
+  const card = (command, output, extra = {}) => toolCardOf({ tool: "Bash", input: { command }, output, ...extra });
+  const env = (data) => JSON.stringify({ ok: true, data });
+
+  const park = card('mental park --json --title "Wire card" --resume "Run the tests next"', env({ path: "journal/x.md", heartbeat: { handoff: { resume: "Run the tests next", outcome: "Wire card" } } }));
+  assert.equal(park.title, "Next: Run the tests next");
+  assert.equal(park.detail, "Wire card");
+  const journal = card('mental journal --json --title J --resume "Do X"', env({ path: "journal/x.md", section: "## 18:54 — J\n\nResume: Do X\n" }));
+  assert.equal(journal.title, "Next: Do X", "journal answers with a section, not a heartbeat");
+
+  const raised = card("mental attention --json --tag ui --title 'Check width' --kind verify", env({ path: "attention/x.md", updated: false }));
+  assert.deepEqual([raised.title, raised.detail, raised.tone], ["Check width", "verify · raised", "warn"], "the write prints only a path: the title comes from the flags");
+  const resolved = card('mental attention --json --title "Check width" --status=resolved', env({ path: "attention/x.md", updated: true }));
+  assert.deepEqual([resolved.detail, resolved.tone], ["resolved", "ok"]);
+
+  const beat = card("mental heartbeat --json --passive", env({ git: { branch: "main" }, handoff: { resume: "Ship it" }, attentionCount: 3, openDecisionCount: 49 }));
+  assert.equal(beat.title, "Pick up: Ship it");
+  assert.equal(beat.detail, "3 need you · main · 49 open decisions");
+
+  const hook = card("mental hooks session-start cursor", JSON.stringify({ additional_context: "x".repeat(1331) }));
+  assert.deepEqual([hook.kind, hook.title, hook.detail], ["mental hooks session-start", "Session-start hook for Cursor", "1.3 KB context"]);
+  const on = card("mental hooks on --json", env({ action: "on", written: ["C:\\h\\.cursor\\hooks.json", "C:\\h\\.claude\\settings.json"] }));
+  assert.deepEqual([on.title, on.detail], ["Session-start hooks on", "Cursor, Claude Code · 2 files"]);
+  assert.equal(card("mental hooks on", { stdout: "hooks on: a, b\n" }).title, "hooks on: a, b", "plain output: its first line");
+
+  assert.equal(card("mental search card --json", env({ q: "card", hits: [{ title: "Card note" }] })).title, "1 result for “card”");
+  assert.equal(card("mental list --type Decision --json", env({ items: [{ title: "A" }, { title: "B" }], total: 2, type: "Decision" })).title, "2 decisions");
+  const doctor = card("mental doctor --json", env({ checks: [{ ok: true }, { ok: false, level: "warn", message: "2 untagged" }] }));
+  assert.deepEqual([doctor.title, doctor.detail, doctor.tone], ["1 warning · 1 ok", "2 untagged", "warn"]);
+  assert.equal(card("mental.cmd track stop --all --json", env({ stopped: [{ wall: "1:12", title_internal: "Card work" }] })).title, "Clock stopped · 1:12");
+  assert.equal(card("mental option mcp off --json", env({ feature: "mcp", enabled: false, written: [] })).title, "mcp off");
+
+  const failed = card("mental decide --json --title X", JSON.stringify({ ok: false, error: { code: "usage", message: "mental decide create requires --body", hint: "Pass --body" } }));
+  assert.deepEqual([failed.state, failed.tone, failed.title, failed.detail], ["failed", "danger", "mental decide create requires --body", "Pass --body"]);
+  const crashed = card("mental status --json", { stdout: "", stderr: "spawn ENOENT" }, { isErrored: true });
+  assert.deepEqual([crashed.state, crashed.title], ["failed", "spawn ENOENT"], "the real error, from stderr");
+  assert.equal(card("mental park", "", { isInterrupted: true }).title, "Interrupted");
+});
+
+test("the chat card spans the chat and stays one or two lines tall", async () => {
+  const { toolCardOf } = await import("../claude-mod/lib/toolcard.mjs");
+  const { toolRowDesktop, widthOf } = await import("../claude-mod/lib/desktop.mjs");
+  const el = (type) => (props) => ({ type, props });
+  const svgOf = (model, columns) => toolRowDesktop({ Svg: el("Svg"), Box: el("Box") }, { model, columns }).props.children[0].props;
+  const short = toolCardOf({ tool: "Bash", input: { command: "mental park --json --resume 'Run tests'" }, output: JSON.stringify({ ok: true, data: { path: "j" } }) });
+  const long = { ...short, title: "Next: ".concat("a very long resume line ".repeat(12)), detail: "a long outcome title that will not fit" };
+  for (const columns of [40, 90, 140]) {
+    for (const model of [short, long]) {
+      const svg = svgOf(model, columns);
+      assert.equal(svg.width, widthOf(columns), `width follows the site's ${columns} columns`);
+      assert.ok(svg.height >= 28 && svg.height <= 46, `compact at ${columns} columns: ${svg.height}px`);
+      assert.match(svg.source, new RegExp(`width="${svg.width}"`));
+    }
+  }
+  assert.equal(svgOf(short, 140).height, 32, "a short summary is one line");
+  assert.equal(svgOf(long, 140).height, 46, "a long one takes a second line, not more");
+
+  const eng = fakeEngine({});
+  await eng.fire("session.start", { cwd: "/repo" }, { cwd: "/repo" });
+  await eng.flush();
+  const row = await eng.fire("ui.render", { component: "ToolUse", surface: "desktop", viewport: { columns: 110, rows: 40 }, props: { tool: "Bash", input: { command: "mental park" }, output: "ok", isRunning: false, isErrored: false, isInterrupted: false } });
+  let drawn;
+  walk(row, (n) => n.type === "Svg" && (drawn = n.props));
+  assert.equal(drawn?.width, widthOf(110), "the hook sizes the card from e.viewport.columns");
+  assert.doesNotMatch(JSON.stringify(row).replace(/"source":"(?:[^"\\]|\\.)*"/g, ""), /#[0-9a-f]{3,8}\b/i, "no hex colours outside the drawing");
 });
 
 test("register degrades when heartbeat cannot run", async () => {
