@@ -1,0 +1,110 @@
+{
+  "name": "mental",
+  "displayName": "Mental",
+  "description": "Where you left off, what needs you, and the thread across agents, in a Cursor sidebar backed by the Mental CLI.",
+  "version": "0.12.1",
+  "publisher": "balacode",
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/afaraha8403/mental.git",
+    "directory": "cursor-ext"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "mental",
+    "continuity",
+    "handoff",
+    "cursor",
+    "agents"
+  ],
+  "main": "./extension.js",
+  "files": [
+    "extension.js",
+    "lib.js",
+    "media/icon.png",
+    "media/mental.svg"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mental",
+          "title": "Mental",
+          "icon": "media/mental.svg"
+        }
+      ]
+    },
+    "views": {
+      "mental": [
+        {
+          "type": "webview",
+          "id": "mental.panel",
+          "name": "Mental"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "mental.park",
+        "title": "Park this session",
+        "category": "Mental"
+      },
+      {
+        "command": "mental.handoff",
+        "title": "Hand off this session",
+        "category": "Mental"
+      },
+      {
+        "command": "mental.refresh",
+        "title": "Refresh",
+        "category": "Mental",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mental.openInBrowser",
+        "title": "Open the dashboard in the browser",
+        "category": "Mental",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "mental.stopDashboard",
+        "title": "Stop the dashboard",
+        "category": "Mental"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "mental.refresh",
+          "when": "view == mental.panel",
+          "group": "navigation"
+        },
+        {
+          "command": "mental.openInBrowser",
+          "when": "view == mental.panel",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Mental",
+      "properties": {
+        "mental.cliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the Mental CLI. Leave empty to use `mental` from PATH (`mental.cmd` on Windows)."
+        }
+      }
+    }
+  }
+}
