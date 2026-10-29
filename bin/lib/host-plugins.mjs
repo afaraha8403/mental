@@ -181,7 +181,7 @@ export function hostPluginChecks(opts) {
     }
   }
 
-  const targets = userInstallTargets(opts.home).skills;
+  const targets = userInstallTargets(opts.home, env).skills;
   /** @type {string | null} */
   let worst = null;
   let seen = false;

@@ -7,8 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-10-29
+
 ### Fixes
-- `mental install`, `mental doctor --fix`, `mental uninstall` and the hooks option now also cover the Claude Code profile named by `CLAUDE_CONFIG_DIR`, next to `~/.claude`. Before, a profile launched with its own config dir never received the Mental skill, rule, `CLAUDE.md` block or session-start hook and went stale after every upgrade. `mental doctor` reports that profile as `rule-claude-profile`, and an install with hooks already on adds the hook to a profile that lacks it.
+- `mental install`, `mental doctor --fix`, `mental uninstall` and the hooks option now also cover the Claude Code profile named by `CLAUDE_CONFIG_DIR`, next to `~/.claude`. Before, a profile launched with its own config dir never received the Mental skill, rule, `CLAUDE.md` block or session-start hook and went stale after every upgrade. `mental doctor` reports that profile as `rule-claude-profile`, and an install with hooks already on adds the hook to a profile that lacks it. The doctor's skill-version check reads that profile's copy too, so a profile left behind after an upgrade shows up.
 
 ## [0.13.0] - 2026-10-28
 
