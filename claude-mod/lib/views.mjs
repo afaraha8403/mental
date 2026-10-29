@@ -463,15 +463,22 @@ function kitOf(E, look) {
     picture,
     head: (label, right = "", tone = "accent") => picture(headSvg({ label, right, tone }, { width })),
     card: (key, children, extra = {}) =>
-      E.Box({ key, flexDirection: "row", alignItems: "center", gap: 1, borderStyle: "round", borderDimColor: true, paddingX: 1, ...extra, children: children.filter(Boolean) }),
+      E.Box({ key, flexDirection: "row", alignItems: "center", gap: 1, borderStyle: "round", borderDimColor: true, backgroundColor: SURFACE, paddingX: 1, ...extra, children: children.filter(Boolean) }),
     grow: (key, child) => E.Box({ key, flexGrow: 1, flexShrink: 1, children: [child] }),
     link: (key, label, onPress) => E.Button({ key, label, plain: true, onPress }),
     press: (key, spec, onPress) => pressRow(E, look, key, spec, onPress),
   };
 }
 
-/** The hover a native row takes while the pointer is on it: a teal border. */
-const ROW_HOVER = { borderColor: "cyan", borderDimColor: false };
+/**
+ * Row fills are host theme keys, not colours, so they follow the light or dark
+ * theme: the grey of a user message at rest, the cool tint of a memory block lit.
+ */
+const SURFACE = "userMessageBackground";
+const SURFACE_HOT = "memoryBackgroundColor";
+
+/** The hover a native row takes while the pointer is on it: a teal border on a tinted fill. */
+const ROW_HOVER = { borderColor: "cyan", borderDimColor: false, backgroundColor: SURFACE_HOT };
 
 /**
  * One row that is a single target. Where the host gives a row `Client`
@@ -500,6 +507,7 @@ function pressRow(E, look, key, spec, onPress) {
     gap: 1,
     borderStyle: "round",
     borderDimColor: true,
+    backgroundColor: SURFACE,
     paddingX: 1,
     hover: ROW_HOVER,
     children: [
@@ -659,7 +667,7 @@ function renderRouteConsole(E, route, on, look) {
     if (on.onAskItem) {
       children.push(row(E, "item-actions", [link("item-ask", "✦ Ask Claude about this ›", () => on.onAskItem({ path: route.path, title, kind: kind.toLowerCase() }))], 2));
     }
-    children.push(E.Box({ key: "doc", flexDirection: "column", borderStyle: "round", borderDimColor: true, paddingX: 1, paddingY: 0, children: [bodyOf(E, look, doc.body)] }));
+    children.push(E.Box({ key: "doc", flexDirection: "column", borderStyle: "round", borderDimColor: true, backgroundColor: SURFACE, paddingX: 1, paddingY: 0, children: [bodyOf(E, look, doc.body)] }));
     const links = Array.isArray(doc.backlinks) ? doc.backlinks.filter((b) => b?.path) : [];
     if (links.length) {
       children.push(

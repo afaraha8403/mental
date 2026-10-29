@@ -40,7 +40,11 @@ export function logoSvg(size = 18) {
  * because an `Svg` region cannot be clicked.
  */
 
-/** Console palettes: ink, hairlines and one teal accent per theme. */
+/**
+ * Console palettes: ink, hairlines, one teal accent, and card surfaces per theme.
+ * Cards fill with `card` plus a wash of their tone (`tint` opacity) and edge in
+ * that tone (`edge` opacity); the hero runs a teal wash from `heroA` to `heroB`.
+ */
 const CONSOLE = {
   dark: {
     ink: "#f4f4f5",
@@ -51,6 +55,11 @@ const CONSOLE = {
     lineOpacity: 0.14,
     accent: "#2dd4bf",
     accentSoft: "#5eead4",
+    card: "#222b2b",
+    heroA: "#123c37",
+    heroB: "#1f2a2a",
+    tint: 0.1,
+    edge: 0.4,
     emerald: "#34d399",
     amber: "#fbbf24",
     rose: "#fb7185",
@@ -71,6 +80,11 @@ const CONSOLE = {
     lineOpacity: 0.12,
     accent: "#0d9488",
     accentSoft: "#0f766e",
+    card: "#f5faf9",
+    heroA: "#d9f2ed",
+    heroB: "#f5fbfa",
+    tint: 0.07,
+    edge: 0.38,
     emerald: "#059669",
     amber: "#b45309",
     rose: "#e11d48",
@@ -203,6 +217,7 @@ function doc(W, H, defs, body) {
 function strokes(id) {
   return [
     `<linearGradient id="${id}rule" x1="0" x2="1"><stop offset="0" stop-color="${C.accent}" stop-opacity="0.5"/><stop offset="1" stop-color="${C.accent}" stop-opacity="0"/></linearGradient>`,
+    `<linearGradient id="${id}hero" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" stop-color="${C.heroA}"/><stop offset="1" stop-color="${C.heroB}"/></linearGradient>`,
     `<linearGradient id="${id}wire" x1="0" x2="1"><stop offset="0" stop-color="${C.accent}" stop-opacity="0.15"/><stop offset="1" stop-color="${C.accent}" stop-opacity="0.9"/></linearGradient>`,
   ].join("");
 }
@@ -317,7 +332,7 @@ function heroOf(m, { width: W, now, working = false }) {
     body.push(say(pad, y, clip(`△ ${h.error}`, fitChars(inner, 12)), { size: 12, fill: C.rose }));
   }
   const H = Math.round(y + 22);
-  const frame = `<rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="14" fill="none" ${hair()}/>`;
+  const frame = `<rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="14" fill="url(#${id}hero)" stroke="${C.accent}" stroke-opacity="${C.edge}"/>`;
   return { source: doc(W, H, strokes(id), frame + body.join("")), height: H, alt };
 }
 
@@ -395,10 +410,17 @@ function pulseOf(m, { width: W, now }) {
       label: "Needs you",
       value: String(m.needs.total),
       sub: m.needs.total ? breakdown || "open items" : m.needs.later ? `all clear · ${m.needs.later} later` : "all clear",
+      tone: m.needs.total ? C.rose : C.emerald,
       art: (cx, cy) => ring(cx, cy, 16, Object.entries(counts).map(([k, n]) => ({ n, color: KIND_COLOR[k] }))),
     },
-    { label: "Decisions in force", value: String(m.guardrails || 0), sub: "guarding this repo", art: shield },
-    { label: "Context", value: m.context == null ? "—" : `${m.context}%`, sub: "of the window", art: (cx, cy) => gauge(cx, cy, 16, m.context) },
+    { label: "Decisions in force", value: String(m.guardrails || 0), sub: "guarding this repo", tone: C.sky, art: shield },
+    {
+      label: "Context",
+      value: m.context == null ? "—" : `${m.context}%`,
+      sub: "of the window",
+      tone: (m.context || 0) >= 80 ? C.amber : C.accent,
+      art: (cx, cy) => gauge(cx, cy, 16, m.context),
+    },
     {
       label: "This session",
       value: String(st.turns),
@@ -412,7 +434,8 @@ function pulseOf(m, { width: W, now }) {
     const x = (i % cols) * (tw + gap);
     const y = Math.floor(i / cols) * (th + gap);
     return [
-      `<rect x="${r1(x + 0.5)}" y="${y + 0.5}" width="${r1(tw - 1)}" height="${th - 1}" rx="12" fill="none" ${hair()}/>`,
+      `<rect x="${r1(x + 0.5)}" y="${y + 0.5}" width="${r1(tw - 1)}" height="${th - 1}" rx="12" fill="${C.card}"/>`,
+      `<rect x="${r1(x + 0.5)}" y="${y + 0.5}" width="${r1(tw - 1)}" height="${th - 1}" rx="12" fill="${t.tone || C.accent}" fill-opacity="${C.tint}" stroke="${t.tone || C.accent}" stroke-opacity="${C.edge}"/>`,
       say(x + 14, y + 23, clip(t.label.toUpperCase(), fitChars(tw - 28, 9.5)), { size: 9.5, weight: 650, fill: C.ink3, spacing: 1.2 }),
       say(x + 14, y + 56, t.value, { size: 26, weight: 650, tabular: true }),
       say(x + 14, y + 74, clip(t.sub, fitChars(tw - 28, 10.5)), { size: 10.5, fill: C.ink4 }),

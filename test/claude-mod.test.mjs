@@ -1222,4 +1222,14 @@ test("row Client: hover lights the border and title; a click or Enter posts one 
   assert.deepEqual(posts, [{ press: true }, { press: true }], "one press per click, one per Enter");
   pointer({ type: "leave", x: 40, y: 0 });
   assert.deepEqual(state, { hot: false });
+  assert.equal(rest.props.backgroundColor, "userMessageBackground", "rows fill with a host theme key");
+  assert.equal(hot.props.backgroundColor, "memoryBackgroundColor");
+
+  // A leave that reaches the listener from the draw before the row lit must still clear it.
+  state = undefined;
+  MentalRow(props, surface());
+  const stale = pointer;
+  stale({ type: "enter", x: 3, y: 0 });
+  stale({ type: "leave", x: 40, y: 0 });
+  assert.deepEqual(state, { hot: false }, "a row never stays lit after the pointer leaves");
 });

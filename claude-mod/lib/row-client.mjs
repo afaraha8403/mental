@@ -7,7 +7,8 @@
  * A surface module gets no mods API and no imports from the mod; everything it
  * draws comes from `props`. Props are plain data:
  * `{ tag, tagColor, tagWidth, title, detail }`, where `tagColor` is a colour
- * name the host maps to its own theme.
+ * name the host maps to its own theme. Fills are host theme keys so they follow
+ * the light or dark theme.
  */
 
 /**
@@ -18,9 +19,11 @@ export default function MentalRow(props, surface) {
   const { Box, Text } = surface.elements;
   const hot = !!surface.state?.hot;
   // A later call replaces the listener, so setting them on each draw keeps them current.
+  // Enter and leave set the state outright: a listener from an earlier draw can
+  // hold a stale `hot`, and skipping on it left rows lit after the pointer left.
   surface.onPointer((e) => {
-    if (e.type === "enter" && !hot) surface.setState({ hot: true });
-    else if (e.type === "leave" && hot) surface.setState({ hot: false });
+    if (e.type === "enter") surface.setState({ hot: true });
+    else if (e.type === "leave") surface.setState({ hot: false });
     else if (e.type === "up" && e.button === "left") surface.post({ press: true });
   });
   surface.onKey((e) => {
@@ -54,6 +57,7 @@ export default function MentalRow(props, surface) {
     gap: 1,
     paddingX: 1,
     borderStyle: "round",
+    backgroundColor: hot ? "memoryBackgroundColor" : "userMessageBackground",
     ...(hot ? { borderColor: "cyan" } : { borderDimColor: true }),
     children,
   });
