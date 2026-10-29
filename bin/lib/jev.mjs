@@ -50,7 +50,7 @@ const CACHE_MAX = 500;
 
 /**
  * @param {string | null} home
- * @param {NodeJS.ProcessEnv} [env] only used for cache/ledger location; never for keys
+ * @param {NodeJS.ProcessEnv} [env] used for cache/ledger location and `MENTAL_JEV_TIMEOUT_MS`; never for keys
  * @param {{ fetch?: typeof fetch, timeoutMs?: number, backoffMs?: number, provider?: string }} [opts]
  * @returns {{ ask: Function, decide: Function, gate: Function, source: string, provider: string, personal: boolean } | null}
  *   null when the decision model is off or unkeyed
@@ -59,7 +59,8 @@ export function getJev(home, env = process.env, opts = {}) {
   const r = resolveDecide(home, opts.provider);
   if (!r.key) return null;
   const doFetch = opts.fetch || globalThis.fetch;
-  const timeoutMs = opts.timeoutMs ?? 4000;
+  // MENTAL_JEV_TIMEOUT_MS lets tests give a starved CI runner more than the short default.
+  const timeoutMs = opts.timeoutMs ?? (Number(env.MENTAL_JEV_TIMEOUT_MS) || 4000);
   const backoffMs = opts.backoffMs ?? 250;
   const cfg = home ? loadConfig(home) : null;
   const dailyTokens = cfg && !cfg.corrupt ? cfg.decide.dailyTokens : null;

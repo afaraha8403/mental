@@ -73,6 +73,9 @@ export function gitEnv(home) {
     npm_config_update_notifier: "false",
     MENTAL_SKIP_UPDATE_CHECK: "1",
     MENTAL_SKIP_HOST_PLUGIN_CHECK: "1",
+    // A busy Windows runner can miss the 4s decision-model timeout against a local mock,
+    // which silently drops to the unranked path and fails ranking assertions.
+    MENTAL_JEV_TIMEOUT_MS: "30000",
   };
   // A real Claude profile from the shell running the tests must never receive test installs.
   delete env.CLAUDE_CONFIG_DIR;

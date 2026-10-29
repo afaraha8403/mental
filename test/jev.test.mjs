@@ -127,6 +127,22 @@ test("gate fails open on HTTP error, network error and timeout", async () => {
   assert.equal(slow.reason, "timeout");
 });
 
+test("MENTAL_JEV_TIMEOUT_MS sets the request timeout; an explicit timeoutMs still wins", async () => {
+  const home = tempHome();
+  withKey(home);
+  const late = (ms) => async (_u, o) =>
+    new Promise((resolve, reject) => {
+      const t = setTimeout(() => resolve({ status: 500, ok: false, headers: { get: () => null }, json: async () => ({}) }), ms);
+      o.signal.addEventListener("abort", () => (clearTimeout(t), reject(Object.assign(new Error("a"), { name: "AbortError" }))));
+    });
+  const short = await getJev(home, { MENTAL_JEV_TIMEOUT_MS: "20" }, { fetch: late(200), backoffMs: 1 }).gate({ t: 1 }, { q: "x" });
+  assert.equal(short.reason, "timeout");
+  const long = await getJev(home, { MENTAL_JEV_TIMEOUT_MS: "5000" }, { fetch: late(30), backoffMs: 1 }).gate({ t: 2 }, { q: "x" });
+  assert.notEqual(long.reason, "timeout", "a 30ms answer is inside a 5s override");
+  const pinned = await getJev(home, { MENTAL_JEV_TIMEOUT_MS: "5000" }, { fetch: late(200), backoffMs: 1, timeoutMs: 20 }).gate({ t: 3 }, { q: "x" });
+  assert.equal(pinned.reason, "timeout");
+});
+
 test("gate does not retry with another auth scheme on 401, and caches answers", async () => {
   const home = tempHome();
   const seen = [];
