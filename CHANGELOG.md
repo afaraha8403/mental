@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-10-29
+
 ### Changes
 - The Mental panel in Claude Desktop has real surfaces now. The hero card sits on a teal wash, each pulse tile is tinted by what it shows (needs you, decisions, context, this session), and every row, link and the entry body sits on a filled card that lights teal under the pointer. Row fills use Claude's own theme backgrounds, so they follow light and dark mode.
 
