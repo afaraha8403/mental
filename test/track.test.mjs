@@ -337,9 +337,13 @@ test("report includes a running interval with live wall instead of a silent zero
   );
   const slice = parseOk(mental(home, root, ["where", "--json"]), "where").data.root;
   ageInterval(slice, started.data.id, { startedAgoMs: 7 * 3600 * 1000, lastSeenAgoMs: 3 * 3600 * 1000 });
-  const day = todayYmd();
+  // The clock started 7 hours ago, which is yesterday shortly after midnight;
+  // the range starts on the start's day so the whole interval is in it.
+  const p = (n) => String(n).padStart(2, "0");
+  const s = new Date(Date.now() - 7 * 3600 * 1000 - 60_000);
+  const since = `${s.getFullYear()}-${p(s.getMonth() + 1)}-${p(s.getDate())}`;
   const report = parseOk(
-    mental(home, root, ["track", "report", "--json", "--since", day, "--until", day]),
+    mental(home, root, ["track", "report", "--json", "--since", since, "--until", todayYmd()]),
     "report running",
   );
   assert.equal(typeof report.data.wall_minutes, "number");
@@ -351,7 +355,7 @@ test("report includes a running interval with live wall instead of a silent zero
   assert.equal(report.data.rows[0].status, "running");
   assert.equal(typeof report.data.rows[0].wall_minutes, "number");
   const all = parseOk(
-    mental(home, root, ["track", "report", "--all", "--json", "--since", day, "--until", day]),
+    mental(home, root, ["track", "report", "--all", "--json", "--since", since, "--until", todayYmd()]),
     "report --all running",
   );
   assert.equal(all.data.chunks.length, 1);
