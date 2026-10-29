@@ -74,6 +74,8 @@ export function gitEnv(home) {
     MENTAL_SKIP_UPDATE_CHECK: "1",
     MENTAL_SKIP_HOST_PLUGIN_CHECK: "1",
   };
+  // A real Claude profile from the shell running the tests must never receive test installs.
+  delete env.CLAUDE_CONFIG_DIR;
   delete env.NO_COLOR;
   if (env.TERM === "dumb") delete env.TERM;
   return env;

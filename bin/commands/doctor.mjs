@@ -89,7 +89,7 @@ function applySafeDoctorFixes({ home, cwd, env }) {
   if (ignore.ok) applied.push("ignore");
   const legacy = purgeBalakitMental({ home, projectDir: cwd });
   if (legacy.removed.length) applied.push("legacy-balakit");
-  const installed = installSkills({ home, projectDir: null, force: true });
+  const installed = installSkills({ home, env, projectDir: null, force: true });
   applied.push("install");
   ensureSkeleton(userMentalDir(home), { name: "personal" });
   return {

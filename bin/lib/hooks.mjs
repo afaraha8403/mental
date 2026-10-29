@@ -11,6 +11,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CMD, PKG_ROOT } from "./pkg.mjs";
 import { HOST_VIA } from "./via.mjs";
+import { claudeConfigDirs } from "./install-skills.mjs";
 
 export const HOOK_MARKER = "mental status --json";
 /** Pre-0.12.2 hook script; still shipped so existing hook entries keep working. */
@@ -92,10 +93,12 @@ export function cursorHooksPath(home) {
 }
 
 /**
+ * Claude Code settings files: `~/.claude/settings.json` plus a CLAUDE_CONFIG_DIR profile's.
  * @param {string} home
+ * @param {NodeJS.ProcessEnv} [env]
  */
-export function claudeSettingsPath(home) {
-  return join(home, ".claude", "settings.json");
+export function claudeSettingsPaths(home, env = process.env) {
+  return claudeConfigDirs(home, env).map((dir) => join(dir, "settings.json"));
 }
 
 /**
@@ -104,9 +107,9 @@ export function claudeSettingsPath(home) {
  * Claude Code gets SessionStart only: matcher "" also fires after compaction, and
  * PreCompact stdout never reaches the model.
  * @param {string} home
- * @param {{ platform?: string }} [opts]
+ * @param {{ platform?: string, env?: NodeJS.ProcessEnv }} [opts]
  */
-export function enableHooks(home, { platform = process.platform } = {}) {
+export function enableHooks(home, { platform = process.platform, env = process.env } = {}) {
   /** @type {string[]} */
   const written = [];
 
@@ -115,10 +118,14 @@ export function enableHooks(home, { platform = process.platform } = {}) {
   if (!cursor) {
     return { ok: false, error: { code: "hooks-parse", message: `Could not parse ${cursorFile}` } };
   }
-  const claudeFile = claudeSettingsPath(home);
-  const claude = readJson(claudeFile, {});
-  if (!claude) {
-    return { ok: false, error: { code: "hooks-parse", message: `Could not parse ${claudeFile}` } };
+  /** @type {Array<[string, any]>} */
+  const claudes = [];
+  for (const claudeFile of claudeSettingsPaths(home, env)) {
+    const claude = readJson(claudeFile, {});
+    if (!claude) {
+      return { ok: false, error: { code: "hooks-parse", message: `Could not parse ${claudeFile}` } };
+    }
+    claudes.push([claudeFile, claude]);
   }
 
   cursor.version = cursor.version || 1;
@@ -131,17 +138,19 @@ export function enableHooks(home, { platform = process.platform } = {}) {
   writeJson(cursorFile, cursor);
   written.push(cursorFile);
 
-  claude.hooks = claude.hooks || {};
-  claude.hooks.SessionStart = [
-    ...withoutMentalBlocks(claude.hooks.SessionStart),
-    { matcher: "", hooks: [{ type: "command", command: hookCommand(HOST_VIA.claudeCode, platform) }] },
-  ];
-  if (Array.isArray(claude.hooks.PreCompact)) {
-    claude.hooks.PreCompact = withoutMentalBlocks(claude.hooks.PreCompact);
-    if (claude.hooks.PreCompact.length === 0) delete claude.hooks.PreCompact;
+  for (const [claudeFile, claude] of claudes) {
+    claude.hooks = claude.hooks || {};
+    claude.hooks.SessionStart = [
+      ...withoutMentalBlocks(claude.hooks.SessionStart),
+      { matcher: "", hooks: [{ type: "command", command: hookCommand(HOST_VIA.claudeCode, platform) }] },
+    ];
+    if (Array.isArray(claude.hooks.PreCompact)) {
+      claude.hooks.PreCompact = withoutMentalBlocks(claude.hooks.PreCompact);
+      if (claude.hooks.PreCompact.length === 0) delete claude.hooks.PreCompact;
+    }
+    writeJson(claudeFile, claude);
+    written.push(claudeFile);
   }
-  writeJson(claudeFile, claude);
-  written.push(claudeFile);
 
   return {
     ok: true,
@@ -154,17 +163,21 @@ export function enableHooks(home, { platform = process.platform } = {}) {
 }
 
 /**
- * True when a hook file still runs the pre-0.12.2 `.sh` script or raw `mental status`.
+ * True when consented hooks need rewriting: a file still runs the pre-0.12.2 `.sh`
+ * script or raw `mental status`, or a Claude Code profile has no session-start entry.
  * @param {string} home
+ * @param {NodeJS.ProcessEnv} [env]
  */
-export function hasLegacyHooks(home) {
+export function hooksNeedRewrite(home, env = process.env) {
   const cursor = readJson(cursorHooksPath(home), null);
   if (cursor?.hooks?.sessionStart?.some?.((e) => isLegacyCommand(entryCommand(e)))) return true;
-  const claude = readJson(claudeSettingsPath(home), null);
-  for (const key of ["SessionStart", "PreCompact"]) {
-    const blocks = claude?.hooks?.[key];
-    if (!Array.isArray(blocks)) continue;
-    if (blocks.some((b) => (b?.hooks || []).some((h) => isLegacyCommand(h.command)))) return true;
+  for (const file of claudeSettingsPaths(home, env)) {
+    const claude = readJson(file, null);
+    const commands = ["SessionStart", "PreCompact"].flatMap((key) =>
+      Array.isArray(claude?.hooks?.[key]) ? claude.hooks[key].flatMap((b) => (b?.hooks || []).map((h) => h.command)) : [],
+    );
+    if (commands.some(isLegacyCommand)) return true;
+    if (!commands.some((c) => isMentalCommand(c) && c.includes("hooks session-start"))) return true;
   }
   return false;
 }
@@ -172,8 +185,9 @@ export function hasLegacyHooks(home) {
 /**
  * Remove only Mental hook entries. Leave the rest of the files intact.
  * @param {string} home
+ * @param {NodeJS.ProcessEnv} [env]
  */
-export function disableHooks(home) {
+export function disableHooks(home, env = process.env) {
   /** @type {string[]} */
   const written = [];
 
@@ -185,9 +199,9 @@ export function disableHooks(home) {
     written.push(cursorFile);
   }
 
-  const claudeFile = claudeSettingsPath(home);
-  const claude = readJson(claudeFile, null);
-  if (claude?.hooks) {
+  for (const claudeFile of claudeSettingsPaths(home, env)) {
+    const claude = readJson(claudeFile, null);
+    if (!claude?.hooks) continue;
     for (const key of ["SessionStart", "PreCompact"]) {
       if (!Array.isArray(claude.hooks[key])) continue;
       claude.hooks[key] = withoutMentalBlocks(claude.hooks[key]);

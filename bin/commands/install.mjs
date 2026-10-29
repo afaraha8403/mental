@@ -6,7 +6,7 @@ import { resolveBundle } from "../lib/resolve.mjs";
 import { userMentalDir } from "../lib/bindings.mjs";
 import { ensureSkeleton } from "../lib/okf.mjs";
 import { installSkills } from "../lib/install-skills.mjs";
-import { enableHooks, hasLegacyHooks } from "../lib/hooks.mjs";
+import { enableHooks, hooksNeedRewrite } from "../lib/hooks.mjs";
 import { enableMcp } from "../lib/mcp-hosts.mjs";
 import { CMD } from "../lib/pkg.mjs";
 import { printResult, brandLine, EXIT_IO } from "../lib/output.mjs";
@@ -43,6 +43,7 @@ export function cmdInstall(args, io = {}) {
     projectDir: projectOnly ? cwd : null,
     homeInstall: !projectOnly,
     force,
+    env,
   });
   const personal = userMentalDir(home);
   if (!projectOnly) ensureSkeleton(personal, { name: "personal" });
@@ -56,11 +57,11 @@ export function cmdInstall(args, io = {}) {
 
   if (!projectOnly) {
     if (hooks) {
-      hookResult = enableHooks(home);
+      hookResult = enableHooks(home, { env });
       setFeature(home, "hooks", "on", { all: true });
-    } else if (featureOn(loadConfig(home).features.hooks, null) && hasLegacyHooks(home)) {
-      // Hooks were already consented to; rewrite the old absolute `.sh` entries in place.
-      hookResult = enableHooks(home);
+    } else if (featureOn(loadConfig(home).features.hooks, null) && hooksNeedRewrite(home, env)) {
+      // Hooks were already consented to; rewrite old `.sh` entries and fill in a new Claude profile.
+      hookResult = enableHooks(home, { env });
     }
     if (mcp) {
       mcpResult = enableMcp(home);

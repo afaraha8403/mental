@@ -44,7 +44,7 @@ export function uninstallSkills({ home, projectDir = null, homeUninstall = true 
         removed.push(dest);
       }
     }
-    for (const file of [targets.cursorRule, targets.claudeRule, targets.agentsRule]) {
+    for (const file of [targets.cursorRule, targets.claudeRule, ...targets.profileRules, targets.agentsRule]) {
       if (existsSync(file)) {
         rmSync(file, { force: true });
         removed.push(file);

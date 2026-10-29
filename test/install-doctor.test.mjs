@@ -504,3 +504,45 @@ test("install leaves OpenCode AGENTS.md absent; doctor names the CLAUDE.md fallb
   assert.equal(fallback.level, "warn");
   assert.notEqual(off.data.next?.command, "mental doctor --fix");
 });
+
+test("install, hooks, doctor and uninstall cover a CLAUDE_CONFIG_DIR profile", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const profile = join(home, "profiles", "work", "claude-code");
+  const env = { CLAUDE_CONFIG_DIR: profile };
+  const r = mental(home, root, ["install", "--json", "--hooks"], env);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  for (const dir of [join(home, ".claude"), profile]) {
+    const skill = readFileSync(join(dir, "skills", "mental", "SKILL.md"), "utf8");
+    assert.match(skill, /--via claude-code/);
+    assert.match(readFileSync(join(dir, "rules", "mental.md"), "utf8"), /Continuity is Mental CLI/);
+    assert.match(readFileSync(join(dir, "CLAUDE.md"), "utf8"), /BEGIN mental/);
+    const settings = JSON.parse(readFileSync(join(dir, "settings.json"), "utf8"));
+    assert.match(JSON.stringify(settings.hooks.SessionStart), /hooks session-start claude-code/);
+  }
+
+  rmSync(join(profile, "rules", "mental.md"), { force: true });
+  const post = mental(home, root, ["doctor", "--json"], env);
+  const hit = JSON.parse(post.stdout).data.checks.find((c) => c.id === "rule-claude-profile");
+  assert.ok(hit, post.stdout);
+  assert.equal(hit.ok, false);
+  assert.match(hit.message, /claude-code/);
+  assert.equal(mental(home, root, ["doctor", "--fix", "--json"], env).status, 0);
+  assert.equal(existsSync(join(profile, "rules", "mental.md")), true);
+
+  const gone = mental(home, root, ["uninstall", "--json"], env);
+  assert.equal(gone.status, 0, gone.stderr || gone.stdout);
+  assert.equal(existsSync(join(profile, "skills", "mental")), false);
+  assert.equal(existsSync(join(profile, "rules", "mental.md")), false);
+  assert.doesNotMatch(readFileSync(join(profile, "settings.json"), "utf8"), /hooks session-start/);
+});
+
+test("a CLAUDE_CONFIG_DIR equal to ~/.claude is not installed twice", () => {
+  const home = tempHome();
+  const { root } = initRepo(home);
+  const r = mental(home, root, ["install", "--json"], { CLAUDE_CONFIG_DIR: join(home, ".claude") + "/" });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const written = JSON.parse(r.stdout).data.written;
+  const claudeSkills = written.filter((p) => /[\\/]\.claude[\\/]+skills[\\/]mental$/.test(p));
+  assert.equal(claudeSkills.length, 1, JSON.stringify(written));
+});

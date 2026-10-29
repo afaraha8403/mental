@@ -2,7 +2,7 @@
  * Copy the Mental skill + tiny rule into user agent dirs (one source in-repo).
  */
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { BEGIN, CMD, END, OPTIONAL_DIR, PKG_ROOT, RULES_DIR, VERSION } from "./pkg.mjs";
 import { loadConfig } from "./config.mjs";
 import { skillMetadataVersion } from "./lockstep.mjs";
@@ -93,11 +93,32 @@ export function projectCursorRule(projectDir) {
 }
 
 /**
- * User-global skill/rule destinations under $HOME.
+ * Claude Code config dirs that get Mental: `~/.claude` first, then `CLAUDE_CONFIG_DIR`
+ * when it names another profile. Claude Code reads only CLAUDE_CONFIG_DIR when it is
+ * set, so a profile launched that way never sees what `~/.claude` holds.
+ * @param {string} home
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function claudeConfigDirs(home, env = process.env) {
+  const base = join(home, ".claude");
+  const extra = env.CLAUDE_CONFIG_DIR?.trim();
+  if (!extra) return [base];
+  const dir = resolve(extra);
+  const same = process.platform === "win32" ? dir.toLowerCase() === resolve(base).toLowerCase() : dir === resolve(base);
+  return same ? [base] : [base, dir];
+}
+
+/**
+ * User-global skill/rule destinations under $HOME, plus any extra Claude Code profile.
  * Cursor 2.1+ loads `cursorRule` (`~/.cursor/rules/*.mdc`) into Agent context.
  * @param {string} home
+ * @param {NodeJS.ProcessEnv} [env]
  */
-export function userInstallTargets(home) {
+export function userInstallTargets(home, env = process.env) {
+  const claudeProfiles = claudeConfigDirs(home, env).slice(1);
+  const profileSkills = claudeProfiles.map((dir) => join(dir, "skills", "mental"));
+  const profileRules = claudeProfiles.map((dir) => join(dir, "rules", "mental.md"));
+  const profileDocs = claudeProfiles.map((dir) => join(dir, "CLAUDE.md"));
   const claudeMd = join(home, ".claude", "CLAUDE.md");
   const codexAgents = join(home, ".codex", "AGENTS.md");
   const agentsMd = join(home, ".agents", "AGENTS.md");
@@ -112,15 +133,17 @@ export function userInstallTargets(home) {
     opencode: join(home, ".config", "opencode", "skills", "mental"),
   };
   return {
-    skills: [skills.claude, skills.cursor, skills.agents, skills.opencode],
+    skills: [skills.claude, ...profileSkills, skills.cursor, skills.agents, skills.opencode],
     cursorRule,
     claudeRule,
+    claudeProfiles,
+    profileRules,
     agentsRule,
     claudeMd,
     codexAgents,
     agentsMd,
     opencodeAgents,
-    managedDocs: [claudeMd, codexAgents, agentsMd],
+    managedDocs: [claudeMd, ...profileDocs, codexAgents, agentsMd],
     /**
      * `--via` token per destination; null = shared by several hosts.
      * OpenCode falls back to CLAUDE.md when it has no AGENTS.md of its own, so
@@ -139,6 +162,7 @@ export function userInstallTargets(home) {
       [codexAgents]: HOST_VIA.codex,
       [agentsMd]: null,
       [opencodeAgents]: HOST_VIA.opencode,
+      ...Object.fromEntries([...profileSkills, ...profileRules, ...profileDocs].map((p) => [p, HOST_VIA.claudeCode])),
     },
   };
 }
@@ -277,10 +301,12 @@ function trackRuleBodyText() {
  * Not under plugin `skills/` — Agent Plugins would auto-load it.
  * @param {string} home
  */
-export function userTrackTargets(home) {
+export function userTrackTargets(home, env = process.env) {
+  const claudeProfiles = claudeConfigDirs(home, env).slice(1);
   return {
     skills: [
       join(home, ".claude", "skills", "mental-track"),
+      ...claudeProfiles.map((dir) => join(dir, "skills", "mental-track")),
       join(home, ".cursor", "skills", "mental-track"),
       join(home, ".agents", "skills", "mental-track"),
       join(home, ".config", "opencode", "skills", "mental-track"),
@@ -288,6 +314,7 @@ export function userTrackTargets(home) {
     cursorRule: join(home, ".cursor", "rules", "mental-track.mdc"),
     claudeRule: join(home, ".claude", "rules", "mental-track.md"),
     agentsRule: join(home, ".agents", "rules", "mental-track.md"),
+    profileRules: claudeProfiles.map((dir) => join(dir, "rules", "mental-track.md")),
   };
 }
 
@@ -338,10 +365,10 @@ export function shouldCopyTrackSkills(home) {
 
 /**
  * @param {string} home
- * @param {{ force?: boolean }} [opts]
+ * @param {{ force?: boolean, env?: NodeJS.ProcessEnv }} [opts]
  * @returns {{ written: string[], skipped: string[], failed: Array<{ path: string, code: string, message: string }> }}
  */
-export function copyTrackSkills(home, { force = false } = {}) {
+export function copyTrackSkills(home, { force = false, env = process.env } = {}) {
   /** @type {string[]} */
   const written = [];
   /** @type {string[]} */
@@ -349,8 +376,8 @@ export function copyTrackSkills(home, { force = false } = {}) {
   /** @type {Array<{ path: string, code: string, message: string }>} */
   const failed = [];
   if (!existsSync(join(trackSkillSourceDir(), "SKILL.md"))) return { written, skipped, failed };
-  const targets = userTrackTargets(home);
-  const via = userInstallTargets(home).via;
+  const targets = userTrackTargets(home, env);
+  const via = userInstallTargets(home, env).via;
   targets.skills.forEach((dest) => {
     // Track skills sit next to the main skill in each host's skills dir.
     const token = via[join(dirname(dest), "mental")] ?? null;
@@ -367,7 +394,9 @@ export function copyTrackSkills(home, { force = false } = {}) {
     });
     const body = trackRuleBodyText();
     recordAttempt(written, skipped, failed, targets.claudeRule, () => writePlainRule(targets.claudeRule, body, { force }));
-    recordAttempt(written, skipped, failed, targets.agentsRule, () => writePlainRule(targets.agentsRule, body, { force }));
+    for (const dest of [targets.agentsRule, ...targets.profileRules]) {
+      recordAttempt(written, skipped, failed, dest, () => writePlainRule(dest, body, { force }));
+    }
   }
   return { written, skipped, failed };
 }
@@ -385,7 +414,7 @@ export function removeTrackSkills(home) {
       removed.push(dest);
     }
   }
-  for (const file of [targets.cursorRule, targets.claudeRule, targets.agentsRule]) {
+  for (const file of [targets.cursorRule, targets.claudeRule, targets.agentsRule, ...targets.profileRules]) {
     if (existsSync(file)) {
       rmSync(file, { force: true });
       removed.push(file);
@@ -480,7 +509,7 @@ function truthyEnv(v) {
  * @param {{ home: string, gitRoot?: string | null }} opts
  */
 export function hostRuleChecks({ home, gitRoot = null, env = process.env }) {
-  const t = userInstallTargets(home);
+  const t = userInstallTargets(home, env);
   const installHint = `run \`${CMD} install\``;
   /** @type {{ id: string, ok: boolean, message: string, level: string }[]} */
   const checks = [];
@@ -501,6 +530,20 @@ export function hostRuleChecks({ home, gitRoot = null, env = process.env }) {
       ? "Claude Code ~/.claude/rules/mental.md present"
       : `missing ~/.claude/rules/mental.md — ${installHint}`,
   });
+  for (const dir of t.claudeProfiles) {
+    const ok =
+      existsSync(join(dir, "skills", "mental", "SKILL.md")) &&
+      isPlainMentalRule(join(dir, "rules", "mental.md")) &&
+      hasManagedBlock(join(dir, "CLAUDE.md"));
+    checks.push({
+      id: "rule-claude-profile",
+      ok,
+      level: "error",
+      message: ok
+        ? `Claude Code profile ${dir} (CLAUDE_CONFIG_DIR) has the Mental skill and rule`
+        : `Claude Code profile ${dir} (CLAUDE_CONFIG_DIR) is missing the Mental skill or rule — ${installHint}`,
+    });
+  }
   checks.push({
     id: "rule-codex",
     ok: hasManagedBlock(t.codexAgents),
@@ -588,16 +631,17 @@ export function hostRuleChecks({ home, gitRoot = null, env = process.env }) {
 }
 
 /**
- * @param {{ home: string, projectDir?: string | null, dryRun?: boolean, force?: boolean, homeInstall?: boolean }} opts
+ * @param {{ home: string, env?: NodeJS.ProcessEnv, projectDir?: string | null, dryRun?: boolean, force?: boolean, homeInstall?: boolean }} opts
  */
 export function installSkills({
   home,
+  env = process.env,
   projectDir = null,
   dryRun = false,
   force = false,
   homeInstall = true,
 }) {
-  const targets = userInstallTargets(home);
+  const targets = userInstallTargets(home, env);
   /** @type {string[]} */
   const written = [];
   /** @type {string[]} */
@@ -626,7 +670,7 @@ export function installSkills({
           copyRule(targets.cursorRule, { force, via: via[targets.cursorRule] }),
         );
       }
-      for (const dest of [targets.claudeRule, targets.agentsRule]) {
+      for (const dest of [targets.claudeRule, ...targets.profileRules, targets.agentsRule]) {
         recordAttempt(written, skipped, failed, dest, () => writePlainRule(dest, ruleBodyFor(via[dest]), { force }));
       }
       // OpenCode's AGENTS.md is only merged when it exists: creating it would stop
@@ -648,7 +692,7 @@ export function installSkills({
       recordAttempt(written, skipped, failed, projectRule, () => copyRule(projectRule, { force }));
     }
     if (homeInstall && shouldCopyTrackSkills(home)) {
-      const track = copyTrackSkills(home, { force });
+      const track = copyTrackSkills(home, { force, env });
       written.push(...track.written);
       skipped.push(...track.skipped);
       failed.push(...track.failed);
