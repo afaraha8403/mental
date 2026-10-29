@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.3] - 2026-10-29
+
+### Changes
+- The release tests give the decision model 30 seconds per request (through a test-only `MENTAL_JEV_TIMEOUT_MS`) so a busy Windows CI runner no longer drops `mental brief` to its unranked fallback and blocks a publish. `mental brief` keeps its short 4-second limit for everyone else.
+
 ## [0.13.2] - 2026-10-29
 
 ### Changes

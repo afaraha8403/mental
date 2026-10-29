@@ -2,7 +2,7 @@
   "name": "mental",
   "displayName": "Mental",
   "description": "Where you left off, what needs you, and the thread across agents, in a Cursor sidebar backed by the Mental CLI.",
-  "version": "0.13.2",
+  "version": "0.13.3",
   "publisher": "balacode",
   "license": "MIT",
   "icon": "media/icon.png",
