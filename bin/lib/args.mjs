@@ -25,7 +25,7 @@ export function parseArgv(argv) {
     plain: false,
     /** @type {string[]} */
     rest: [],
-    /** @type {Record<string, string | boolean>} */
+    /** @type {Record<string, string | boolean | string[]>} */
     flags: {},
     /** @type {string[]} */
     unknownFlags: [],
@@ -146,6 +146,13 @@ export function parseArgv(argv) {
         continue;
       }
       value = argv[++i];
+    }
+    if (spec.repeat) {
+      const cur = args.flags[name];
+      const list = Array.isArray(cur) ? cur : [];
+      list.push(String(value));
+      args.flags[name] = list;
+      continue;
     }
     args.flags[name] = value;
   }

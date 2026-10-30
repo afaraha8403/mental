@@ -8,6 +8,8 @@ import { DECIDE_PROVIDERS, FEATURES, listOptionals, loadConfig, maskKey, resolve
 import { usageToday } from "../lib/jev.mjs";
 import { PROVIDER_INFO } from "../lib/decide-providers.mjs";
 import { enableHooks, disableHooks } from "../lib/hooks.mjs";
+import { findGitRoot } from "../lib/git.mjs";
+import { installTrailerHook, removeTrailerHook } from "../lib/trailer.mjs";
 import { enableMcp, disableMcp } from "../lib/mcp-hosts.mjs";
 import { copyTrackSkills } from "../lib/install-skills.mjs";
 import { printResult, EXIT_USAGE } from "../lib/output.mjs";
@@ -18,7 +20,7 @@ function formatOptionalsTable(rows) {
   const lines = ["optionals (consent required — do not enable unless the user named the feature this turn):"];
   for (const r of rows) {
     const neu = r.isNew ? "  [new]" : "";
-    lines.push(`  ${r.id.padEnd(6)} ${r.enabled ? "on " : "off"}  ${r.scope.padEnd(6)}  ${r.command}${neu}`);
+    lines.push(`  ${r.id.padEnd(8)} ${r.enabled ? "on " : "off"}  ${r.scope.padEnd(6)}  ${r.command}${neu}`);
     if (r.summary) lines.push(`         ${r.summary}`);
   }
   return lines.join("\n");
@@ -272,7 +274,8 @@ export function cmdOption(args, io = {}) {
     return EXIT_USAGE;
   }
 
-  if (feature !== "track" && thisFlag) {
+  const perBundle = feature === "track" || feature === "trailer";
+  if (!perBundle && thisFlag) {
     printResult(stdout, args, false, undefined, {
       code: "usage",
       message: `mental option ${feature} is user-global; --this is usage`,
@@ -281,14 +284,13 @@ export function cmdOption(args, io = {}) {
   }
 
   const { uuid, where } = uuidForThis(args);
-  const scopeAll = all || feature !== "track";
-  const scopeThis = feature === "track" && !all;
+  const scopeAll = all || !perBundle;
+  const scopeThis = perBundle && !all;
 
   if (scopeThis && !uuid) {
     printResult(stdout, args, false, undefined, {
       code: "usage",
-      message:
-        "mental option track on|off needs a project UUID (run from a git repo after a write). --this before identity exists is usage.",
+      message: `mental option ${feature} on|off needs a project UUID (run from a git repo after a write). --this before identity exists is usage.`,
     });
     return EXIT_USAGE;
   }
@@ -331,6 +333,15 @@ export function cmdOption(args, io = {}) {
   if (feature === "track" && action === "on") {
     const copied = copyTrackSkills(home);
     extra.push(...(copied.written || []));
+  }
+  if (feature === "trailer") {
+    const gitRoot = findGitRoot(args.cwd ?? process.cwd(), { env: args.env ?? process.env });
+    const hook = action === "on" ? installTrailerHook(gitRoot, args.env ?? process.env) : removeTrailerHook(gitRoot, args.env ?? process.env);
+    if (!hook.ok) {
+      printResult(stdout, args, false, undefined, hook.error);
+      return 1;
+    }
+    if (hook.path) extra.push(hook.path);
   }
 
   const data = {

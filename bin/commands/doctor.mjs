@@ -31,6 +31,11 @@ import { deepChecks } from "../lib/doctor-deep.mjs";
 import { repairHistory, summarizeRepair, DEFAULT_REPAIR_FILES, MAX_REPAIR_FILES } from "../lib/doctor-repair.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { FEATURES, listOptionals, loadConfig, markOptionalSeen, isFeatureOn } from "../lib/config.mjs";
+import { networkStatus } from "../lib/network.mjs";
+import { detectSkillHosts } from "../lib/hosts.mjs";
+import { redactFileText, scanBundleSecrets } from "../lib/redact.mjs";
+import { writeAtomic } from "../lib/atomic.mjs";
+import { trailerHookInstalled } from "../lib/trailer.mjs";
 import { formatOptionalsTable } from "./option.mjs";
 import { TIME_DB, formatHmm, glanceTime, listOrphanTimeDbs, runningHealth } from "../lib/time.mjs";
 import { countParkHopsSinceMs, localDayStartMs } from "../lib/delta.mjs";
@@ -529,6 +534,66 @@ export async function cmdDoctor(args, io = {}) {
     }
   }
 
+  const network = home ? networkStatus(home, resolved.ok ? resolved.data.id : null, args.env ?? process.env) : [];
+  const leaving = network.filter((row) => row.network && row.active).map((row) => row.id);
+  checks.push(
+    check(
+      "network",
+      true,
+      leaving.length ? `can leave this machine when on: ${leaving.join(", ")}` : "nothing leaves this machine",
+      "info",
+    ),
+  );
+  const hosts = home ? detectSkillHosts(home, args.cwd ?? process.cwd()) : [];
+  const hostMissing = hosts.filter((h) => h.paths.some((p) => p.state === "missing"));
+  if (hosts.length) {
+    checks.push(
+      check(
+        "hosts",
+        hostMissing.length === 0,
+        hostMissing.length
+          ? `skill path missing for ${hostMissing.map((h) => h.id).join(", ")}`
+          : `${hosts.length} detected host(s) can read the skill`,
+        hostMissing.length ? "warn" : "info",
+      ),
+    );
+  }
+  if (resolved.ok && resolved.data.root) {
+    let secrets = scanBundleSecrets(resolved.data.root);
+    if (fix && secrets.length) {
+      for (const hit of secrets) {
+        const abs = join(resolved.data.root, hit.path);
+        try {
+          const next = redactFileText(readFileSync(abs, "utf8"));
+          writeAtomic(abs, next.text);
+        } catch {
+          // leave the file; the check below still reports it
+        }
+      }
+      secrets = scanBundleSecrets(resolved.data.root);
+    }
+    checks.push(
+      check(
+        "secrets",
+        secrets.length === 0,
+        secrets.length
+          ? `${secrets.length} file(s) match a credential shape (${[...new Set(secrets.flatMap((s) => s.kinds))].join(", ")})`
+          : "no credential shapes in the bundle",
+        secrets.length ? "warn" : "info",
+      ),
+    );
+    const trailerOn = Boolean(home && resolved.data.id && isFeatureOn(home, "trailer", resolved.data.id));
+    const hook = resolved.data.gitRoot ? trailerHookInstalled(resolved.data.gitRoot, args.env ?? process.env) : false;
+    checks.push(
+      check(
+        "trailer",
+        !trailerOn || hook,
+        trailerOn ? (hook ? "prepare-commit-msg installed" : "trailer is on but the hook is missing") : "off",
+        trailerOn && !hook ? "warn" : "info",
+      ),
+    );
+  }
+
   const optionals = home ? listOptionals(home, resolved.ok ? resolved.data.id : null) : { optionals: [] };
   if (home) for (const id of FEATURES) markOptionalSeen(home, id);
 
@@ -543,6 +608,8 @@ export async function cmdDoctor(args, io = {}) {
     where: resolved.ok ? resolved.data : null,
     problems: problems.length,
     optionals: optionals.optionals,
+    network,
+    hosts,
     next,
     ...(repair ? { repair } : {}),
     ...(fix ? { fix } : {}),

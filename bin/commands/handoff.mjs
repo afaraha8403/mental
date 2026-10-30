@@ -12,6 +12,8 @@ import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
 import { isFeatureOn } from "../lib/config.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { stopFocusedForPark } from "../lib/time.mjs";
+import { writeExtras } from "../lib/write-meta.mjs";
+import { packProject } from "../lib/share.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
@@ -88,12 +90,55 @@ export function cmdHandoff(args, io = {}) {
     }
   }
 
+  const extra = writeExtras(args, resolved.data);
+  if (!extra.ok) {
+    printResult(stdout, args, false, undefined, extra.error);
+    return EXIT_USAGE;
+  }
   const body = flagString(args.flags, "body") || "";
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
-  const written = appendJournal(resolved.data.root, { title, body, resume, against, via: viaParsed.via });
+  let written;
+  try {
+    written = appendJournal(resolved.data.root, {
+      title,
+      body,
+      resume,
+      against,
+      via: viaParsed.via,
+      noRedact: extra.noRedact,
+      gitRoot: resolved.data.gitRoot,
+      anchor: extra.anchor,
+      refs: extra.refs,
+      refHint: extra.refHint,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const code = /** @type {{ code?: string }} */ (err).code || "write";
+    printResult(stdout, args, false, undefined, { code, message });
+    return code === "usage" ? EXIT_USAGE : 1;
+  }
   const env = args.env ?? process.env;
+  const shareDir = flagString(args.flags, "share");
+  let share = null;
+  if (shareDir) {
+    const packed = packProject({
+      home,
+      id: resolved.data.id,
+      out: shareDir,
+      cwd: args.cwd ?? process.cwd(),
+      env,
+      since: flagString(args.flags, "since"),
+      noJournal: args.flags?.["no-journal"] === true,
+      allowSecrets: args.flags?.["allow-secrets"] === true,
+    });
+    if (!packed.ok) {
+      printResult(stdout, args, false, undefined, packed.error);
+      return packed.error.code === "usage" ? EXIT_USAGE : 1;
+    }
+    share = packed.data;
+  }
   refreshIndex(resolved.data, home, env);
 
   const collected = collectHeartbeat(args);
@@ -105,6 +150,9 @@ export function cmdHandoff(args, io = {}) {
     ...(time ? { time } : {}),
     ...(review ? { review } : {}),
     heartbeat,
+    ...(share ? { share } : {}),
+    ...(written.redacted ? { redacted: written.redacted } : {}),
+    ...(written.refHint ? { refHint: written.refHint } : {}),
     ...(timer_stop_failed ? { timer_stop_failed: true } : {}),
   };
   printResult(stdout, args, true, data, undefined, () => {

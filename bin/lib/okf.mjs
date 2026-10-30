@@ -2,8 +2,10 @@
  * OKF markdown SoT: tiny frontmatter parse/write + bundle skeleton.
  * No YAML library — templates only need scalars and `[tag, lists]`.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, cpSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, cpSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join, relative, resolve as resolvePath, sep } from "node:path";
+import { writeAtomic, withFileLock } from "./atomic.mjs";
+import { loadEnvSecretValues, redactText } from "./redact.mjs";
 import { backupTimeDb, isTimeSidecarName, TIME_DB } from "./time.mjs";
 
 export const CONCEPT_DIRS = ["journal", "decisions", "notes", "attention", "status"];
@@ -99,6 +101,153 @@ export function localTime(d = new Date()) {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+/** Process-local cache so one heartbeat reads each OKF file once. */
+let bundleReadCache = null;
+
+/**
+ * @template T
+ * @param {() => T} fn
+ * @returns {T}
+ */
+export function withBundleReadCache(fn) {
+  const prev = bundleReadCache;
+  bundleReadCache = new Map();
+  try {
+    return fn();
+  } finally {
+    bundleReadCache = prev;
+  }
+}
+
+/**
+ * @param {string} abs
+ */
+export function readUtf8(abs) {
+  if (bundleReadCache?.has(abs)) return bundleReadCache.get(abs);
+  const text = readFileSync(abs, "utf8");
+  if (bundleReadCache) bundleReadCache.set(abs, text);
+  return text;
+}
+
+/**
+ * Quoted scalars keep ` #`, colons and leading brackets. Unquoted values still
+ * drop an inline ` #` comment, which is how older files were written.
+ * @param {string} raw
+ * @returns {string | string[]}
+ */
+function parseFrontmatterValue(raw) {
+  const trimmed = String(raw ?? "").trim();
+  if (trimmed.startsWith('"') || trimmed.startsWith("'")) return unquoteScalar(trimmed);
+  const hash = trimmed.indexOf(" #");
+  const v = hash >= 0 ? trimmed.slice(0, hash).trim() : trimmed;
+  if (v.startsWith("[") && v.endsWith("]")) {
+    return splitFrontmatterList(v.slice(1, -1));
+  }
+  return v;
+}
+
+/**
+ * @param {string} s
+ */
+function unquoteScalar(s) {
+  const q = s[0];
+  let out = "";
+  for (let i = 1; i < s.length; i++) {
+    const c = s[i];
+    if (q === '"' && c === "\\") {
+      out += s[i + 1] ?? "";
+      i += 1;
+      continue;
+    }
+    if (c === q) return out;
+    out += c;
+  }
+  return out;
+}
+
+/**
+ * @param {string} inner
+ */
+function splitFrontmatterList(inner) {
+  /** @type {string[]} */
+  const out = [];
+  let cur = "";
+  let quote = "";
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i];
+    if (quote) {
+      if (c === "\\" && quote === '"') {
+        cur += inner[i + 1] ?? "";
+        i += 1;
+        continue;
+      }
+      if (c === quote) {
+        quote = "";
+        continue;
+      }
+      cur += c;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      quote = c;
+      continue;
+    }
+    if (c === ",") {
+      if (cur.trim()) out.push(cur.trim());
+      cur = "";
+      continue;
+    }
+    cur += c;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+/**
+ * @param {string} value
+ */
+function quoteFrontmatterScalar(value) {
+  const s = String(value);
+  if (/[\r\n]/.test(s)) {
+    throw Object.assign(new Error("frontmatter values cannot contain newlines"), { code: "usage" });
+  }
+  if (
+    s === "" ||
+    /^(true|false|null|yes|no)$/i.test(s) ||
+    /^[\s[{'"*&!|>%@#]/.test(s) ||
+    /[:#'"\\]/.test(s) ||
+    /\s#/.test(s) ||
+    /\s$/.test(s)
+  ) {
+    return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  }
+  return s;
+}
+
+/**
+ * @param {string[]} items
+ */
+function quoteFrontmatterList(items) {
+  const parts = items.map((item) => {
+    const s = String(item);
+    if (/[\r\n]/.test(s)) {
+      throw Object.assign(new Error("frontmatter values cannot contain newlines"), { code: "usage" });
+    }
+    if (/^[A-Za-z0-9_./+-]+$/.test(s)) return s;
+    return quoteFrontmatterScalar(s);
+  });
+  return `[${parts.join(", ")}]`;
+}
+
+/**
+ * A journal body that contains `## ` would split into extra hops. Demote those
+ * lines so the hop heading stays the only level-2 heading.
+ * @param {string} body
+ */
+export function demoteJournalBody(body) {
+  return String(body || "").replace(/^##(?= )/gm, "###");
+}
+
 /**
  * @param {string} text
  * @returns {{ data: Record<string, string | string[]>, body: string }}
@@ -109,20 +258,9 @@ export function parseFrontmatter(text) {
   /** @type {Record<string, string | string[]>} */
   const data = {};
   for (const line of m[1].split(/\r?\n/)) {
-    const kv = line.match(/^([A-Za-z0-9_]+):\s*(.*?)\s*$/);
+    const kv = line.match(/^([A-Za-z0-9_]+):\s*(.*)$/);
     if (!kv) continue;
-    let v = kv[2];
-    const hash = v.indexOf(" #");
-    if (hash >= 0) v = v.slice(0, hash).trim();
-    if (v.startsWith("[") && v.endsWith("]")) {
-      data[kv[1]] = v
-        .slice(1, -1)
-        .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-        .filter(Boolean);
-    } else {
-      data[kv[1]] = v.replace(/^["']|["']$/g, "");
-    }
+    data[kv[1]] = parseFrontmatterValue(kv[2]);
   }
   return { data, body: m[2] };
 }
@@ -135,8 +273,8 @@ export function stringifyFrontmatter(data, body) {
   const lines = ["---"];
   for (const [k, v] of Object.entries(data)) {
     if (v == null) continue;
-    if (Array.isArray(v)) lines.push(`${k}: [${v.join(", ")}]`);
-    else lines.push(`${k}: ${v}`);
+    if (Array.isArray(v)) lines.push(`${k}: ${quoteFrontmatterList(v)}`);
+    else lines.push(`${k}: ${quoteFrontmatterScalar(v)}`);
   }
   lines.push("---", "");
   const b = body.startsWith("\n") ? body.replace(/^\n+/, "") : body;
@@ -178,7 +316,7 @@ export function ensureSkeleton(root, { name = "project", now = new Date() } = {}
   const date = localDate(now);
   const indexPath = join(root, "index.md");
   if (!existsSync(indexPath)) {
-    writeFileSync(
+    writeAtomic(
       indexPath,
       stringifyFrontmatter(
         {
@@ -204,7 +342,7 @@ Private continuity log. Start at [current status](status/current.md).
   }
   const statusPath = join(root, "status", "current.md");
   if (!existsSync(statusPath)) {
-    writeFileSync(statusPath, renderStatus({ name, date, ts, now: "Not yet derived.", inFlight: "None", decisions: [], resume: "Run `mental status` after the first journal entry." }));
+    writeAtomic(statusPath, renderStatus({ name, date, ts, now: "Not yet derived.", inFlight: "None", decisions: [], resume: "Run `mental status` after the first journal entry." }));
   }
   return root;
 }
@@ -307,7 +445,7 @@ export function latestJournalHandoff(root) {
   const files = dated.length ? dated : all.sort();
   if (files.length === 0) return empty;
   const file = files[files.length - 1];
-  const text = readFileSync(join(dir, file), "utf8");
+  const text = readUtf8(join(dir, file));
   const { body } = parseFrontmatter(text);
   const sections = body.split(/^## /m).filter(Boolean);
   const last = sections[sections.length - 1] || body;
@@ -390,7 +528,7 @@ export function recentJournalSections(root, limit = 8) {
     if (out.length >= limit) break;
     let text;
     try {
-      text = readFileSync(join(dir, file), "utf8");
+      text = readUtf8(join(dir, file));
     } catch {
       continue;
     }
@@ -443,7 +581,7 @@ export function listDecidedGuardrails(root) {
   if (!existsSync(dir)) return [];
   const out = [];
   for (const file of listMarkdownRecursive(dir)) {
-    const text = readFileSync(join(dir, file), "utf8");
+    const text = readUtf8(join(dir, file));
     const { data } = parseFrontmatter(text);
     if (String(data.status || "") !== "decided") continue;
     out.push({
@@ -477,7 +615,7 @@ export function listOpenDecisions(root) {
   if (!existsSync(dir)) return [];
   const out = [];
   for (const file of listMarkdownRecursive(dir)) {
-    const text = readFileSync(join(dir, file), "utf8");
+    const text = readUtf8(join(dir, file));
     const { data } = parseFrontmatter(text);
     const status = String(data.status || "open");
     if (status === "open" || status === "deferred") {
@@ -520,7 +658,7 @@ export function findDecision(root, { path, title } = {}) {
   if (!title) return null;
   const matches = [];
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".md"))) {
-    const text = readFileSync(join(dir, file), "utf8");
+    const text = readUtf8(join(dir, file));
     const parsed = parseFrontmatter(text);
     const t = String(parsed.data.title || basename(file, ".md"));
     if (t === title) {
@@ -560,7 +698,7 @@ export function listNotes(root) {
   if (!existsSync(dir)) return [];
   const out = [];
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".md")).sort()) {
-    const text = readFileSync(join(dir, file), "utf8");
+    const text = readUtf8(join(dir, file));
     const { data, body } = parseFrontmatter(text);
     const status = String(data.status || "active");
     if (status === "superseded" || status === "obsolete") continue;
@@ -584,7 +722,7 @@ export function listOpenAttention(root) {
   if (!existsSync(dir)) return [];
   const out = [];
   for (const file of listMarkdownRecursive(dir)) {
-    const text = readFileSync(join(dir, file), "utf8");
+    const text = readUtf8(join(dir, file));
     const { data, body } = parseFrontmatter(text);
     const status = String(data.status || "open");
     if (status !== "open" && status !== "later") continue;
@@ -663,7 +801,7 @@ export function findAttention(root, { path, title } = {}) {
   if (!title) return null;
   const matches = [];
   for (const file of readdirSync(dir).filter((f) => f.endsWith(".md"))) {
-    const text = readFileSync(join(dir, file), "utf8");
+    const text = readUtf8(join(dir, file));
     const parsed = parseFrontmatter(text);
     const t = String(parsed.data.title || basename(file, ".md"));
     if (t === title) {
@@ -684,11 +822,63 @@ export function findAttention(root, { path, title } = {}) {
   return matches[0] ?? null;
 }
 
+const SCRUB_KEYS = ["title", "description", "body", "resume", "from", "against", "via"];
+
+/**
+ * @param {Record<string, string | undefined>} fields
+ * @param {{ noRedact?: boolean, gitRoot?: string | null }} [opts]
+ */
+function scrubWriteFields(fields, opts = {}) {
+  for (const key of ["title", "description", "resume", "from", "against", "via"]) {
+    if (typeof fields[key] === "string" && /[\r\n]/.test(fields[key])) {
+      throw Object.assign(new Error(`${key} cannot contain a newline`), { code: "usage" });
+    }
+  }
+  /** @type {Array<{ field: string, kind: string }>} */
+  const redacted = [];
+  if (opts.noRedact) return { fields, redacted, redact: false };
+  const envValues = loadEnvSecretValues(opts.gitRoot || null);
+  /** @type {Record<string, string | undefined>} */
+  const out = { ...fields };
+  for (const key of SCRUB_KEYS) {
+    if (typeof out[key] !== "string" || !out[key]) continue;
+    const r = redactText(out[key], { envValues });
+    out[key] = r.text;
+    for (const kind of r.kinds) redacted.push({ field: key, kind });
+  }
+  return { fields: out, redacted };
+}
+
+/**
+ * @param {Record<string, string | string[] | undefined>} data
+ * @param {{ head?: string, paths?: string[] } | null | undefined} anchor
+ * @param {string[] | undefined} refs
+ */
+function stampAnchor(data, anchor, refs) {
+  if (anchor?.head) data.head = anchor.head;
+  if (anchor) data.paths = anchor.paths?.length ? anchor.paths : undefined;
+  if (refs?.length) data.refs = refs;
+  return data;
+}
+
+/**
+ * @param {{ redacted: Array<{ field: string, kind: string }>, redact?: false, refHint?: string | null }} extra
+ */
+function writeEnvelope(extra) {
+  return {
+    ...(extra.redacted?.length ? { redacted: extra.redacted } : {}),
+    ...(extra.redact === false ? { redact: false } : {}),
+    ...(extra.refHint ? { refHint: extra.refHint } : {}),
+  };
+}
+
 /**
  * @param {string} root
- * @param {{ title: string, status?: string, kind: string, from?: string, against?: string, via?: string, description?: string, body?: string, slug?: string, tags?: string[], now?: Date }} opts
+ * @param {{ title: string, status?: string, kind: string, from?: string, against?: string, via?: string, description?: string, body?: string, slug?: string, tags?: string[], now?: Date, noRedact?: boolean, gitRoot?: string | null, anchor?: { head: string, paths: string[] } | null, refs?: string[], refHint?: string | null }} opts
  */
-export function writeAttention(root, { title, status = "open", kind, from, against, via, description = "", body = "", slug, tags, now = new Date() }) {
+export function writeAttention(root, opts) {
+  const scrub = scrubWriteFields(opts, opts);
+  const { title, status = "open", kind, from, against, via, description = "", body = "", slug, tags, now = new Date() } = { ...opts, ...scrub.fields };
   ensureSkeleton(root);
   const day = localDate(now);
   const s = slug || slugify(title);
@@ -697,27 +887,31 @@ export function writeAttention(root, { title, status = "open", kind, from, again
   mkdirSync(dirname(file), { recursive: true });
   if (existsSync(file)) throw Object.assign(new Error(`Attention already exists: ${rel}`), { code: "exists" });
   const ts = now.toISOString();
-  const text = body.trim();
+  const text = String(body || "").trim();
   const markdown = text ? `# ${title}\n\n${text}\n` : `# ${title}\n`;
-  writeFileSync(
+  writeAtomic(
     file,
     stringifyFrontmatter(
-      {
-        type: "Attention",
-        title,
-        description: description || title,
-        tags: tagsToStore(tags) ?? [],
-        timestamp: ts,
-        status,
-        kind,
-        from: from || undefined,
-        against: against || undefined,
-        via: via || undefined,
-      },
+      stampAnchor(
+        {
+          type: "Attention",
+          title,
+          description: description || title,
+          tags: tagsToStore(tags) ?? [],
+          timestamp: ts,
+          status,
+          kind,
+          from: from || undefined,
+          against: against || undefined,
+          via: via || undefined,
+        },
+        opts.anchor,
+        opts.refs,
+      ),
       markdown,
     ),
   );
-  return { path: rel, updated: false };
+  return { path: rel, updated: false, ...writeEnvelope({ redacted: scrub.redacted, redact: opts.noRedact ? false : undefined, refHint: opts.refHint }) };
 }
 
 /**
@@ -725,7 +919,9 @@ export function writeAttention(root, { title, status = "open", kind, from, again
  * @param {string} rel
  * @param {{ title?: string, status?: string, kind?: string, from?: string, against?: string, via?: string, description?: string, body?: string, tags?: string[], now?: Date }} opts
  */
-export function updateAttention(root, rel, { title, status, kind, from, against, via, description, body, tags, now = new Date() }) {
+export function updateAttention(root, rel, opts) {
+  const scrub = scrubWriteFields(opts, opts);
+  const { title, status, kind, from, against, via, description, body, tags, now = new Date() } = { ...opts, ...scrub.fields };
   const got = readBundleFile(root, rel);
   if (!got.ok) {
     throw Object.assign(new Error(got.error.message), { code: got.error.code });
@@ -742,6 +938,7 @@ export function updateAttention(root, rel, { title, status, kind, from, against,
   if (nextTags !== undefined) data.tags = nextTags;
   data.timestamp = now.toISOString();
   data.type = "Attention";
+  stampAnchor(data, opts.anchor, opts.refs);
   let nextBody = got.data.body;
   if (body != null && body !== "") {
     const heading = String(data.title || title || "Attention");
@@ -749,53 +946,82 @@ export function updateAttention(root, rel, { title, status, kind, from, against,
   } else if (title) {
     nextBody = got.data.body.replace(/^#\s+.+$/m, `# ${title}`);
   }
-  writeFileSync(got.data.abs, stringifyFrontmatter(data, nextBody));
-  return { path: rel, updated: true };
+  writeAtomic(got.data.abs, stringifyFrontmatter(data, nextBody));
+  return { path: rel, updated: true, ...writeEnvelope({ redacted: scrub.redacted, redact: opts.noRedact ? false : undefined, refHint: opts.refHint }) };
 }
 
 /**
  * @param {string} root
  * @param {{ title: string, body?: string, resume?: string, against?: string, via?: string, hop?: boolean, now?: Date }} opts
  */
-export function appendJournal(root, { title, body = "", resume = "Continue. — open loops: none", against, via, hop = false, now = new Date() }) {
+function journalSection({ time, title, body, resume, against, via, hop, anchor, refs }) {
+  const lines = [`## ${time} — ${title}`];
+  if (hop) lines.push("Hop: park");
+  if (via) lines.push(`Via: ${via}`);
+  if (anchor?.head) lines.push(`Head: ${anchor.head}`);
+  if (anchor?.paths?.length) lines.push(`Paths: ${anchor.paths.join(", ")}`);
+  for (const ref of refs || []) lines.push(`Ref: ${ref}`);
+  const prose = demoteJournalBody(body).trim();
+  if (prose) lines.push(prose);
+  if (against) lines.push("", `Against: ${against}`);
+  lines.push(`Resume: ${resume}`);
+  return `${lines.join("\n")}\n`;
+}
+
+export function appendJournal(root, opts) {
+  const scrub = scrubWriteFields(
+    {
+      title: opts.title,
+      body: opts.body || "",
+      resume: opts.resume || "Continue. — open loops: none",
+      against: opts.against,
+      via: opts.via,
+    },
+    opts,
+  );
+  const title = scrub.fields.title;
+  const body = scrub.fields.body || "";
+  const resume = scrub.fields.resume || "Continue. — open loops: none";
+  const against = scrub.fields.against;
+  const via = scrub.fields.via;
+  const { hop = false, now = new Date() } = opts;
   ensureSkeleton(root);
   const day = localDate(now);
   const file = join(root, "journal", `${day}.md`);
-  const ts = now.toISOString();
-  const time = localTime(now);
-  const hopLine = hop ? "Hop: park\n" : "";
-  const viaLine = via ? `Via: ${via}\n` : "";
-  const againstLine = against ? `\nAgainst: ${against}\n` : "";
-  const section = `## ${time} — ${title}
-${hopLine}${viaLine}${body.trim()}
-${againstLine}
-Resume: ${resume}
-`;
-  if (!existsSync(file)) {
-    writeFileSync(
-      file,
-      stringifyFrontmatter(
-        {
-          type: "Journal",
-          title: `Journal — ${day}`,
-          description: `Work log for ${day}.`,
-          tags: ["journal"],
-          timestamp: ts,
-          status: "active",
-        },
-        `# ${day}
-
-${section}`,
-      ),
-    );
-  } else {
-    const cur = readFileSync(file, "utf8");
-    const { data, body: existing } = parseFrontmatter(cur);
-    data.timestamp = ts;
-    const nextBody = `${existing.replace(/\s*$/, "")}\n\n${section}`;
-    writeFileSync(file, stringifyFrontmatter(data, nextBody));
-  }
-  return { path: `journal/${day}.md`, section, against: against ?? null };
+  const lock = `${file}.lock`;
+  return withFileLock(lock, () => {
+    const ts = now.toISOString();
+    const time = localTime(now);
+    const section = journalSection({ time, title, body, resume, against, via, hop, anchor: opts.anchor, refs: opts.refs });
+    if (!existsSync(file)) {
+      writeAtomic(
+        file,
+        stringifyFrontmatter(
+          {
+            type: "Journal",
+            title: `Journal — ${day}`,
+            description: `Work log for ${day}.`,
+            tags: ["journal"],
+            timestamp: ts,
+            status: "active",
+          },
+          `# ${day}\n\n${section}`,
+        ),
+      );
+    } else {
+      const cur = readFileSync(file, "utf8");
+      const { data, body: existing } = parseFrontmatter(cur);
+      data.timestamp = ts;
+      const nextBody = `${existing.replace(/\s*$/, "")}\n\n${section}`;
+      writeAtomic(file, stringifyFrontmatter(data, nextBody));
+    }
+    return {
+      path: `journal/${day}.md`,
+      section,
+      against: against ?? null,
+      ...writeEnvelope({ redacted: scrub.redacted, redact: opts.noRedact ? false : undefined, refHint: opts.refHint }),
+    };
+  });
 }
 
 /**
@@ -804,7 +1030,9 @@ ${section}`,
  * @param {{ title: string, status?: string, description?: string, body?: string, via?: string, slug?: string, tags?: string[], now?: Date }} opts
  * @throws {{ code: string }} `usage` when `body` is missing or whitespace, or tags are not a TagList.
  */
-export function writeDecision(root, { title, status = "open", description = "", body = "", via, slug, tags, now = new Date() }) {
+export function writeDecision(root, opts) {
+  const scrub = scrubWriteFields(opts, opts);
+  const { title, status = "open", description = "", body = "", via, slug, tags, now = new Date() } = { ...opts, ...scrub.fields };
   ensureSkeleton(root);
   const text = String(body || "").trim();
   if (!text) {
@@ -817,25 +1045,26 @@ export function writeDecision(root, { title, status = "open", description = "", 
   mkdirSync(dirname(file), { recursive: true });
   if (existsSync(file)) throw Object.assign(new Error(`Decision already exists: ${rel}`), { code: "exists" });
   const ts = now.toISOString();
-  writeFileSync(
+  writeAtomic(
     file,
     stringifyFrontmatter(
-      {
-        type: "Decision",
-        title,
-        description: description || title,
-        tags: tagsToStore(tags) ?? [],
-        timestamp: ts,
-        status,
-        via: via || undefined,
-      },
-      `# ${title}
-
-${text}
-`,
+      stampAnchor(
+        {
+          type: "Decision",
+          title,
+          description: description || title,
+          tags: tagsToStore(tags) ?? [],
+          timestamp: ts,
+          status,
+          via: via || undefined,
+        },
+        opts.anchor,
+        opts.refs,
+      ),
+      `# ${title}\n\n${text}\n`,
     ),
   );
-  return { path: rel, updated: false };
+  return { path: rel, updated: false, ...writeEnvelope({ redacted: scrub.redacted, redact: opts.noRedact ? false : undefined, refHint: opts.refHint }) };
 }
 
 /**
@@ -843,7 +1072,9 @@ ${text}
  * @param {string} rel
  * @param {{ title?: string, status?: string, description?: string, body?: string, via?: string, tags?: string[], now?: Date }} opts
  */
-export function updateDecision(root, rel, { title, status, description, body, via, tags, now = new Date() }) {
+export function updateDecision(root, rel, opts) {
+  const scrub = scrubWriteFields(opts, opts);
+  const { title, status, description, body, via, tags, now = new Date() } = { ...opts, ...scrub.fields };
   const got = readBundleFile(root, rel);
   if (!got.ok) {
     throw Object.assign(new Error(got.error.message), { code: got.error.code });
@@ -857,6 +1088,7 @@ export function updateDecision(root, rel, { title, status, description, body, vi
   if (nextTags !== undefined) data.tags = nextTags;
   data.timestamp = now.toISOString();
   data.type = "Decision";
+  stampAnchor(data, opts.anchor, opts.refs);
   let nextBody = got.data.body;
   if (body != null && body !== "") {
     const heading = String(data.title || title || "Decision");
@@ -864,15 +1096,17 @@ export function updateDecision(root, rel, { title, status, description, body, vi
   } else if (title) {
     nextBody = got.data.body.replace(/^#\s+.+$/m, `# ${title}`);
   }
-  writeFileSync(got.data.abs, stringifyFrontmatter(data, nextBody));
-  return { path: rel, updated: true };
+  writeAtomic(got.data.abs, stringifyFrontmatter(data, nextBody));
+  return { path: rel, updated: true, ...writeEnvelope({ redacted: scrub.redacted, redact: opts.noRedact ? false : undefined, refHint: opts.refHint }) };
 }
 
 /**
  * @param {string} root
  * @param {{ title: string, status?: string, description?: string, body?: string, slug?: string, tags?: string[], now?: Date }} opts
  */
-export function writeNote(root, { title, status = "active", description = "", body = "", slug, tags, now = new Date() }) {
+export function writeNote(root, opts) {
+  const scrub = scrubWriteFields(opts, opts);
+  const { title, status = "active", description = "", body = "", slug, tags, now = new Date() } = { ...opts, ...scrub.fields };
   ensureSkeleton(root);
   const s = slug || slugify(title);
   const rel = `notes/${s}.md`;
@@ -880,24 +1114,25 @@ export function writeNote(root, { title, status = "active", description = "", bo
   mkdirSync(dirname(file), { recursive: true });
   if (existsSync(file)) throw Object.assign(new Error(`Note already exists: ${rel}`), { code: "exists" });
   const ts = now.toISOString();
-  writeFileSync(
+  writeAtomic(
     file,
     stringifyFrontmatter(
-      {
-        type: "Note",
-        title,
-        description: description || title,
-        tags: tagsToStore(tags) ?? [],
-        timestamp: ts,
-        status,
-      },
-      `# ${title}
-
-${body.trim() || "<durable, non-obvious, repository-specific fact>"}
-`,
+      stampAnchor(
+        {
+          type: "Note",
+          title,
+          description: description || title,
+          tags: tagsToStore(tags) ?? [],
+          timestamp: ts,
+          status,
+        },
+        opts.anchor,
+        opts.refs,
+      ),
+      `# ${title}\n\n${String(body || "").trim() || "<durable, non-obvious, repository-specific fact>"}\n`,
     ),
   );
-  return { path: rel };
+  return { path: rel, ...writeEnvelope({ redacted: scrub.redacted, redact: opts.noRedact ? false : undefined, refHint: opts.refHint }) };
 }
 
 export function bundleName(root, fallback = "project") {
@@ -1032,7 +1267,7 @@ function walkPacked(abs, rel, out) {
  * @param {{ dryRun?: boolean }} [opts] dryRun reports the same result without writing anything
  * @returns {{ wrote: string[], kept: string[], journalMerged: string[] }}
  */
-export function mergeOkfTree(destRoot, packFiles, { dryRun = false } = {}) {
+export function mergeOkfTree(destRoot, packFiles, { dryRun = false, viaImport = "" } = {}) {
   if (!dryRun) mkdirSync(destRoot, { recursive: true });
   const destFiles = listPackedOkfFiles(destRoot);
   /** @type {string[]} */
@@ -1055,7 +1290,7 @@ export function mergeOkfTree(destRoot, packFiles, { dryRun = false } = {}) {
       continue;
     }
     if (rel.startsWith("journal/") && rel.endsWith(".md")) {
-      const r = mergeJournalFile(destAbs, packAbs, { dryRun });
+      const r = mergeJournalFile(destAbs, packAbs, { dryRun, viaImport });
       if (r.changed) journalMerged.push(rel);
       else kept.push(rel);
       continue;
@@ -1133,7 +1368,7 @@ function conceptTimeFromText(abs, text) {
  * @param {string} packAbs
  * @returns {{ changed: boolean }}
  */
-export function mergeJournalFile(destAbs, packAbs, { dryRun = false } = {}) {
+export function mergeJournalFile(destAbs, packAbs, { dryRun = false, viaImport = "" } = {}) {
   const destRaw = readFileSync(destAbs, "utf8");
   const packRaw = readFileSync(packAbs, "utf8");
   const dest = parseFrontmatter(destRaw);
@@ -1145,18 +1380,19 @@ export function mergeJournalFile(destAbs, packAbs, { dryRun = false } = {}) {
   const extra = [];
   for (const hop of packHops) {
     if (destExact.has(hopIdentity(hop))) continue;
-    const clash = destHops.some((d) => d.heading === hop.heading && normHopBody(d.body) !== normHopBody(hop.body));
+    const clash = destHops.some((d) => d.heading === hop.heading && normHopBody(stripImportVia(d.body)) !== normHopBody(stripImportVia(hop.body)));
     if (clash) {
       const renamed = {
         ...hop,
         heading: backupHopHeading(hop.heading),
+        body: tagImportHop(hop.body, viaImport),
       };
       if (destExact.has(hopIdentity(renamed))) continue;
       if (extra.some((e) => hopIdentity(e) === hopIdentity(renamed))) continue;
       extra.push(renamed);
       continue;
     }
-    extra.push(hop);
+    extra.push({ ...hop, body: tagImportHop(hop.body, viaImport) });
   }
   if (extra.length === 0) return { changed: false };
   if (dryRun) return { changed: true };
@@ -1165,15 +1401,30 @@ export function mergeJournalFile(destAbs, packAbs, { dryRun = false } = {}) {
   const extraBlocks = extra.map((h) => `## ${h.heading}\n${h.body.replace(/\s+$/, "")}`).join("\n\n");
   const nextBody = [preamble.replace(/\s+$/, ""), destBlocks, extraBlocks].filter(Boolean).join("\n\n") + "\n";
   dest.data.timestamp = new Date().toISOString();
-  writeFileSync(destAbs, stringifyFrontmatter(dest.data, nextBody));
+  writeAtomic(destAbs, stringifyFrontmatter(dest.data, nextBody));
   return { changed: true };
 }
 
 /**
  * @param {{ heading: string, body: string }} hop
  */
+function stripImportVia(body) {
+  return String(body || "").replace(/^Via: import .+\n?/gm, "");
+}
+
 function hopIdentity(hop) {
-  return `${hop.heading}\n${normHopBody(hop.body)}`;
+  return `${hop.heading}\n${normHopBody(stripImportVia(hop.body))}`;
+}
+
+/**
+ * @param {string} body
+ * @param {string} viaImport
+ */
+function tagImportHop(body, viaImport) {
+  if (!viaImport) return body;
+  const line = `Via: import ${viaImport}`;
+  if (new RegExp(`^Via: import ${viaImport.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "m").test(body)) return body;
+  return `${line}\n${String(body || "").replace(/^\n/, "")}`;
 }
 
 /** @param {string} body */

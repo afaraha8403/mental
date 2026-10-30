@@ -3,13 +3,15 @@
  * Feature flags: track is per-UUID; hooks/mcp are user-global.
  * Corrupt file → that feature off (fail open for coding).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { writeAtomic } from "./atomic.mjs";
 import { userMentalDir } from "./bindings.mjs";
 
 export const CONFIG_VERSION = 1;
 
-export const FEATURES = ["hooks", "mcp", "track"];
+export const FEATURES = ["hooks", "mcp", "track", "trailer"];
 
 const EMPTY_FEATURE = () => ({ default: "off", on: [], off: [] });
 
@@ -27,6 +29,7 @@ function blankConfig() {
       hooks: EMPTY_FEATURE(),
       mcp: EMPTY_FEATURE(),
       track: EMPTY_FEATURE(),
+      trailer: EMPTY_FEATURE(),
     },
     seenOptionals: [],
     decide: blankDecide(),
@@ -126,8 +129,24 @@ export function saveConfig(home, data) {
     seenOptionals: data.seenOptionals || [],
     decide: data.decide || blankDecide(),
   };
-  // The file may hold an API key; keep it owner-only (no-op on Windows).
-  writeFileSync(file, `${JSON.stringify(out, null, 2)}\n`, { mode: 0o600 });
+  // The file may hold an API key. mode 0600 is owner-only on POSIX and a no-op on
+  // Windows, so Windows also gets an owner-only ACL when icacls is available.
+  writeAtomic(file, `${JSON.stringify(out, null, 2)}\n`, { mode: 0o600 });
+  restrictConfigFile(file);
+}
+
+/**
+ * @param {string} file
+ */
+function restrictConfigFile(file) {
+  if (process.platform !== "win32") return;
+  const user = process.env.USERNAME || process.env.USER;
+  if (!user) return;
+  try {
+    spawnSync("icacls", [file, "/inheritance:r", "/grant:r", `${user}:(R,W)`], { windowsHide: true });
+  } catch {
+    // Fail open: the key is still in the file, and doctor mentions the Windows limit.
+  }
 }
 
 /**
@@ -239,7 +258,7 @@ export function setFeature(home, id, action, { all = false, uuid = null } = {}) 
     return { ok: false, error: { code: "config", message: "config.json is corrupt; doctor will warn. Tracking stays off." } };
   }
   const feat = cfg.features[id] || EMPTY_FEATURE();
-  if (id === "track") {
+  if (id === "track" || id === "trailer") {
     if (all) {
       feat.default = action;
       if (action === "on") feat.off = [];
@@ -250,7 +269,7 @@ export function setFeature(home, id, action, { all = false, uuid = null } = {}) 
           ok: false,
           error: {
             code: "usage",
-            message: "mental option track on|off needs a project UUID (run from a git repo after a write). --this before identity exists is usage.",
+            message: `mental option ${id} on|off needs a project UUID (run from a git repo after a write). --this before identity exists is usage.`,
           },
         };
       }
@@ -356,6 +375,15 @@ export function listOptionals(home, uuid) {
       command: "mental option track on",
       summary: "ledger accepts rows; recording starts with mental track start",
       isNew: !cfg.seenOptionals.includes("track"),
+      needsConsent: true,
+    },
+    {
+      id: "trailer",
+      enabled: featureOn(cfg.features.trailer, uuid),
+      scope: "bundle",
+      command: "mental option trailer on",
+      summary: "prepare-commit-msg adds a Mental-Decision trailer (id and path only)",
+      isNew: !cfg.seenOptionals.includes("trailer"),
       needsConsent: true,
     },
     {

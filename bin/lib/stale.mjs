@@ -2,9 +2,9 @@
  * Stale residue for doctor: open/later attention and open/deferred decisions
  * older than N days. Warn-only — never a hard doctor failure.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
-import { listMarkdownRecursive, parseFrontmatter } from "./okf.mjs";
+import { listMarkdownRecursive, parseFrontmatter, readUtf8 } from "./okf.mjs";
 import { conceptTimeMs } from "./delta.mjs";
 
 export const STALE_DAYS_DEFAULT = 14;
@@ -36,7 +36,7 @@ function scanDir(root, dir, keep, cutoffMs) {
     const abs = join(absDir, file);
     let text;
     try {
-      text = readFileSync(abs, "utf8");
+      text = readUtf8(abs);
     } catch {
       continue;
     }

@@ -171,8 +171,8 @@ Measured. Reproducible. `npm test` · `npm run bench`
 
 | | | |
 | ---: | --- | --- |
-| **0** | runtime npm dependencies | Node `>=18` |
-| **224** | automated tests | identity, search, install, MCP, optional track |
+| **0** | runtime npm dependencies | Node `>=22.13` |
+| **562** | automated tests | identity, search, install, MCP, optional track |
 | **51 ms** | `mental heartbeat --json` | p50, fresh process |
 | **11 ms** | same pulse in-process | MCP after `mental serve` |
 | **46 ms** | search over **2,000** notes | **1.2 ms** in-process |
@@ -228,9 +228,24 @@ Only if you turn it on (`mental option track on`). Agents automatically record p
 
 ## Privacy
 
+### What leaves your machine
+
+| Surface | Leaves? | What is sent | How to turn it off |
+| --- | --- | --- | --- |
+| Core CLI (journal, search, why, heartbeat without a model) | No | Nothing | — |
+| Skill and rule | No | Nothing | — |
+| Update check | Package name only | `npm view` of `@balacode/mental` when the cache is stale, including on `--json` | `MENTAL_SKIP_UPDATE_CHECK=1` |
+| MCP | No | stdio on this machine | `mental option mcp off` |
+| Dashboard | No | Loopback `127.0.0.1`, GET and HEAD only | Stop `mental dashboard` |
+| Decision models | Redacted text, only with a key | The configured provider | `mental option decide off` |
+| Hooks | No | Nothing | `mental option hooks off` |
+| Time tracking | No | Local sqlite, never git | `mental option track off` |
+
+There is no account, no telemetry, and no Mental server. API keys live in `~/.mental/config.json`. On macOS and Linux that file is mode `0600`. On Windows that mode is a no-op, so Mental also asks `icacls` for an owner-only ACL when it can. `mental doctor --json` includes a `network` list of these rows.
+
 - Default store: `~/.mental/` (never commit)
 - Project `.mental/` is opt-in and must be gitignored (`mental doctor --fix-ignore`). Agents must not edit `.gitignore`
-- Never store secrets, tokens, or private keys
+- Writes redact obvious credentials locally before they hit disk (`[REDACTED:kind]`). `--no-redact` stores the text and says so. `mental doctor --fix` rewrites files that still match
 - `mental uninstall` does not delete OKF unless you type `DELETE`
 
 Optional: `mental install --mcp` · `mental hooks on` · `mental option track on` · `mental option decide key <KEY>` — default **off**. Skill + rule are the contract. Hours never go in git. [Track](docs/track.md).

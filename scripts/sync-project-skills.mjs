@@ -38,7 +38,19 @@ export function drift() {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  if (process.argv.includes("--check")) {
+  const emitAt = process.argv.indexOf("--emit");
+  if (emitAt !== -1) {
+    const project = process.argv[emitAt + 1];
+    if (!project) {
+      console.error("--emit needs a project directory");
+      process.exit(1);
+    }
+    const dest = join(project, ".agents", "skills", "mental");
+    mkdirSync(dest, { recursive: true });
+    cpSync(join(ROOT, "skill", "mental"), dest, { recursive: true });
+    console.log(`wrote ${dest}`);
+    console.log("Add .agents/skills/mental/ to .gitignore if this copy should stay local. This script does not edit .gitignore.");
+  } else if (process.argv.includes("--check")) {
     const d = drift();
     if (d.length) {
       console.error(`.claude/skills drifted from .agents/skills:\n  ${d.join("\n  ")}\nRun: node scripts/sync-project-skills.mjs`);

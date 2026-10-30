@@ -51,8 +51,26 @@ function mustContain(label, text, line) {
   if (!text.includes(line)) fail(`${label} missing ${JSON.stringify(line)}`);
 }
 
+const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const nodeFloor = String(pkg.engines?.node || "")
+  .replace(/^[^\d]*/, "")
+  .split(".")
+  .slice(0, 2)
+  .join(".");
+if (!nodeFloor) fail("package.json engines.node is missing");
+
 const readme = readFileSync(join(ROOT, "README.md"), "utf8");
 const installDoc = readFileSync(join(ROOT, "docs", "install.md"), "utf8");
+const benchmarks = readFileSync(join(ROOT, "docs", "benchmarks.md"), "utf8");
+for (const [label, text] of [
+  ["README", readme],
+  ["docs/install.md", installDoc],
+  ["docs/benchmarks.md", benchmarks],
+]) {
+  if (!text.includes(`>=${nodeFloor}`) && !text.includes(`>= ${nodeFloor}`)) {
+    fail(`${label} must name Node >=${nodeFloor} (engines.node is ${pkg.engines.node})`);
+  }
+}
 const setup = readFileSync(join(ROOT, "skills", "mental-setup", "SKILL.md"), "utf8");
 for (const [label, text] of [
   ["README", readme],

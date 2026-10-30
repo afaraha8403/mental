@@ -106,6 +106,7 @@ export function createInspector(ctx) {
     fill($("#insp-fm"));
     fill($("#insp-body"), skeleton(6));
     $("#insp-backlinks-wrap").hidden = true;
+    $("#insp-why-wrap").hidden = true;
     $("#insp-related-wrap").hidden = true;
     scroll.scrollTop = 0;
 
@@ -141,6 +142,12 @@ export function createInspector(ctx) {
     md = md.replace(/^\s*#\s+.+\n?/, (line) => (line.replace(/^\s*#\s+/, "").trim() === $("#insp-title").textContent ? "" : line));
     const html = renderMarkdown(md);
     $("#insp-body").innerHTML = html || '<p class="muted">No body.</p>';
+
+    const why = await ctx.api(`/api/why${ctx.qs({ path: doc.path.split("#")[0] })}`);
+    if (my !== token) return;
+    const whyHits = Array.isArray(why.body?.data?.hits) ? why.body.data.hits.filter((h) => h.path !== doc.path.split("#")[0]) : [];
+    $("#insp-why-wrap").hidden = whyHits.length === 0;
+    fill($("#insp-why"), ...whyHits.map((h) => miniRow(h.path, h.type, h.title)));
 
     const back = Array.isArray(doc.backlinks) ? doc.backlinks : [];
     $("#insp-backlinks-wrap").hidden = back.length === 0;

@@ -37,10 +37,12 @@ Leftover Balakit `./.mental` (no `.mental-local` marker) is ingested into `~/.me
 
 ## Privacy
 
+Same contract as the README table [What leaves your machine](../README.md#what-leaves-your-machine). Core CLI, the skill, MCP (stdio), the dashboard (loopback), hooks, and time tracking send nothing. The update check sends the package name to npm unless `MENTAL_SKIP_UPDATE_CHECK=1`. Decision models send redacted text only after a key is set. There is no account, no telemetry, and no Mental server. Keys stay in `~/.mental/config.json` (mode 0600; on Windows that mode is a no-op and Mental sets an owner-only ACL when `icacls` is available). `mental doctor --json` repeats the table as `network`.
+
 - Default store: `~/.mental/` (never commit)
 - Project `.mental/` is opt-in and must be gitignored (`mental doctor --fix-ignore`)
 - Agents must not edit `.gitignore`
-- Never store secrets, tokens, or private keys in Mental files
+- Writes redact obvious credentials before they hit disk. `--no-redact` is the escape hatch and is logged
 - Uninstall does not delete OKF unless you type `DELETE`
 - Do not live-sync `~/.mental` with Syncthing, Dropbox, or iCloud. Use `mental backup` / `mental restore`
 

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+- Titles keep `#`, `:`, and quotes, and a newline in a title is rejected instead of breaking the file.
+- The README and install docs name Node `>=22.13`, matching `engines`.
+- Recording an attention item that was resolved opens it again.
+- A `## ` heading inside a journal body no longer splits the next hop.
+- Journal days and `bindings.json` are written atomically and locked so two agents cannot drop an update.
+- The search index rebuilds in one transaction, once per write, and a search refreshes it when files changed outside Mental.
+- Every search backend matches word prefixes and ranks a title hit above the same words in a body.
+- Writes redact obvious credentials locally, including `.env` values, without a model key. Long slugs, paths, SHAs, and UUIDs stay. `mental doctor --fix` rewrites files that still match.
+- Heartbeat docs say what it writes (`last_seen` when tracking is on, the update cache) and that `MENTAL_SKIP_UPDATE_CHECK=1` skips the npm check. Config files on Windows get an owner-only ACL when `icacls` is available.
+- Heartbeat skips journal days that cannot contain today's hops and reads each bundle file once.
+
+### Features
+- `mental why <path|sha|path:line>` shows decisions and hops anchored to that code, plus `Mental-Decision` trailers.
+- `--ref` stores a session link on journal, park, handoff, decide, attention, and note. Mental never fetches it.
+- `mental handoff --share <dir>` packs one project, and `mental import <dir>` merges it into the binding with the same git origin.
+- `mental option trailer on` installs a `prepare-commit-msg` hook that appends `Mental-Decision: <id>/<path>` and never fails the commit.
+- The README privacy section lists what can leave the machine. `mental doctor --json` repeats it as `network` and reports which agent hosts can see the skill.
+
 ## [0.13.3] - 2026-10-29
 
 ### Changes

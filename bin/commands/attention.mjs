@@ -21,6 +21,7 @@ import {
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
+import { writeExtras } from "../lib/write-meta.mjs";
 
 const HISTORY_TITLE = /^\s*(DONE|CLOSED|COMPLETED?|CORRECTION|LEDGER CORRECTION)\b/i;
 const HISTORY_WARNING =
@@ -146,11 +147,24 @@ export function cmdAttention(args, io = {}) {
     return EXIT_USAGE;
   }
 
+  const extra = writeExtras(args, resolved.data);
+  if (!extra.ok) {
+    printResult(stdout, args, false, undefined, extra.error);
+    return EXIT_USAGE;
+  }
+  const reopening = Boolean(existing && existing.status === "resolved" && !statusFlag);
+  const meta = {
+    noRedact: extra.noRedact,
+    gitRoot: resolved.data.gitRoot,
+    anchor: extra.anchor,
+    refs: extra.refs,
+    refHint: extra.refHint,
+  };
   try {
     const written = existing
       ? updateAttention(resolved.data.root, existing.path, {
           title: title || undefined,
-          status: statusFlag || undefined,
+          status: reopening ? "open" : statusFlag || undefined,
           kind: kindFlag || undefined,
           from: flagString(args.flags, "from") || undefined,
           against: against || undefined,
@@ -158,6 +172,7 @@ export function cmdAttention(args, io = {}) {
           description: flagString(args.flags, "description") || undefined,
           body: flagString(args.flags, "body") || undefined,
           tags: tagged.tags,
+          ...meta,
         })
       : writeAttention(resolved.data.root, {
           title,
@@ -170,6 +185,7 @@ export function cmdAttention(args, io = {}) {
           body: flagString(args.flags, "body") || "",
           slug: flagString(args.flags, "slug") || undefined,
           tags: tagged.tags,
+          ...meta,
         });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
@@ -182,7 +198,7 @@ export function cmdAttention(args, io = {}) {
       stdout,
       args,
       true,
-      { ...resolved.data, ...written, indexed, ...(warning ? { warning } : {}) },
+      { ...resolved.data, ...written, indexed, ...(reopening ? { reopened: true, status: "open" } : {}), ...(warning ? { warning } : {}) },
       undefined,
       () =>
         kindLine("attention", `${verb} ${written.path}`) +

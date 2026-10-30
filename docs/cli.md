@@ -31,13 +31,14 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | Command | What it does |
 | --- | --- |
 | `mental` | Heartbeat (TTY): resume, last outcome, git, hops today, Needs eyes, In the air, Later, unsettled + settled; then exit |
-| `mental heartbeat` | Same cheap reload; agents pass `--json`. Read-only — does not write the pulse watermark. Delta is counts only. `hopsToday` is parks since local midnight. `later` / `laterCount` are `--status later` residue |
+| `mental heartbeat` | Same cheap reload; agents pass `--json`. Does not write the pulse watermark. With time tracking on it updates `last_seen` unless `--passive`. It may write `jev-hint.json` and `npm-latest.json`, and it may run a synchronous `npm view` (about 5s) when the update cache is stale, including on `--json`. `MENTAL_SKIP_UPDATE_CHECK=1` skips that. Delta is counts only. `hopsToday` is parks since local midnight. `later` / `laterCount` are `--status later` residue |
 | `mental pulse` | Cross-project compact rows from `bindings.json` (id, name, resume, attentionCount, openDecisionCount). No journal bodies. Writes watermark for the active bundle |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only; does not create identity) |
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
-| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`, `--project`, `--all-projects`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op` |
+| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`, `--project`, `--all-projects`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op`. Every backend matches word prefixes. Hits are ordered by type, then title weight, then path. A search rebuilds the index when files changed outside Mental |
 | `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`, `--since`, `--on`; pages of 50 via `--limit`, `--offset`, `--all`; `--project <id\|name>` or `--all-projects` to cross projects) |
 | `mental move <path> --to <project>` | Re-file one attention/decision/note into another bound project, keeping timestamp, frontmatter and body; warns on dangling links |
+| `mental why <path\|sha\|path:line>` | Decisions and hops anchored to that path or commit, plus `Mental-Decision` trailers. JSON matches search: hits with path, type, title, head |
 | `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`; with a decision-model key also `suggestedLinks` and, for agent-directed text, `flags`; writes may add advisory `data.guard`) |
 | `mental relink [path] [--apply]` | Optional (needs a Jev key). Suggest links for a file, or the 5 most recent non-journal files, each labelled with how it relates (`supports`, `supersedes`, `contradicts`, `depends_on`; plain `related` is unlabelled). Dry run by default; `--apply` appends only high-confidence links under `## Related` (`- supersedes: [Title](path)`) |
 | `mental retag [path] [--apply] [--limit N]` | Optional (needs a Jev key). Propose one topic tag for untagged files from existing tags plus frequent title words (bootstrap, `*` marks a new topic). Dry run by default; `--apply` writes only the `tags:` line of confident matches. Never runs on the personal bundle |
@@ -46,7 +47,11 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental extract <file\|-> [--apply --tag slug]` | Optional (needs a Jev key). Propose actions, decisions and concerns from pasted meeting notes. Dry run by default; `--apply` writes them (needs `--tag`). The raw text is never stored |
 | `mental search <q> --rank` | Optional (needs a key). Re-order hits by relevance, favoring the file type the question points at (decision, attention, note); never drops a hit. With zero hits and a key, `search` also lets the model read the freshest files (`broad: true`) |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
-| `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`, `--via`). Requires `--resume`. Then heartbeat; writes watermark |
+| `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`, `--via`, `--ref`). Requires `--resume`. Then heartbeat; writes watermark |
+| `mental handoff --share <dir>` | After the journal entry, pack this one project (never personal files or hours) into a directory outside the worktree, with `HANDOFF.md` |
+| `mental import <dir>` | Merge a share into the binding with the same git origin. A second import does not duplicate hops |
+| `mental option trailer on` | Install `prepare-commit-msg` (chains an existing hook). It appends `Mental-Decision: <id>/<path>` and never fails the commit. Default off |
+| `mental trailer` | Read-only list of those trailers. The hook calls it |
 | `mental handoff --title --resume` | Planned boundary: journal then heartbeat. Both flags required. JSON `{ path, heartbeat }`. Writes watermark. `--via` optional |
 | `mental journal --title --body --resume [--against] [--via]` | Append today’s journal section. `--resume` is required (same as park/handoff) |
 | `mental schema [command]` | Dump the command catalog as JSON (`mental schema heartbeat --json` for one command) |

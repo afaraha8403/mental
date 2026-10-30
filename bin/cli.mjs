@@ -37,6 +37,9 @@ import { cmdMove } from "./commands/move.mjs";
 import { cmdLink } from "./commands/link.mjs";
 import { cmdBackup } from "./commands/backup.mjs";
 import { cmdRestore } from "./commands/restore.mjs";
+import { cmdImport } from "./commands/import.mjs";
+import { cmdWhy } from "./commands/why.mjs";
+import { cmdTrailer } from "./commands/trailer.mjs";
 import { cmdUninstall } from "./commands/uninstall.mjs";
 import { cmdHooks } from "./commands/hooks.mjs";
 import { cmdServe } from "./commands/serve.mjs";
@@ -83,6 +86,9 @@ export const COMMANDS = {
   link: cmdLink,
   backup: cmdBackup,
   restore: cmdRestore,
+  import: cmdImport,
+  why: cmdWhy,
+  trailer: cmdTrailer,
   uninstall: cmdUninstall,
   hooks: cmdHooks,
   serve: cmdServe,

@@ -16,6 +16,7 @@ import {
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
+import { writeExtras } from "../lib/write-meta.mjs";
 
 function flagString(flags, key) {
   return typeof flags?.[key] === "string" ? flags[key] : null;
@@ -97,6 +98,18 @@ export function cmdDecide(args, io = {}) {
     return EXIT_USAGE;
   }
 
+  const extra = writeExtras(args, resolved.data);
+  if (!extra.ok) {
+    printResult(stdout, args, false, undefined, extra.error);
+    return EXIT_USAGE;
+  }
+  const meta = {
+    noRedact: extra.noRedact,
+    gitRoot: resolved.data.gitRoot,
+    anchor: extra.anchor,
+    refs: extra.refs,
+    refHint: extra.refHint,
+  };
   try {
     const written = existing
       ? updateDecision(resolved.data.root, existing.path, {
@@ -106,6 +119,7 @@ export function cmdDecide(args, io = {}) {
           body: body || undefined,
           via: viaParsed.via,
           tags: tagged.tags,
+          ...meta,
         })
       : writeDecision(resolved.data.root, {
           title,
@@ -115,6 +129,7 @@ export function cmdDecide(args, io = {}) {
           via: viaParsed.via,
           slug: flagString(args.flags, "slug") || undefined,
           tags: tagged.tags,
+          ...meta,
         });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);

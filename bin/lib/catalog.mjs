@@ -70,6 +70,8 @@ const SCOPE_FLAGS = [
 
 const WRITE_PROJECT = v("project", { summary: "File into another project's bundle instead of the active one (id, id prefix, or name from bindings)" });
 const VIA = v("via", { summary: "Short client token (cursor, claude-code, copilot, codex, opencode, mcp, cli). Not a session id." });
+const REF = v("ref", { repeat: true, summary: "Link to the full session (https URL or repo-relative path). Repeatable. Never fetched." });
+const NO_REDACT = b("no-redact", { mcpName: "no_redact", summary: "Store text as given. Logged on the result. Default redacts obvious credentials locally." });
 const AGAINST = v("against", { summary: "Repo-relative plan path (no ..)" });
 const TITLE = v("title", { summary: "OKF title (same title updates)" });
 const BODY = v("body", { summary: "Section or file body" });
@@ -108,7 +110,7 @@ export const CATALOG = {
       `${CMD} park --resume "Pick up the catalog next — open loops: none"`,
       `${CMD} park --resume "…" --via cursor --json`,
     ],
-    flags: [RESUME, v("title", { summary: "Journal title (default Parked)" }), BODY, ...TIME_CAPTURE_FLAGS, v("attention", { summary: "Residue title to record with this park" }), v("kind", { enum: ["direction", "concern", "thread", "verify"] }), v("from", { summary: "Who raised the residue" }), AGAINST, VIA],
+    flags: [RESUME, v("title", { summary: "Journal title (default Parked)" }), BODY, ...TIME_CAPTURE_FLAGS, v("attention", { summary: "Residue title to record with this park" }), v("kind", { enum: ["direction", "concern", "thread", "verify"] }), v("from", { summary: "Who raised the residue" }), AGAINST, VIA, REF, NO_REDACT],
     effects: "non_idempotent",
     mcp: true,
   },
@@ -121,7 +123,7 @@ export const CATALOG = {
       `${CMD} handoff --title "Catalog landed" --resume "Phase A tests — open loops: none"`,
       `${CMD} handoff --title "…" --resume "…" --via cursor --json`,
     ],
-    flags: [v("title", { required: true, summary: "Journal outcome title" }), RESUME, BODY, ...TIME_CAPTURE_FLAGS, AGAINST, VIA],
+    flags: [v("title", { required: true, summary: "Journal outcome title" }), RESUME, BODY, ...TIME_CAPTURE_FLAGS, AGAINST, VIA, REF, NO_REDACT, v("share", { summary: "After the handoff, pack this one project (never personal or hours) into a directory outside the worktree" }), v("since", { summary: "With --share: include journal days on or after YYYY-MM-DD" }), b("no-journal", { summary: "With --share: decisions and residue only" }), b("allow-secrets", { summary: "With --share: write the pack even if a credential shape is present" })],
     effects: "non_idempotent",
     mcp: true,
   },
@@ -144,6 +146,8 @@ export const CATALOG = {
       v("tag", { summary: "Required on create: 1–3 comma-separated topic slugs. Omit on update to keep existing tags." }),
       WRITE_PROJECT,
       VIA,
+      REF,
+      NO_REDACT,
     ],
     effects: "idempotent",
     mcp: true,
@@ -172,8 +176,21 @@ export const CATALOG = {
       v("move-to", { mcpName: "move_to", summary: "Re-file this existing item into another project (id, prefix, or name), keeping timestamp and body. Same as `mental move`." }),
       AGAINST,
       VIA,
+      REF,
+      NO_REDACT,
     ],
     effects: "idempotent",
+    mcp: true,
+  },
+  why: {
+    name: "why",
+    group: "Lookup",
+    summary: "Decisions and hops that explain a path, a commit, or path:line. Reads anchors stored at write time and Mental-Decision trailers.",
+    usage: `${CMD} why <path|sha|path:line>`,
+    examples: [`${CMD} why src/foo.ts --json`, `${CMD} why src/foo.ts:42 --json`],
+    flags: [],
+    rest: { name: "target", required: true, mcpName: "target", summary: "Repo path, commit SHA, or path:line" },
+    effects: "read_only",
     mcp: true,
   },
   search: {
@@ -353,7 +370,7 @@ export const CATALOG = {
       `${CMD} journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next — open loops: none" --against PLAN.md --via cursor`,
       `${CMD} journal --title "…" --resume "…" --json`,
     ],
-    flags: [v("title", { required: true }), RESUME, BODY, ...TIME_CAPTURE_FLAGS, AGAINST, VIA],
+    flags: [v("title", { required: true }), RESUME, BODY, ...TIME_CAPTURE_FLAGS, AGAINST, VIA, REF, NO_REDACT],
     effects: "non_idempotent",
     mcp: true,
   },
@@ -371,6 +388,8 @@ export const CATALOG = {
       v("slug"),
       v("tag", { summary: "Required: 1–3 comma-separated topic slugs." }),
       WRITE_PROJECT,
+      REF,
+      NO_REDACT,
     ],
     effects: "idempotent",
     mcp: true,
@@ -430,6 +449,25 @@ export const CATALOG = {
     flags: [v("out", { required: true, summary: "Directory outside any git worktree" })],
     effects: "non_idempotent",
   },
+  import: {
+    name: "import",
+    group: "Identity",
+    summary: "Merge a handoff --share folder into the binding that matches its git origin. Personal files and hours are refused.",
+    usage: `${CMD} import <dir>`,
+    examples: [`${CMD} import ~/handoff-out --json`],
+    flags: [b("allow-secrets", { summary: "Merge even if a credential shape is present" })],
+    rest: { name: "dir", required: true, summary: "Share directory from handoff --share" },
+    effects: "non_idempotent",
+  },
+  trailer: {
+    name: "trailer",
+    group: "Setup",
+    summary: "Read-only Mental-Decision trailers for commits since the last one. The prepare-commit-msg hook calls this and never fails the commit.",
+    usage: `${CMD} trailer`,
+    examples: [`${CMD} trailer --json`],
+    flags: [],
+    effects: "read_only",
+  },
   restore: {
     name: "restore",
     group: "Identity",
@@ -470,7 +508,7 @@ export const CATALOG = {
     name: "option",
     group: "Setup",
     summary: "List or set optional features (track per-UUID; mcp/hooks user-global). Consent required. `option decide` manages the optional decision model (TypeSafe Jev, OpenAI Decisions, Cloudflare Clef); keys are stored in config and never printed. `option jev` is an alias.",
-    usage: `${CMD} option [track|mcp|hooks] on|off  |  ${CMD} option decide [key <KEY> [--provider P]|key -|key clear|provider <P>|url <U>|model <M>|account <ID>|on|off|budget <tokens/day>|personal on|off|fallback <P|off>]`,
+    usage: `${CMD} option [track|mcp|hooks|trailer] on|off  |  ${CMD} option decide [key <KEY> [--provider P]|key -|key clear|provider <P>|url <U>|model <M>|account <ID>|on|off|budget <tokens/day>|personal on|off|fallback <P|off>]`,
     examples: [
       `${CMD} option`,
       `${CMD} option track on --json`,
@@ -479,7 +517,7 @@ export const CATALOG = {
     ],
     flags: [b("all"), b("this"), v("provider", { summary: "decide: provider the key/url/model/account applies to (typesafe | openai | cloudflare | custom)" })],
     effects: "non_idempotent",
-    rest: { name: "feature", summary: "track | mcp | hooks | decide (alias jev), then on|off (decide: key <KEY>, provider <P>, ...)" },
+    rest: { name: "feature", summary: "track | mcp | hooks | trailer | decide (alias jev), then on|off (decide: key <KEY>, provider <P>, ...)" },
     mcp: true,
   },
   track: {
@@ -763,7 +801,9 @@ export function mcpInputSchema(c) {
     const key = f.mcpName || f.name.replace(/-/g, "_");
     if (properties[key]) continue;
     /** @type {Record<string, unknown>} */
-    const prop = { type: f.mcpType || (f.takesValue === false ? "boolean" : "string") };
+    const prop = f.repeat
+      ? { type: "array", items: { type: "string" } }
+      : { type: f.mcpType || (f.takesValue === false ? "boolean" : "string") };
     if (f.summary) prop.description = f.summary;
     if (f.enum) prop.enum = f.enum;
     properties[key] = prop;

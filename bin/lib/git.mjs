@@ -22,9 +22,13 @@ export function runGit(cwd, args, { env = process.env } = {}) {
   });
 }
 
+/** One `git --version` per process. Heartbeat used to spawn it on every resolve. */
+let gitOk;
 export function gitAvailable() {
+  if (gitOk !== undefined) return gitOk;
   const r = spawnSync("git", ["--version"], { encoding: "utf8", windowsHide: true });
-  return !r.error && r.status === 0;
+  gitOk = !r.error && r.status === 0;
+  return gitOk;
 }
 
 /**
@@ -250,7 +254,67 @@ export function getRemoteUrl(cwd, name = "origin", { env = process.env } = {}) {
 }
 
 /**
+ * HEAD sha plus paths from `status --porcelain`, capped.
+ * Missing git returns null. Callers skip the anchor instead of failing the write.
+ * @param {string | null | undefined} gitRoot
+ * @param {{ env?: NodeJS.ProcessEnv, cap?: number }} [opts]
+ * @returns {{ head: string, paths: string[] } | null}
+ */
+export function gitAnchor(gitRoot, { env = process.env, cap = 50 } = {}) {
+  if (!gitRoot || !gitAvailable()) return null;
+  const headR = runGit(gitRoot, ["rev-parse", "HEAD"], { env });
+  if (headR.status !== 0) return null;
+  const head = (headR.stdout || "").trim();
+  if (!/^[0-9a-f]{7,40}$/i.test(head)) return null;
+  const st = runGit(gitRoot, ["status", "--porcelain"], { env });
+  /** @type {string[]} */
+  const paths = [];
+  if (st.status === 0) {
+    for (const line of (st.stdout || "").split(/\r?\n/)) {
+      if (line.length < 4) continue;
+      let p = line.slice(3).trim();
+      const arrow = p.indexOf(" -> ");
+      if (arrow >= 0) p = p.slice(arrow + 4).trim();
+      p = p.replace(/^"|"$/g, "").replace(/\\/g, "/");
+      if (!p) continue;
+      paths.push(p);
+      if (paths.length >= cap) break;
+    }
+  }
+  return { head, paths };
+}
+
+/**
+ * `git blame -L line,line --porcelain` sha, or null.
+ * @param {string | null | undefined} gitRoot
+ * @param {string} file
+ * @param {number} line
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function blameLine(gitRoot, file, line, env = process.env) {
+  if (!gitRoot || !gitAvailable() || !Number.isInteger(line) || line < 1) return null;
+  const r = runGit(gitRoot, ["blame", "-L", `${line},${line}`, "--porcelain", "--", file], { env });
+  if (r.status !== 0) return null;
+  const sha = (r.stdout || "").split(/\s/)[0] || "";
+  return /^[0-9a-f]{7,40}$/i.test(sha) ? sha : null;
+}
+
+/**
+ * True when `ancestor` is an ancestor of `descendant` (or the same commit).
+ * @param {string} gitRoot
+ * @param {string} ancestor
+ * @param {string} descendant
+ * @param {NodeJS.ProcessEnv} [env]
+ */
+export function isAncestor(gitRoot, ancestor, descendant, env = process.env) {
+  if (!gitRoot || !ancestor || !descendant) return false;
+  const r = runGit(gitRoot, ["merge-base", "--is-ancestor", ancestor, descendant], { env });
+  return r.status === 0;
+}
+
+/**
  * Lightweight git snapshot for `mental status`. Missing git → null fields.
+ * Branch and dirty state come from one `status -sb` call.
  *
  * @param {string | null} gitRoot
  * @param {{ env?: NodeJS.ProcessEnv }} [opts]
@@ -259,10 +323,20 @@ export function gitSnapshot(gitRoot, { env = process.env } = {}) {
   if (!gitRoot || !gitAvailable()) {
     return { branch: null, dirty: false, porcelain: "", recent: [] };
   }
-  const branchR = runGit(gitRoot, ["rev-parse", "--abbrev-ref", "HEAD"], { env });
-  const branch = branchR.status === 0 ? (branchR.stdout || "").trim() || null : null;
-  const st = runGit(gitRoot, ["status", "--porcelain"], { env });
-  const porcelain = st.status === 0 ? st.stdout || "" : "";
+  // One status call carries the branch line and the porcelain. `rev-parse` is not a third spawn.
+  const st = runGit(gitRoot, ["status", "-sb", "--porcelain"], { env });
+  let branch = null;
+  let porcelain = "";
+  if (st.status === 0) {
+    const lines = (st.stdout || "").split(/\r?\n/);
+    const head = lines[0] || "";
+    if (head.startsWith("## ")) {
+      const rest = head.slice(3).trim();
+      branch = rest.startsWith("HEAD (no branch)") ? "HEAD" : rest.split("...")[0].trim() || null;
+    }
+    porcelain = lines.slice(1).filter((l) => l.length > 0).join("\n");
+    if (porcelain) porcelain += "\n";
+  }
   const log = runGit(gitRoot, ["log", "-5", "--oneline"], { env });
   const recent =
     log.status === 0

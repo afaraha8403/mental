@@ -17,8 +17,6 @@ import {
   userMentalDir,
 } from "./bindings.mjs";
 import { importLegacyBundle, isOptedInLocal } from "./import-legacy.mjs";
-import { reindexBundle } from "./index.mjs";
-
 /**
  * @typedef {'env' | 'local' | 'home' | 'personal'} ResolveMode
  *
@@ -131,10 +129,9 @@ function importLeftover({ leftover, dest, home, id }) {
  * @param {WhereData} data
  * @param {{ write: boolean, home: string, env: NodeJS.ProcessEnv }} ctx
  */
-function withIndex(data, { write, home, env }) {
-  if (write && data.id && home) {
-    data.indexed = reindexBundle({ root: data.root, id: data.id, home, env });
-  }
+function withIndex(data) {
+  // The write command reindexes once, after the file lands. Indexing here as well
+  // rebuilt the database and then threw that work away.
   return { ok: true, data };
 }
 

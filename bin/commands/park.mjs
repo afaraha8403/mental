@@ -18,6 +18,7 @@ import { collectHeartbeat, formatHeartbeat } from "../lib/heartbeat.mjs";
 import { writeWatermark } from "../lib/watermark.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
 import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
+import { writeExtras } from "../lib/write-meta.mjs";
 import { isFeatureOn } from "../lib/config.mjs";
 import { isBundleRoot } from "../lib/heartbeat.mjs";
 import { stopFocusedForPark } from "../lib/time.mjs";
@@ -30,17 +31,18 @@ function flagString(flags, key) {
  * Same title identity as `mental attention`: update if a file exists, else create.
  * Same-day retry must not throw after the journal is already appended.
  */
-function upsertParkAttention(root, { title, kind, from, against, via }) {
-  const existing = findAttention(root, { title });
+function upsertParkAttention(root, opts) {
+  const existing = findAttention(root, { title: opts.title });
+  const status = existing?.status === "resolved" ? "open" : undefined;
   if (existing) {
-    return updateAttention(root, existing.path, { kind, from, against, via });
+    return updateAttention(root, existing.path, { ...opts, status });
   }
   try {
-    return writeAttention(root, { title, kind, from, against, via });
+    return writeAttention(root, opts);
   } catch (err) {
     if (/** @type {{ code?: string }} */ (err).code === "exists") {
-      const raced = findAttention(root, { title });
-      if (raced) return updateAttention(root, raced.path, { kind, from, against, via });
+      const raced = findAttention(root, { title: opts.title });
+      if (raced) return updateAttention(root, raced.path, { ...opts, status: raced.status === "resolved" ? "open" : undefined });
     }
     throw err;
   }
@@ -126,12 +128,37 @@ export function cmdPark(args, io = {}) {
     }
   }
 
+  const extra = writeExtras(args, resolved.data);
+  if (!extra.ok) {
+    printResult(stdout, args, false, undefined, extra.error);
+    return EXIT_USAGE;
+  }
   const title = flagString(args.flags, "title") || "Parked";
   const body = flagString(args.flags, "body") || "";
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
-  const written = appendJournal(resolved.data.root, { title, body, resume, against, via: viaParsed.via, hop: true });
+  let written;
+  try {
+    written = appendJournal(resolved.data.root, {
+      title,
+      body,
+      resume,
+      against,
+      via: viaParsed.via,
+      hop: true,
+      noRedact: extra.noRedact,
+      gitRoot: resolved.data.gitRoot,
+      anchor: extra.anchor,
+      refs: extra.refs,
+      refHint: extra.refHint,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const code = /** @type {{ code?: string }} */ (err).code || "write";
+    printResult(stdout, args, false, undefined, { code, message });
+    return code === "usage" ? EXIT_USAGE : 1;
+  }
 
   /** @type {{ path: string, updated: boolean } | null} */
   let attention = null;
@@ -143,6 +170,10 @@ export function cmdPark(args, io = {}) {
         from: flagString(args.flags, "from") || undefined,
         against,
         via: viaParsed.via,
+        noRedact: extra.noRedact,
+        gitRoot: resolved.data.gitRoot,
+        anchor: extra.anchor,
+        refs: extra.refs,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

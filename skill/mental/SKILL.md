@@ -345,9 +345,12 @@ Mental CLI is not only a start/finish ritual. Step back in cheaply whenever:
   not park.
 - **Cross-project** — orchestrating several repos: `mental pulse --json` once
   for compact rows. Do not dump journals. Stay on `heartbeat` inside one repo.
-- **"Why is it like this?"** — `mental search <the thing> --json`, then `show` the
-  path; a decision or note may already hold the answer. Follow `backlinks`
-  instead of grepping.
+- **"Why is it like this?"** — `mental why <file>` (or `path:line`, or a commit)
+  before changing code you did not write, then `mental search <the thing> --json`
+  and `show` the path. Follow `backlinks` instead of grepping.
+- Pass `--ref` on journal, park, handoff, decide, attention, and note when the
+  host exposes a session link (`https://…` or a repo-relative path). Mental
+  stores the link and never fetches it.
 
 Reads are always safe. Writes stay selective: mid-chat re-entry does not change
 what deserves a decision, attention item, or note. Never auto-journal every

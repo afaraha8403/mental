@@ -8,6 +8,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { listConcepts, searchBundle, tokenizeQuery, extractLinks } from "./index.mjs";
 import { THRESHOLDS, choice, pick } from "./jev.mjs";
+import { redactForModel, SECRETISH as SECRETISH_PATTERN } from "./redact.mjs";
 
 const STOP = new Set([
   "the", "and", "for", "with", "that", "this", "from", "into", "are", "was", "not", "but", "you", "all", "can",
@@ -24,16 +25,13 @@ export function oneLine(s) {
   return String(s || "").replace(/\s+/g, " ").trim();
 }
 
-/** Long opaque runs are what a credential looks like. They never leave the machine. */
+/** Known credential shapes and high-entropy runs. Slugs and paths stay. */
 export function redact(s) {
-  return oneLine(s)
-    .replace(/-----BEGIN[\s\S]*?(-----END[^-]*-----|$)/g, "[REDACTED]")
-    .replace(/\b(sk|gh[pousr]|xox[bap]|AKIA)[-_A-Za-z0-9]{8,}/g, "[REDACTED]")
-    .replace(/[A-Za-z0-9+/_=-]{24,}/g, "[REDACTED]");
+  return redactForModel(oneLine(s));
 }
 
 /** Loose pre-filter only. A hit means "worth asking", never "is a secret". */
-export const SECRETISH = /(api[_ -]?key|secret|token|passw(or)?d|bearer|credential|private key|BEGIN [A-Z ]*KEY|\bsk-[A-Za-z0-9]|\bgh[pousr]_|AKIA[0-9A-Z]{8})/i;
+export const SECRETISH = SECRETISH_PATTERN;
 
 /** @param {string} s */
 export function sigTokens(s) {

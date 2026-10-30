@@ -76,6 +76,24 @@ Mid-chat, not just start/finish:
 
 `mental uninstall` removes each of those, including a leftover empty AGENTS.md/CLAUDE.md after the managed block is stripped. `mental doctor` fails when a load-true host file is missing. `mental doctor --fix` recopies the home dests and git excludes; it does not write the project Cursor rule.
 
+### Hosts that read `.agents/skills`
+
+`mental doctor --json` lists detected hosts under `hosts` (`path` and `ok` / `missing`). CI checks the skill frontmatter. It does not launch Cursor, Claude, Codex, Copilot, OpenCode, Windsurf, or Cline.
+
+| Host | User-level | Project-level | `/mental` | Rule |
+| --- | --- | --- | --- | --- |
+| Cursor | `~/.agents/skills/mental` | `<repo>/.agents/skills/mental` | yes | `~/.cursor/rules/mental.mdc` |
+| Claude Code | `~/.agents/skills/mental` | `<repo>/.agents/skills/mental` | yes | `~/.claude/rules/mental.md` |
+| Codex | `~/.agents/skills/mental` | `<repo>/.agents/skills/mental` | yes | `~/.codex/AGENTS.md` block |
+| Copilot | `~/.agents/skills/mental` | `<repo>/.agents/skills/mental` | yes | host rule from install |
+| OpenCode | `~/.agents/skills/mental` | `<repo>/.agents/skills/mental` | yes | AGENTS.md block if the file exists |
+| Windsurf | `~/.agents/skills/mental` | `<repo>/.agents/skills/mental` | yes | host rule from install |
+| Cline | `~/.agents/skills/mental` | `<repo>/.agents/skills/mental` | yes | host rule from install |
+
+`node scripts/sync-project-skills.mjs --emit <project>` copies `skill/mental` to `<project>/.agents/skills/mental` and prints gitignore guidance. It does not edit `.gitignore`. Before a manual host check, confirm `name: mental`, a description of at most 1024 characters, and `compatibility` naming Node `>=22.13`. Record the CLI version and the date. Layout is what CI verifies. Host UI is not launched in CI.
+
+Before changing code you did not write, run `mental why <file>`. When the host exposes a session link, pass `--ref` (https or a repo-relative path). Mental stores it and never fetches it.
+
 Source: [skill/mental/SKILL.md](../skill/mental/SKILL.md) and [rules/mental.mdc](../rules/mental.mdc).
 
 Mental CLI is **not** a todo app. Do not store transcripts. Do not duplicate `PLAN.md`. Create a decision only when it constrains the future — including a rejected approach titled with the words a later agent will search. Attention is residue, not a backlog.

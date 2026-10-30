@@ -6,6 +6,8 @@ import { existsSync, rmSync } from "node:fs";
 import { userMentalDir } from "../lib/bindings.mjs";
 import { uninstallSkills } from "../lib/uninstall.mjs";
 import { disableHooks } from "../lib/hooks.mjs";
+import { findGitRoot } from "../lib/git.mjs";
+import { removeTrailerHook } from "../lib/trailer.mjs";
 import { disableMcp } from "../lib/mcp-hosts.mjs";
 import { printResult, EXIT_USAGE } from "../lib/output.mjs";
 
@@ -37,6 +39,8 @@ export function cmdUninstall(args, io = {}) {
     homeUninstall: !projectOnly,
   });
   const hooks = projectOnly ? { written: [] } : disableHooks(home);
+  const gitRoot = findGitRoot(args.cwd ?? process.cwd(), { env: args.env ?? process.env });
+  const trailer = gitRoot ? removeTrailerHook(gitRoot, args.env ?? process.env) : { ok: true, removed: false };
   const mcp = projectOnly ? { written: [] } : disableMcp(home);
   let wiped = null;
   if (!projectOnly && deleteData && confirm === "DELETE") {
@@ -51,7 +55,7 @@ export function cmdUninstall(args, io = {}) {
     stdout,
     args,
     true,
-    { removed: skills.removed, hooks: hooks.written, mcp: mcp.written, wiped },
+    { removed: skills.removed, hooks: hooks.written, mcp: mcp.written, trailer, wiped },
     undefined,
     () =>
       `removed ${skills.removed.length} skill/rule path(s)${wiped ? `\nwiped ${wiped}` : "\nOKF left in place (~/.mental)"}`,

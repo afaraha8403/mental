@@ -49,7 +49,7 @@ export function recentHops(root, { limit = DEFAULT_HOPS, find = "", since = "" }
       if (needle && !`${h.title} ${resume}`.toLowerCase().includes(needle)) continue;
       const prose = h.body
         .split(/\r?\n/)
-        .filter((l) => !/^(Resume|Via|Against|Plan):/.test(l))
+        .filter((l) => !/^(Resume|Via|Against|Plan|Head|Paths|Ref):/.test(l))
         .join(" ");
       out.push({
         date: file.slice(0, 10),
@@ -61,6 +61,7 @@ export function recentHops(root, { limit = DEFAULT_HOPS, find = "", since = "" }
         against: h.body.match(/^(?:Against|Plan):\s*(.+)$/m)?.[1]?.trim() ?? null,
         path: `journal/${file}#${h.fragment}`,
         excerpt: redact(prose).slice(0, EXCERPT_CHARS),
+        refs: [...h.body.matchAll(/^Ref:\s*(.+)$/gm)].map((m) => m[1].trim()).filter(Boolean),
       });
     }
   }
@@ -183,7 +184,7 @@ export async function buildBrief({ root, hb, jev, hops = DEFAULT_HOPS, find = ""
     when: hb.handoff?.when ?? null,
     via: hb.handoff?.via ?? null,
     against: hb.handoff?.against ?? null,
-    lastHop: !find && trail[0] ? { title: trail[0].title, excerpt: trail[0].excerpt, path: trail[0].path, kind: trail[0].kind } : null,
+    lastHop: !find && trail[0] ? { title: trail[0].title, excerpt: trail[0].excerpt, path: trail[0].path, kind: trail[0].kind, refs: trail[0].refs || [] } : null,
     needsEyes: eyesV,
     inTheAir: airV,
     later: laterV,
@@ -207,6 +208,7 @@ export function formatBrief(d, when) {
   L.push(`Git      ${d.branch || "no repo"}${d.dirty ? `, uncommitted: ${d.changed.join(", ") || "yes"}` : ", clean"}`);
   for (const c of d.recentCommits) L.push(`         ${c}`);
   if (d.lastHop?.excerpt) L.push("", `Last ${d.lastHop.kind === "park" ? "park " : ""}hop "${d.lastHop.title}": ${d.lastHop.excerpt}`, `         (${d.lastHop.path})`);
+  if (d.lastHop?.refs?.length) for (const ref of d.lastHop.refs) L.push(`         ref ${ref}`);
   const block = (label, v, fmt) => {
     if (!v.items.length && !v.hidden) return;
     L.push("", label);

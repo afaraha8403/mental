@@ -5,6 +5,7 @@
  * Path: ${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { journalHops, parseFrontmatter } from "./okf.mjs";
@@ -12,7 +13,7 @@ import { filterByWindow, timeFields } from "./paging.mjs";
 
 const require = createRequire(import.meta.url);
 /** Bump when the concepts table shape changes; mismatch drops and recreates. */
-export const INDEX_VERSION = "5";
+export const INDEX_VERSION = "6";
 
 const SNIPPET_CHARS = 160;
 const ISO_DATE_RE = /\d{4}-\d{2}-\d{2}/g;
@@ -46,6 +47,65 @@ export function tokenizeQuery(needle) {
 /** @param {string} token */
 function ftsToken(token) {
   return /^[\p{L}\p{N}]+$/u.test(token) ? `${token}*` : `"${token.replace(/"/g, "")}"*`;
+}
+
+/**
+ * Prefix match on words. The same rule for FTS (`tok*`), LIKE and the file scan,
+ * so a substring in the middle of a word is not a hit on any backend.
+ * @param {string} text
+ * @param {string[]} tokens
+ * @param {boolean} any
+ */
+export function matchesTokens(text, tokens, any = false) {
+  const words = String(text || "")
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+  const hit = (t) => {
+    const needle = String(t || "").toLowerCase();
+    if (!needle) return true;
+    if (needle.includes("-")) return String(text || "").toLowerCase().includes(needle);
+    return words.some((w) => w.startsWith(needle));
+  };
+  if (!tokens.length) return true;
+  return any ? tokens.some(hit) : tokens.every(hit);
+}
+
+/**
+ * Cheap directory signature: path, mtime and size. Search rebuilds when it changes.
+ * @param {string} root
+ */
+export function bundleSignature(root) {
+  /** @type {string[]} */
+  const parts = [];
+  const walk = (dir, rel) => {
+    let names = [];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names.sort()) {
+      if (name.startsWith(".")) continue;
+      const abs = join(dir, name);
+      const next = rel ? `${rel}/${name}` : name;
+      let st;
+      try {
+        st = statSync(abs);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) {
+        if (name === "status") continue;
+        walk(abs, next);
+      } else if (name.endsWith(".md")) {
+        parts.push(`${next}:${Math.floor(st.mtimeMs)}:${st.size}`);
+      }
+    }
+  };
+  for (const dir of ["journal", "decisions", "notes", "attention"]) walk(join(root, dir), dir);
+  const hash = createHash("sha256").update(parts.join("\n")).digest("hex").slice(0, 16);
+  return `${parts.length}:${hash}`;
 }
 
 /**
@@ -186,6 +246,8 @@ function walk(base, dir, out) {
       from: data.from ? String(data.from) : "",
       against: data.against ? String(data.against) : "",
       tags: Array.isArray(data.tags) ? data.tags.map(String) : data.tags ? [String(data.tags)] : [],
+      head: data.head ? String(data.head) : "",
+      paths: Array.isArray(data.paths) ? data.paths.map(String) : [],
       mtime: Math.floor(st.mtimeMs),
       timestamp: data.timestamp ? String(data.timestamp) : "",
       body,
@@ -214,6 +276,11 @@ export function expandJournalSections(concepts) {
     }
     for (const hop of hops) {
       const searchable = [hop.title, hop.body].filter(Boolean).join("\n");
+      const head = hop.body.match(/^Head:\s*([0-9a-f]{7,40})\s*$/im)?.[1] || "";
+      const paths = (hop.body.match(/^Paths:\s*(.+)$/im)?.[1] || "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
       out.push({
         ...c,
         path: `${c.path}#${hop.fragment}`,
@@ -221,6 +288,8 @@ export function expandJournalSections(concepts) {
         description: "",
         body: hop.body,
         searchable,
+        head,
+        paths,
       });
     }
   }
@@ -295,6 +364,14 @@ const SCHEMA_SQL = `
     dest TEXT NOT NULL,
     raw TEXT
   );
+  CREATE TABLE IF NOT EXISTS concept_paths (
+    concept TEXT NOT NULL,
+    path TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS concept_head (
+    concept TEXT NOT NULL,
+    sha TEXT NOT NULL
+  );
 `;
 
 const FTS_SQL = `CREATE VIRTUAL TABLE IF NOT EXISTS concepts_fts USING fts5(path, title, body_text);`;
@@ -327,7 +404,7 @@ function ensureSchema(db) {
     version = "0";
   }
   if (version !== INDEX_VERSION) {
-    db.exec("DROP TABLE IF EXISTS concepts; DROP TABLE IF EXISTS links; DROP TABLE IF EXISTS concepts_fts;");
+    db.exec("DROP TABLE IF EXISTS concepts; DROP TABLE IF EXISTS links; DROP TABLE IF EXISTS concepts_fts; DROP TABLE IF EXISTS concept_paths; DROP TABLE IF EXISTS concept_head;");
   }
   db.exec(SCHEMA_SQL);
   return enableFts5(db);
@@ -345,50 +422,76 @@ export function reindexBundle({ root, id, home, env = process.env }) {
   }
   const files = listConcepts(root);
   const concepts = expandJournalSections(files);
+  /** @type {import("node:sqlite").DatabaseSync | null} */
+  let db = null;
   try {
     mkdirSync(dirname(file), { recursive: true });
-    const db = new DatabaseSync(file);
+    const signature = bundleSignature(root);
+    db = new DatabaseSync(file);
     const fts5 = ensureSchema(db);
-    db.exec("DELETE FROM concepts; DELETE FROM links;");
-    if (fts5) {
-      try {
-        db.exec("DELETE FROM concepts_fts;");
-      } catch {
-        // table missing on a partial previous build
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.exec("DELETE FROM concepts; DELETE FROM links; DELETE FROM concept_paths; DELETE FROM concept_head;");
+      if (fts5) {
+        try {
+          db.exec("DELETE FROM concepts_fts;");
+        } catch {
+          // table missing on a partial previous build
+        }
       }
-    }
-    const insC = db.prepare(
-      "INSERT INTO concepts (path, type, title, description, status, kind, from_val, against, tags_json, mtime, timestamp, body_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-    );
-    const insL = db.prepare("INSERT INTO links (src, dest, raw) VALUES (?, ?, ?)");
-    const insF = fts5 ? db.prepare("INSERT INTO concepts_fts (path, title, body_text) VALUES (?, ?, ?)") : null;
-    for (const c of concepts) {
-      insC.run(
-        c.path,
-        c.type,
-        c.title,
-        c.description,
-        c.status,
-        c.kind,
-        c.from,
-        c.against,
-        JSON.stringify(c.tags),
-        c.mtime,
-        c.timestamp,
-        c.searchable,
+      const insC = db.prepare(
+        "INSERT INTO concepts (path, type, title, description, status, kind, from_val, against, tags_json, mtime, timestamp, body_text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       );
-      insF?.run(c.path, c.title, c.searchable);
+      const insL = db.prepare("INSERT INTO links (src, dest, raw) VALUES (?, ?, ?)");
+      const insP = db.prepare("INSERT INTO concept_paths (concept, path) VALUES (?, ?)");
+      const insH = db.prepare("INSERT INTO concept_head (concept, sha) VALUES (?, ?)");
+      const insF = fts5 ? db.prepare("INSERT INTO concepts_fts (path, title, body_text) VALUES (?, ?, ?)") : null;
+      for (const c of concepts) {
+        insC.run(
+          c.path,
+          c.type,
+          c.title,
+          c.description,
+          c.status,
+          c.kind,
+          c.from,
+          c.against,
+          JSON.stringify(c.tags),
+          c.mtime,
+          c.timestamp,
+          c.searchable,
+        );
+        insF?.run(c.path, c.title, c.searchable);
+        if (c.head) insH.run(c.path, c.head);
+        for (const p of c.paths || []) insP.run(c.path, p);
+      }
+      for (const f of files) {
+        for (const l of extractLinks(f.path, f.body)) insL.run(l.src, l.dest, l.raw);
+      }
+      const meta = db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)");
+      meta.run("version", INDEX_VERSION);
+      meta.run("root", root);
+      meta.run("builtAt", new Date().toISOString());
+      meta.run("fts5", fts5 ? "1" : "0");
+      meta.run("signature", signature);
+      db.exec("COMMIT");
+    } catch (err) {
+      try {
+        db.exec("ROLLBACK");
+      } catch {
+        // the connection is already closing
+      }
+      throw err;
     }
-    for (const f of files) {
-      for (const l of extractLinks(f.path, f.body)) insL.run(l.src, l.dest, l.raw);
-    }
-    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("version", INDEX_VERSION);
-    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("root", root);
-    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("builtAt", new Date().toISOString());
-    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)").run("fts5", fts5 ? "1" : "0");
     db.close();
+    db = null;
     return { ok: true, path: file, concepts: concepts.length, backend: "sqlite", fts5 };
   } catch (err) {
+    try {
+      db?.close();
+    } catch {
+      // already closed
+    }
     return {
       ok: false,
       path: file,
@@ -462,6 +565,7 @@ export function searchBundle({
   sinceMs,
   untilMs,
   any = false,
+  keepRank = false,
 }) {
   const needle = q.trim().toLowerCase();
   const tokens = tokenizeQuery(needle);
@@ -473,14 +577,18 @@ export function searchBundle({
       all.filter((h) => !h.path.startsWith("projects/")),
       { sinceMs, untilMs },
     );
-    const hits = kept.slice(offset, offset + limit).map(({ mtime, ...h }) => h);
+    const hits = kept.slice(offset, offset + limit).map(({ mtime, rank, ...h }) => (keepRank ? { ...h, rank } : h));
     return { backend, hits, total: kept.length, offset, ...parsed };
   };
   if (id && home) {
     const file = indexPath(home, id, env);
     const DatabaseSync = loadDatabaseSync();
-    if (DatabaseSync && existsSync(file)) {
-      maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file });
+    if (DatabaseSync) {
+      if (!existsSync(file) || storedSignature(DatabaseSync, file) !== bundleSignature(root)) {
+        reindexBundle({ root, id, home, env });
+      } else {
+        maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file });
+      }
       try {
         return finish("sqlite", searchSqlite(DatabaseSync, file, needle, { ...filters, any, tokens }));
       } catch {
@@ -522,9 +630,13 @@ export function mergeSearchResults(batches, limit = 50, offset = 0) {
   hits.sort((a, b) => {
     const tr = typeRank(a.type) - typeRank(b.type);
     if (tr) return tr;
+    const ar = Number(a.rank ?? 0);
+    const br = Number(b.rank ?? 0);
+    if (ar !== br) return ar - br;
     return a.path.localeCompare(b.path);
   });
-  return { backend, hits: hits.slice(offset, offset + limit), total: hits.length, offset, tokens, op: "or" };
+  const page = hits.slice(offset, offset + limit).map(({ rank, ...h }) => h);
+  return { backend, hits: page, total: hits.length, offset, tokens, op: "or" };
 }
 
 /**
@@ -547,6 +659,22 @@ function maybeUpgradeIndex({ root, id, home, env, DatabaseSync, file }) {
 
 /**
  * @param {typeof import("node:sqlite").DatabaseSync} DatabaseSync
+ * @param {string} file
+ */
+function storedSignature(DatabaseSync, file) {
+  const db = new DatabaseSync(file);
+  try {
+    const row = db.prepare("SELECT value FROM meta WHERE key = 'signature'").get();
+    return row?.value ? String(row.value) : "";
+  } catch {
+    return "";
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * @param {typeof import("node:sqlite").DatabaseSync} DatabaseSync
  */
 function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, any = false, tokens = [] }) {
   const db = new DatabaseSync(file);
@@ -565,27 +693,32 @@ function searchSqlite(DatabaseSync, file, needle, { type, status, tag, kind, any
     try {
       const fts = db.prepare(
         `SELECT c.path AS path, c.type AS type, c.title AS title, c.description AS description,
-                c.status AS status, c.kind AS kind, c.tags_json AS tags_json,
+                c.status AS status, c.kind AS kind, c.tags_json AS tags_json, c.body_text AS body_text,
                 c.mtime AS mtime, c.timestamp AS timestamp,
-                snippet(concepts_fts, 2, '', '', '…', 32) AS snippet
+                snippet(concepts_fts, 2, '', '', '…', 32) AS snippet,
+                bm25(concepts_fts, 0.0, 10.0, 1.0) AS rank
          FROM concepts_fts
          JOIN concepts c ON c.path = concepts_fts.path
          WHERE concepts_fts MATCH ?${extra}
-         ORDER BY ${TYPE_ORDER_SQL}, bm25(concepts_fts)`,
+         ORDER BY ${TYPE_ORDER_SQL}, rank`,
       );
-      const join = any ? " OR " : " AND ";
-      const q = tokens.length ? tokens.map(ftsToken).join(join) : needle;
+      const joinOp = any ? " OR " : " AND ";
+      const q = tokens.length ? tokens.map(ftsToken).join(joinOp) : needle;
       rows = fts.all(q, ...filterParams);
     } catch {
       rows = [];
     }
-    if (!rows || rows.length === 0) {
+    const terms = tokens.length ? tokens : needle ? [needle] : [];
+    rows = (rows || []).filter((r) => matchesTokens(`${r.title}\n${r.body_text || ""}\n${r.path}`, terms, any));
+    if (rows.length === 0) {
       try {
         const titlePat = `%${(tokens[0] || needle).replace(/%/g, "")}%`;
         rows = like.all(...likeBits.params, ...filterParams, titlePat);
       } catch {
         rows = [];
       }
+      rows = (rows || []).filter((r) => matchesTokens(`${r.title}\n${r.body_text || ""}\n${r.path}`, terms, any));
+      for (const r of rows) r.rank = matchesTokens(String(r.title || ""), terms, true) ? 0 : 1;
     }
     return (rows || []).map((r) => rowToHit(r, needle));
   } finally {
@@ -625,6 +758,7 @@ function rowToHit(r, needle) {
     kind: String(r.kind || ""),
     tags: parseTagsJson(r.tags_json),
     snippet,
+    rank: Number.isFinite(Number(r.rank)) ? Number(r.rank) : 0,
     mtime,
     ...timeFields({ timestamp, mtime }),
   };
@@ -659,11 +793,7 @@ function scanSnippet(text, needle, max = SNIPPET_CHARS) {
 function searchScan(concepts, needle, { type, status, tag, kind, any = false, tokens = [] }) {
   const terms = tokens.length ? tokens : needle ? [needle] : [];
   const hits = filterConcepts(concepts, { type, status, tag, kind })
-    .filter((c) => {
-      const hay = `${c.title}\n${c.searchable}`.toLowerCase();
-      if (!terms.length) return true;
-      return any ? terms.some((t) => hay.includes(t)) : terms.every((t) => hay.includes(t));
-    })
+    .filter((c) => matchesTokens(`${c.title}\n${c.searchable}\n${c.path}`, terms, any))
     .map((c) => ({
       path: c.path,
       type: c.type,
@@ -674,14 +804,13 @@ function searchScan(concepts, needle, { type, status, tag, kind, any = false, to
       tags: c.tags,
       snippet: scanSnippet(c.searchable, terms[0] || needle),
       mtime: c.mtime,
+      rank: matchesTokens(c.title, terms, true) ? 0 : 1,
       ...timeFields(c),
     }))
     .sort((a, b) => {
       const tr = typeRank(a.type) - typeRank(b.type);
       if (tr) return tr;
-      const at = a.title.toLowerCase().includes(needle) ? 0 : 1;
-      const bt = b.title.toLowerCase().includes(needle) ? 0 : 1;
-      if (at !== bt) return at - bt;
+      if (a.rank !== b.rank) return a.rank - b.rank;
       return a.path.localeCompare(b.path);
     });
   return hits;

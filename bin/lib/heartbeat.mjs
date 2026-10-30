@@ -14,6 +14,7 @@ import {
   splitAttention,
   listOpenDecisions,
   localDate,
+  withBundleReadCache,
 } from "./okf.mjs";
 import { brandMark } from "./output.mjs";
 import { heartbeatDelta, countParkHopsSinceMs, localDayStartMs } from "./delta.mjs";
@@ -142,6 +143,10 @@ export function collectHeartbeat(args, { pingTrack = true, where: whereOverride 
 
   const git = gitSnapshot(where.gitRoot, { env: args.env ?? process.env });
   const root = isBundleRoot(where) && where.root ? where.root : null;
+  return withBundleReadCache(() => collectHeartbeatBody(args, where, git, root, { pingTrack }));
+}
+
+function collectHeartbeatBody(args, where, git, root, { pingTrack }) {
   const handoff = root
     ? latestJournalHandoff(root)
     : { resume: null, outcome: null, file: null, when: null, against: null, via: null };

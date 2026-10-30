@@ -12,6 +12,7 @@ import { bindingsPath, loadBindings, userMentalDir } from "./bindings.mjs";
 import { collectPulseProjects, pulseRootForBinding } from "./pulse.mjs";
 import { extractLinks, filterConcepts, listConcepts, listBacklinks, searchBundle } from "./index.mjs";
 import { journalHops, latestJournalHandoff, parseFrontmatter, readBundleFile } from "./okf.mjs";
+import { whyQuery } from "./why.mjs";
 import { isFeatureOn } from "./config.mjs";
 import { glanceTime, listSessions } from "./time.mjs";
 
@@ -778,6 +779,28 @@ function routeApi(method, url, res, base, id) {
         op: found.op,
         backend: found.backend,
       },
+    });
+    return;
+  }
+
+  if (path === "/api/why") {
+    const target = String(url.searchParams.get("path") || url.searchParams.get("target") || "").trim();
+    if (!target) {
+      sendJson(res, method, 400, { ok: false, error: { code: "usage", message: "path is required" } });
+      return;
+    }
+    if (!session.root) {
+      sendJson(res, method, 404, { ok: false, error: { code: "not-found", message: "no Mental bundle yet" } });
+      return;
+    }
+    sendJson(res, method, 200, {
+      ok: true,
+      data: whyQuery({
+        root: session.root,
+        gitRoot: session.where.gitRoot,
+        target,
+        env: base.env,
+      }),
     });
     return;
   }

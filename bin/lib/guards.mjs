@@ -5,13 +5,12 @@
  */
 import { THRESHOLDS, choice, noul, pick } from "./jev.mjs";
 import { SECRETISH, redact } from "./jev-assist.mjs";
+import { STRONG_SECRET, looksLikeOpaqueSecret } from "./redact.mjs";
 
 const EXCERPT_CHARS = 600;
 const INJECTION_MIN = 0.8;
 
-const OPAQUE_RUN = /[A-Za-z0-9+/_=-]{32,}/;
-/** Credential shapes the redactor strips; a model only sees "[REDACTED]", so these are flagged locally. */
-const STRONG_SECRET = /-----BEGIN [A-Z ]*PRIVATE KEY|\b(sk|gh[pousr]|xox[bap]|AKIA)[-_A-Za-z0-9]{8,}/;
+const OPAQUE_RUN = /[A-Za-z0-9+/_=-]{32,}/g;
 const DECISIONISH =
   /\b(decided|decision|chose|chosen|opted|going with|go with|settled on|switch(ed)? (to|from)|instead of|rather than|trade-?offs?|we will use|will use|ruled out|rejected)\b/i;
 const INJECTIONISH =
@@ -48,7 +47,8 @@ export async function writeGuards({ jev, kind, texts }) {
   /** @type {Record<string, any>} */
   const questions = {};
   const strong = STRONG_SECRET.test(all);
-  if (!strong && (SECRETISH.test(all) || OPAQUE_RUN.test(all))) {
+  const opaque = [...all.matchAll(OPAQUE_RUN)].some((m) => looksLikeOpaqueSecret(m[0]));
+  if (!strong && (SECRETISH.test(all) || opaque)) {
     questions.secret = noul(
       "Does `new` look like it records an actual credential, key, password or private personal data (redacted values count)? Answer no if it only discusses secrets in general.",
     );

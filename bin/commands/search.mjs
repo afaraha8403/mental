@@ -103,7 +103,7 @@ export function cmdSearch(args, io = {}) {
     return queries.length === 1
       ? searchBundle({ ...base, q: queries[0], any, limit: lim, offset: off })
       : mergeSearchResults(
-          queries.map((q) => searchBundle({ ...base, q, any: false, limit: Infinity, offset: 0 })),
+          queries.map((q) => searchBundle({ ...base, q, any: false, limit: Infinity, offset: 0, keepRank: true })),
           lim,
           off,
         );

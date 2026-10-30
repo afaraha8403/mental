@@ -5,6 +5,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveBundle } from "../lib/resolve.mjs";
+import { refreshIndex } from "../lib/index.mjs";
 import { gitSnapshot } from "../lib/git.mjs";
 import {
   bundleName,
@@ -123,8 +124,11 @@ export function cmdStatus(args, io = {}) {
     }),
   );
 
+  const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
+  const indexed = refreshIndex(where, home, args.env ?? process.env);
   const payload = {
     ...where,
+    indexed,
     git: { branch: git.branch, dirty: git.dirty, recent: git.recent },
     resume,
     latestOutcome,

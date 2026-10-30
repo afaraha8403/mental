@@ -3,9 +3,9 @@
  * Scans journal / attention / decisions / notes. Skips status/ (disposable).
  * Park hops are section-level (`Hop: park` or title Parked), not file mtime.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { parseFrontmatter } from "./okf.mjs";
+import { parseFrontmatter, readUtf8 } from "./okf.mjs";
 
 const DELTA_DIRS = ["journal", "attention", "decisions", "notes"];
 
@@ -46,6 +46,19 @@ function sectionTimeMs(file, heading) {
   return new Date(y, m - 1, d, hh, mm, 0, 0).getTime();
 }
 
+/**
+ * A dated journal file's sections all fall on that local day. Skip it when the
+ * day ended at or before `sinceMs`.
+ * @param {string} file
+ * @param {number} sinceMs
+ */
+function journalFileMayContain(file, sinceMs) {
+  const day = file.match(/^(\d{4})-(\d{2})-(\d{2})\.md$/);
+  if (!day) return true;
+  const start = new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])).getTime();
+  return start + 86400000 > sinceMs;
+}
+
 function isParkSection(heading, body) {
   if (/^Hop:\s*park\s*$/m.test(body)) return true;
   const title = heading.replace(/^\d{1,2}:\d{2}\s+—\s+/, "").trim();
@@ -69,9 +82,10 @@ export function countParkHopsSinceMs(root, sinceMs) {
   }
   let n = 0;
   for (const file of files) {
+    if (!journalFileMayContain(file, sinceMs)) continue;
     let text;
     try {
-      text = readFileSync(join(dir, file), "utf8");
+      text = readUtf8(join(dir, file));
     } catch {
       continue;
     }
@@ -130,7 +144,7 @@ export function collectDelta(root, sinceIso, { titleLimit = 0 } = {}) {
       const abs = join(absDir, file);
       let text;
       try {
-        text = readFileSync(abs, "utf8");
+        text = readUtf8(abs);
       } catch {
         continue;
       }

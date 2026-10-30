@@ -54,6 +54,6 @@ That is why agents that can keep `mental serve` warm (MCP) should: the work is c
 npm test
 ```
 
-**224** automated tests on this revision: identity (move, SSH ≡ HTTPS, two clones, fork, worktree, monorepo), leftover import, search filters and title ranking, plugin schemas, version lockstep, install / doctor / uninstall, heartbeat, MCP tools, optional time tracking.
+Automated tests on this revision: identity (move, SSH ≡ HTTPS, two clones, fork, worktree, monorepo), leftover import, search filters and title ranking, plugin schemas, version lockstep, install / doctor / uninstall, heartbeat, MCP tools, optional time tracking. FTS5 versus the LIKE fallback is covered; Windows timings are not measured here.
 
-Zero runtime npm dependencies. Node `>=18`.
+Zero runtime npm dependencies. Node `>=22.13`.

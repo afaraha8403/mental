@@ -25,6 +25,7 @@ import {
 import { cmdHandoffS as cmdHandoff } from "../lib/similar.mjs";
 import { cmdPulse } from "../commands/pulse.mjs";
 import { cmdBrief } from "../commands/brief.mjs";
+import { cmdWhy } from "../commands/why.mjs";
 import { VERSION, CMD } from "./pkg.mjs";
 import { mcpToolsFromCatalog } from "./catalog.mjs";
 
@@ -128,6 +129,7 @@ function runTool(name, args, ctx) {
     });
   }
   if (name === "show") return capture(cmdShow, { ...base, rest: [String(args.path || "")] });
+  if (name === "why") return capture(cmdWhy, { ...base, rest: [String(args.target || "")] });
   if (name === "journal") {
     return capture(cmdJournal, {
       ...base,
@@ -143,6 +145,8 @@ function runTool(name, args, ctx) {
         "body-external": args.body_external,
         billable: args.billable,
         "project-name": args.project_name,
+        ref: args.ref,
+        "no-redact": args.no_redact === true,
       },
     });
   }
@@ -163,6 +167,8 @@ function runTool(name, args, ctx) {
         tag: args.tag,
         project: args.project,
         "move-to": args.move_to,
+        ref: args.ref,
+        "no-redact": args.no_redact === true,
       },
     });
   }
@@ -186,13 +192,15 @@ function runTool(name, args, ctx) {
         slug: args.slug,
         tag: args.tag,
         project: args.project,
+        ref: args.ref,
+        "no-redact": args.no_redact === true,
       },
     });
   }
   if (name === "note") {
     return capture(cmdNote, {
       ...base,
-      flags: { title: args.title, status: args.status, description: args.description, body: args.body, slug: args.slug, tag: args.tag, project: args.project },
+      flags: { title: args.title, status: args.status, description: args.description, body: args.body, slug: args.slug, tag: args.tag, project: args.project, ref: args.ref, "no-redact": args.no_redact === true },
     });
   }
   if (name === "park") {
@@ -213,6 +221,8 @@ function runTool(name, args, ctx) {
         "body-external": args.body_external,
         billable: args.billable,
         "project-name": args.project_name,
+        ref: args.ref,
+        "no-redact": args.no_redact === true,
       },
     });
   }
@@ -231,6 +241,12 @@ function runTool(name, args, ctx) {
         "body-external": args.body_external,
         billable: args.billable,
         "project-name": args.project_name,
+        share: args.share,
+        since: args.since,
+        "no-journal": args.no_journal === true,
+        "allow-secrets": args.allow_secrets === true,
+        ref: args.ref,
+        "no-redact": args.no_redact === true,
       },
     });
   }

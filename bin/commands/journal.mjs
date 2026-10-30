@@ -3,6 +3,7 @@
  */
 import { resolveBundle } from "../lib/resolve.mjs";
 import { appendJournal, bundleName, ensureSkeleton, repoRelativePath } from "../lib/okf.mjs";
+import { writeExtras } from "../lib/write-meta.mjs";
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, EXIT_USAGE, kindLine } from "../lib/output.mjs";
 import { VIA_USAGE, VIA_HINT, viaFromFlags } from "../lib/via.mjs";
@@ -65,6 +66,11 @@ export function cmdJournal(args, io = {}) {
     });
     return EXIT_USAGE;
   }
+  const extra = writeExtras(args, resolved.data);
+  if (!extra.ok) {
+    printResult(stdout, args, false, undefined, extra.error);
+    return EXIT_USAGE;
+  }
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
@@ -87,7 +93,26 @@ export function cmdJournal(args, io = {}) {
       review = stopped.review || null;
     }
   }
-  const written = appendJournal(resolved.data.root, { title, body, resume, against, via: viaParsed.via });
+  let written;
+  try {
+    written = appendJournal(resolved.data.root, {
+      title,
+      body,
+      resume,
+      against,
+      via: viaParsed.via,
+      noRedact: extra.noRedact,
+      gitRoot: resolved.data.gitRoot,
+      anchor: extra.anchor,
+      refs: extra.refs,
+      refHint: extra.refHint,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    const code = /** @type {{ code?: string }} */ (err).code || "write";
+    printResult(stdout, args, false, undefined, { code, message });
+    return code === "usage" ? EXIT_USAGE : 1;
+  }
   const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
   const data = {
     ...resolved.data,
@@ -97,6 +122,9 @@ export function cmdJournal(args, io = {}) {
     indexed,
     ...(timer_stop_failed ? { timer_stop_failed: true } : {}),
   };
-  printResult(stdout, args, true, data, undefined, () => kindLine("journal", `appended ${written.path}`));
+  printResult(stdout, args, true, data, undefined, () => {
+    const warn = written.redacted?.length ? `\nwarning: redacted ${written.redacted.map((r) => r.kind).join(", ")}` : "";
+    return kindLine("journal", `appended ${written.path}`) + warn;
+  });
   return 0;
 }

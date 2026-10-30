@@ -1,9 +1,10 @@
 /**
  * UUID bindings: identity survives path change. Origin is a hint, not the id.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
+import { writeAtomic, withFileLock } from "./atomic.mjs";
 import { normalizeOrigin } from "./git.mjs";
 
 export const BINDINGS_VERSION = 1;
@@ -70,10 +71,16 @@ export function loadBindings(home) {
  * @param {string} home
  * @param {{ version: number, bindings: object[] }} data
  */
+function bindingsLock(home) {
+  return join(userMentalDir(home), "bindings.lock");
+}
+
 export function saveBindings(home, data) {
   const file = bindingsPath(home);
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`);
+  withFileLock(bindingsLock(home), () => {
+    writeAtomic(file, `${JSON.stringify(data, null, 2)}\n`);
+  });
 }
 
 /**
@@ -82,7 +89,10 @@ export function saveBindings(home, data) {
  * @param {{ id: string, name?: string, origins?: string[] }} identity
  * @param {{ now?: string }} [opts]
  */
-export function adoptPortableIdentity(home, identity, { now = nowIso() } = {}) {
+export function adoptPortableIdentity(home, identity, opts) {
+  return withFileLock(bindingsLock(home), () => adoptPortableIdentityInner(home, identity, opts));
+}
+function adoptPortableIdentityInner(home, identity, { now = nowIso() } = {}) {
   if (!isPortableSliceId(identity?.id)) {
     return { created: false, binding: null };
   }
@@ -108,7 +118,10 @@ export function adoptPortableIdentity(home, identity, { now = nowIso() } = {}) {
  * @param {string} from
  * @param {{ copied?: string[], now?: string }} [opts]
  */
-export function recordLegacyImport(home, id, from, { copied = [], now = nowIso() } = {}) {
+export function recordLegacyImport(home, id, from, opts) {
+  return withFileLock(bindingsLock(home), () => recordLegacyImportInner(home, id, from, opts));
+}
+function recordLegacyImportInner(home, id, from, { copied = [], now = nowIso() } = {}) {
   const data = loadBindings(home);
   const binding = data.bindings.find((b) => b.id === id);
   if (!binding) return false;
@@ -135,6 +148,9 @@ export function recordLegacyImport(home, id, from, { copied = [], now = nowIso()
  * @param {"home" | "local"} store
  */
 export function setBindingStore(home, id, store) {
+  return withFileLock(bindingsLock(home), () => setBindingStoreInner(home, id, store));
+}
+function setBindingStoreInner(home, id, store) {
   const data = loadBindings(home);
   const binding = data.bindings.find((b) => b.id === id);
   if (!binding) return false;
@@ -163,7 +179,7 @@ export function readMentalId(dir) {
  * @param {string} id
  */
 export function writeMentalId(dir, id) {
-  writeFileSync(join(dir, ".mental-id"), `${id}\n`);
+  writeAtomic(join(dir, ".mental-id"), `${id}\n`);
 }
 
 function nowIso() {
@@ -200,7 +216,10 @@ function matchesPath(binding, absPath) {
  *   fromId?: string,
  * }}
  */
-export function resolveOrCreateBinding({
+export function resolveOrCreateBinding(opts) {
+  return withFileLock(bindingsLock(opts.home), () => resolveOrCreateBindingInner(opts));
+}
+function resolveOrCreateBindingInner({
   gitRoot,
   origin = null,
   upstream = null,
@@ -371,7 +390,10 @@ function appendHints(binding, { origin, path, now }) {
  * Drop `absPath` from every binding. Used by remap/split.
  * @returns {boolean}
  */
-export function detachPath(home, absPath, { now = nowIso() } = {}) {
+export function detachPath(home, absPath, opts) {
+  return withFileLock(bindingsLock(home), () => detachPathInner(home, absPath, opts));
+}
+function detachPathInner(home, absPath, { now = nowIso() } = {}) {
   const data = loadBindings(home);
   const want = resolve(absPath);
   let changed = false;
@@ -391,7 +413,10 @@ export function detachPath(home, absPath, { now = nowIso() } = {}) {
  * Point this git root at an existing UUID. Writes `.mental-id`.
  * @param {{ home: string, gitRoot: string, toId: string, origin?: string | null }} opts
  */
-export function remapToBinding({ home, gitRoot, toId, origin = null, now = nowIso() }) {
+export function remapToBinding(opts) {
+  return withFileLock(bindingsLock(opts.home), () => remapToBindingInner(opts));
+}
+function remapToBindingInner({ home, gitRoot, toId, origin = null, now = nowIso() }) {
   const data = loadBindings(home);
   const hit = data.bindings.find((b) => b.id === toId);
   if (!hit) {
@@ -411,7 +436,10 @@ export function remapToBinding({ home, gitRoot, toId, origin = null, now = nowIs
  * This clone gets a new UUID. Other clones keep the old one.
  * @param {{ home: string, gitRoot: string, origin?: string | null, copyRoot?: string | null, newId?: () => string }} opts
  */
-export function splitBinding({
+export function splitBinding(opts) {
+  return withFileLock(bindingsLock(opts.home), () => splitBindingInner(opts));
+}
+function splitBindingInner({
   home,
   gitRoot,
   origin = null,

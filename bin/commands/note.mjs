@@ -5,6 +5,7 @@ import { resolveWriteBundle } from "../lib/scope.mjs";
 import { bundleName, ensureSkeleton, missingCreateTag, tagsFromFlag, writeNote } from "../lib/okf.mjs";
 import { refreshIndex } from "../lib/index.mjs";
 import { printResult, kindLine, EXIT_USAGE } from "../lib/output.mjs";
+import { writeExtras } from "../lib/write-meta.mjs";
 
 const STATUSES = new Set(["draft", "active", "superseded", "obsolete"]);
 
@@ -43,6 +44,11 @@ export function cmdNote(args, io = {}) {
   ensureSkeleton(resolved.data.root, {
     name: bundleName(resolved.data.root, resolved.data.id || "project"),
   });
+  const extra = writeExtras(args, resolved.data);
+  if (!extra.ok) {
+    printResult(stdout, args, false, undefined, extra.error);
+    return EXIT_USAGE;
+  }
   try {
     const written = writeNote(resolved.data.root, {
       title,
@@ -51,6 +57,11 @@ export function cmdNote(args, io = {}) {
       body: typeof args.flags?.body === "string" ? args.flags.body : "",
       slug: typeof args.flags?.slug === "string" ? args.flags.slug : undefined,
       tags: tagged.tags,
+      noRedact: extra.noRedact,
+      gitRoot: resolved.data.gitRoot,
+      anchor: extra.anchor,
+      refs: extra.refs,
+      refHint: extra.refHint,
     });
     const home = args.home ?? process.env.HOME ?? process.env.USERPROFILE ?? null;
     const indexed = refreshIndex(resolved.data, home, args.env ?? process.env);
@@ -60,6 +71,6 @@ export function cmdNote(args, io = {}) {
     const message = err instanceof Error ? err.message : String(err);
     const code = /** @type {{ code?: string }} */ (err).code || "write";
     printResult(stdout, args, false, undefined, { code, message });
-    return 1;
+    return code === "usage" ? EXIT_USAGE : 1;
   }
 }
