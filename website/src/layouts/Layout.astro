@@ -38,7 +38,7 @@ const jsonLd = {
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -64,48 +64,15 @@ const jsonLd = {
     <link rel="sitemap" href="/sitemap-index.xml" />
     <script is:inline>
       (function () {
-        var key = 'mental-theme';
-        var stored = localStorage.getItem(key);
-        var root = document.documentElement;
-        var next = stored === 'light' || stored === 'dark' ? stored : 'dark';
-        root.dataset.theme = next;
-        root.style.colorScheme = next;
+        var stored = localStorage.getItem('mental-theme');
+        if (stored === 'light' || stored === 'dark') {
+          document.documentElement.dataset.theme = stored;
+        }
       })();
     </script>
     <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
   </head>
   <body>
-    <a class="skip" href="#how">Skip to content</a>
     <slot />
-    <script is:inline>
-      (function () {
-        var key = 'mental-theme';
-        document.addEventListener('click', function (event) {
-          var target = event.target;
-          if (!(target instanceof Element)) return;
-          var themeBtn = target.closest('#theme-toggle');
-          if (themeBtn) {
-            var root = document.documentElement;
-            var current = root.dataset.theme;
-            if (!current) {
-              current = window.matchMedia('(prefers-color-scheme: dark)').matches
-                ? 'dark'
-                : 'light';
-            }
-            var next = current === 'dark' ? 'light' : 'dark';
-            root.dataset.theme = next;
-            root.style.colorScheme = next;
-            localStorage.setItem(key, next);
-          }
-          var copyBtn = target.closest('[data-copy]');
-          if (copyBtn) {
-            var value = copyBtn.getAttribute('data-copy');
-            if (value && navigator.clipboard) {
-              navigator.clipboard.writeText(value);
-            }
-          }
-        });
-      })();
-    </script>
   </body>
 </html>

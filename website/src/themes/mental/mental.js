@@ -82,9 +82,9 @@ export const mentalTheme = {
     "--duration-slow-min": "300ms",
     "--duration-slow": "400ms",
     "--duration-slow-max": "535ms",
-    "--font-family-body": "\"Inter var\", Inter, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
-    "--font-family-heading": "\"Inter var\", Inter, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
-    "--font-family-code": "\"JetBrains Mono\", \"Cascadia Code\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+    "--font-family-body": "Inter, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+    "--font-family-heading": "Inter, ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+    "--font-family-code": "\"JetBrains Mono\", ui-monospace, Menlo, Consolas, monospace",
     "--color-syntax-keyword": "light-dark(#6b187c, #efa8ff)",
     "--color-syntax-string": "light-dark(#0b5615, #a4d6a3)",
     "--color-syntax-comment": "light-dark(#6a6a6a, #9e9e9e)",
@@ -613,7 +613,7 @@ export const mentalTheme = {
       },
       "body": {
         "family": "Inter",
-        "fallbacks": "\"Inter var\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif"
+        "fallbacks": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif"
       },
       "heading": {
         "weights": {
@@ -625,7 +625,7 @@ export const mentalTheme = {
       },
       "code": {
         "family": "JetBrains Mono",
-        "fallbacks": "\"Cascadia Code\", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+        "fallbacks": "ui-monospace, Menlo, Consolas, monospace"
       }
     },
     "radius": {

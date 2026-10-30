@@ -14,13 +14,12 @@ export const mentalTheme = defineTheme({
     body: {
       family: 'Inter',
       fallbacks:
-        '"Inter var", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+        'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     },
     heading: {weight: 'semibold', weights: {1: 'bold', 2: 'bold', 3: 'semibold'}},
     code: {
       family: 'JetBrains Mono',
-      fallbacks:
-        '"Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+      fallbacks: 'ui-monospace, Menlo, Consolas, monospace',
     },
   },
   radius: {base: 6, multiplier: 1.25},
@@ -66,11 +65,11 @@ export const mentalTheme = defineTheme({
     '--radius-container': '14px',
     '--radius-page': '20px',
     '--font-family-body':
-      '"Inter var", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+      'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     '--font-family-heading':
-      '"Inter var", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
+      'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
     '--font-family-code':
-      '"JetBrains Mono", "Cascadia Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+      '"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace',
   },
   localTokens: {
     '--bg': ['#fafafa', '#09090b'],
