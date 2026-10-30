@@ -1,0 +1,111 @@
+---
+import '../styles/global.css';
+import {
+  DESCRIPTION,
+  OG_IMAGE,
+  SITE_NAME,
+  SITE_URL,
+  TITLE,
+  VERSION,
+} from '../site';
+
+interface Props {
+  title?: string;
+  description?: string;
+  canonical?: string;
+}
+
+const title = Astro.props.title ?? TITLE;
+const description = Astro.props.description ?? DESCRIPTION;
+const canonical = Astro.props.canonical ?? SITE_URL;
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: SITE_NAME,
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'Linux, macOS, Windows',
+  url: SITE_URL,
+  downloadUrl: 'https://www.npmjs.com/package/@balacode/mental',
+  softwareVersion: VERSION,
+  license: 'https://github.com/afaraha8403/mental/blob/main/LICENSE',
+  author: {
+    '@type': 'Person',
+    name: 'Ali Farahat',
+    url: 'https://github.com/afaraha8403',
+  },
+  description,
+};
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={OG_IMAGE} />
+    <meta property="og:image:alt" content="Mental dashboard Today view" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={OG_IMAGE} />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <script is:inline>
+      (function () {
+        var key = 'mental-theme';
+        var stored = localStorage.getItem(key);
+        var root = document.documentElement;
+        var next = stored === 'light' || stored === 'dark' ? stored : 'dark';
+        root.dataset.theme = next;
+        root.style.colorScheme = next;
+      })();
+    </script>
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+  </head>
+  <body>
+    <a class="skip" href="#how">Skip to content</a>
+    <slot />
+    <script is:inline>
+      (function () {
+        var key = 'mental-theme';
+        document.addEventListener('click', function (event) {
+          var target = event.target;
+          if (!(target instanceof Element)) return;
+          var themeBtn = target.closest('#theme-toggle');
+          if (themeBtn) {
+            var root = document.documentElement;
+            var current = root.dataset.theme;
+            if (!current) {
+              current = window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+            }
+            var next = current === 'dark' ? 'light' : 'dark';
+            root.dataset.theme = next;
+            root.style.colorScheme = next;
+            localStorage.setItem(key, next);
+          }
+          var copyBtn = target.closest('[data-copy]');
+          if (copyBtn) {
+            var value = copyBtn.getAttribute('data-copy');
+            if (value && navigator.clipboard) {
+              navigator.clipboard.writeText(value);
+            }
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

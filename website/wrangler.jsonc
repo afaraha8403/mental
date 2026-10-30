@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "getmental",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-30",
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": {
+    "enabled": true,
+    "traces": {
+      "enabled": true,
+    },
+  },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+  },
+  // Canonical host is the apex. www is attached so the Worker can 301 it.
+  // Deploying with this file (when Ali is logged in) attaches both custom
+  // domains. Do not edit DNS by hand unless attach fails; Cloudflare creates
+  // the proxied records. workers.dev preview stays enabled above.
+  "routes": [
+    { "pattern": "getmental.dev", "custom_domain": true },
+    { "pattern": "www.getmental.dev", "custom_domain": true },
+  ],
+}
