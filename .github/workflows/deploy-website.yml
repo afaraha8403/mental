@@ -1,0 +1,48 @@
+# Deploys website/ to the getmental Worker on Cloudflare.
+# Production deploys happen only in this workflow: a push to main that changes
+# the site, a published GitHub Release, or a manual run. Do not wrangler deploy
+# from a laptop. Auth is repo secrets, never committed:
+#   CLOUDFLARE_API_TOKEN  — "Edit Cloudflare Workers", scoped to this account
+#                           and the getmental.dev zone
+#   CLOUDFLARE_ACCOUNT_ID
+name: Deploy website
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - ".github/workflows/deploy-website.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-website
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install and build
+        working-directory: website
+        run: npm ci && npm run build
+
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: website
+          command: deploy

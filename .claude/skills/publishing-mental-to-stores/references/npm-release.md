@@ -33,6 +33,8 @@ npm view @balacode/mental dist-tags
 
 The first must equal `package.json`. For a prerelease, the version appears under the `beta` dist-tag, not `latest`.
 
+Publishing a GitHub Release also starts `.github/workflows/deploy-website.yml`, which deploys `website/` to the getmental Worker (https://getmental.dev). The same workflow runs on a `main` push that changes `website/`, and on `workflow_dispatch`. It needs `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. Do not `wrangler deploy` production from a laptop, and do not `npm publish` from a laptop.
+
 ## What `release.yml` does
 
 - Triggers: `release: published` and `workflow_dispatch`.

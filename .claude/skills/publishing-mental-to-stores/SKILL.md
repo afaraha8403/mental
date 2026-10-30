@@ -53,8 +53,8 @@ Mental is one product shipped through several channels. **npm is the source chan
 2. `node scripts/bump-version.mjs X.Y.Z`, then `node scripts/bump-version.mjs --check`.
 3. Cut CHANGELOG `[Unreleased]` into `## [X.Y.Z] - YYYY-MM-DD`; commit.
 4. After the user confirms: create a GitHub Release tagged exactly `vX.Y.Z` (mark betas as prerelease).
-5. `release.yml` runs tests on three OSes, checks tag and lockstep, skips if already on npm, then publishes (`--tag beta` for prereleases).
-6. Verify: `npm view @balacode/mental version` equals `package.json`. Not done until it does.
+5. `release.yml` runs tests on three OSes, checks tag and lockstep, skips if already on npm, then publishes (`--tag beta` for prereleases). The same GitHub Release starts `deploy-website.yml`, which deploys `website/` to Cloudflare. That workflow also runs when `website/` changes on `main`.
+6. Verify: `npm view @balacode/mental version` equals `package.json`. Not done until it does. The site deploy is done when the Deploy website workflow succeeds.
 7. If publish failed or was skipped: fix the workflow and run `workflow_dispatch` against the existing tag. **Never cut a new tag to fix npm.**
 
 Full commands, failure modes and the post-release host refresh: [references/npm-release.md](references/npm-release.md) and [references/after-release.md](references/after-release.md).
@@ -62,7 +62,7 @@ Full commands, failure modes and the post-release host refresh: [references/npm-
 ## Safety
 
 - Confirm with the user before any tag, GitHub Release, `npm publish`, store submission or PR. Say which version and which channel.
-- Never print, log or commit `NPM_TOKEN` or any credential. Do not read the secret; the workflow uses `secrets.NPM_TOKEN` as `NODE_AUTH_TOKEN`.
+- Never print, log or commit `NPM_TOKEN`, `CLOUDFLARE_API_TOKEN`, or `CLOUDFLARE_ACCOUNT_ID`. Do not read the secret; the workflows use GitHub secrets. Do not `npm publish` or `wrangler deploy` production from a laptop.
 - Never use `MENTAL_SKIP_HOST_PLUGIN_CHECK` outside tests.
 - Never ship a tag that differs from `package.json`.
 - Repo-only skills under `.agents`, `.claude`, `.cursor` and `.codex` must stay out of the npm `files` list and the plugin `skills/` folder.

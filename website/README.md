@@ -28,30 +28,24 @@ npm run preview
 
 Canonical host: **https://getmental.dev** (apex). `www.getmental.dev` 301s to the apex (see `worker.js`). `*.workers.dev` preview stays enabled.
 
-```bash
-cd website
-npx wrangler login
-npm run deploy
-```
+Production deploys run in GitHub Actions (`.github/workflows/deploy-website.yml`), not from a laptop. The workflow builds `website/` and runs `wrangler deploy` when `website/` changes on `main`, when a GitHub Release is published, or when someone runs the workflow by hand. It authenticates with the repo secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`. The token is the Cloudflare "Edit Cloudflare Workers" template, scoped to this account and the `getmental.dev` zone. Do not commit either value.
 
-`npm run deploy` is `npm run build && wrangler deploy`.
+`npm run deploy` (`npm run build && wrangler deploy`) is only for a local check against an account you are already logged into. It is not how getmental.dev ships.
 
-### Custom domain (Ali, Cloudflare dashboard or this wrangler file)
+### Custom domain
 
-Do not buy DNS elsewhere. The zone `getmental.dev` is already on Cloudflare.
+Do not buy DNS elsewhere. The zone `getmental.dev` is already on Cloudflare. `wrangler.jsonc` lists both hosts as custom domains, and the GitHub deploy attaches them:
 
-1. From `website/`, run `npx wrangler login` on the Cloudflare account that owns `getmental.dev`.
-2. Run `npm run deploy`. `wrangler.jsonc` already lists:
-   - `getmental.dev` (`custom_domain: true`)
-   - `www.getmental.dev` (`custom_domain: true`)
-   - `workers_dev: true` (preview URL like `https://getmental.<account>.workers.dev`)
-3. If deploy cannot attach the domains, in the Cloudflare dashboard: **Workers & Pages → getmental → Settings → Domains & Routes → Add → Custom domain** for `getmental.dev` and again for `www.getmental.dev`. Cloudflare creates the proxied DNS records. Typical result:
-   - Apex `getmental.dev`: proxied AAAA to `100::` (Workers custom domain)
-   - `www.getmental.dev`: proxied CNAME to `getmental.<account>.workers.dev` (or the same custom-domain records)
-4. Confirm SSL is Universal/managed (automatic on a proxied custom domain).
-5. Optional check: `https://www.getmental.dev` should 301 to `https://getmental.dev`.
+- `getmental.dev` (`custom_domain: true`)
+- `www.getmental.dev` (`custom_domain: true`)
+- `workers_dev: true` (preview URL like `https://getmental.<account>.workers.dev`)
 
-This repo does not change DNS. Ali must be logged into Wrangler (or attach the domains in the dashboard) on the account that already owns the zone.
+If a deploy cannot attach the domains, in the Cloudflare dashboard: **Workers & Pages → getmental → Settings → Domains & Routes → Add → Custom domain** for `getmental.dev` and again for `www.getmental.dev`. Cloudflare creates the proxied DNS records. Typical result:
+
+- Apex `getmental.dev`: proxied AAAA to `100::` (Workers custom domain)
+- `www.getmental.dev`: proxied CNAME to `getmental.<account>.workers.dev` (or the same custom-domain records)
+
+SSL is Universal/managed on a proxied custom domain. `https://www.getmental.dev` should 301 to `https://getmental.dev`. This repo does not edit DNS by hand.
 
 ## Recapture product screenshots
 

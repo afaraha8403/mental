@@ -25,9 +25,14 @@ npm view @balacode/mental version
 
 That output **must** equal `package.json` (no `v`). If publish skipped or failed, the release is not done. Do not cut a new tag to “fix” npm — fix the workflow and `workflow_dispatch` (tag `v$(package.json version)` must already exist).
 
+## Site deploy (Cloudflare)
+
+https://getmental.dev is the Worker in `website/`. Production deploys go through GitHub, not a laptop. `.github/workflows/deploy-website.yml` runs `wrangler deploy` when `website/` changes on `main`, when a GitHub Release is published, or on `workflow_dispatch`. It uses `secrets.CLOUDFLARE_API_TOKEN` and `secrets.CLOUDFLARE_ACCOUNT_ID`. A release is not a site deploy until that workflow succeeds.
+
 ## Do not
 
 - Ship a git tag whose npm version differs
 - Put `version` on `.claude-plugin/marketplace.json` plugin entries
-- Print or commit `NPM_TOKEN`
+- Print or commit `NPM_TOKEN`, `CLOUDFLARE_API_TOKEN`, or `CLOUDFLARE_ACCOUNT_ID`
+- `npm publish` or `wrangler deploy` the production site from a laptop
 - Use `MENTAL_SKIP_HOST_PLUGIN_CHECK` outside tests
