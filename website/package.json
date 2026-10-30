@@ -1,0 +1,40 @@
+{
+  "name": "@balacode/mental-website",
+  "private": true,
+  "type": "module",
+  "version": "0.13.3",
+  "description": "Public marketing site for Mental CLI at getmental.dev",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "npx astryx theme build src/themes/mental/mentalTheme.ts && astro build",
+    "preview": "astro preview --host 127.0.0.1 --port 4321",
+    "deploy": "npm run build && wrangler deploy",
+    "astryx": "node node_modules/@astryxdesign/cli/clients/cli/bin/astryx.mjs",
+    "capture:product": "node scripts/capture-product.mjs",
+    "capture:site": "node scripts/capture-site.mjs",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/react": "^7.1.2",
+    "@astrojs/sitemap": "^3.7.4",
+    "@astryxdesign/core": "^0.7.4",
+    "@astryxdesign/theme-neutral": "^0.7.4",
+    "@fontsource-variable/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@heroicons/react": "^2.2.0",
+    "@stylexjs/stylex": "^0.19.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "astro": "^7.4.4",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@astryxdesign/cli": "^0.7.4",
+    "playwright": "^1.64.1",
+    "wrangler": "^4.156.0"
+  }
+}
