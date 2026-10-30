@@ -32,6 +32,8 @@ Production deploys run in GitHub Actions (`.github/workflows/deploy-website.yml`
 
 `npm run deploy` (`npm run build && wrangler deploy`) is only for a local check against an account you are already logged into. It is not how getmental.dev ships.
 
+Wrangler reads `website/.env` when you run it from this folder. Copy `.env.example` to `.env` and fill the two Cloudflare values. The same two names are GitHub Actions secrets. `NPM_TOKEN` stays a GitHub secret only. The Mental CLI does not load this file. Decision-model keys go in `~/.mental/config.json` via `mental option decide key`.
+
 ### Custom domain
 
 Do not buy DNS elsewhere. The zone `getmental.dev` is already on Cloudflare. `wrangler.jsonc` lists both hosts as custom domains, and the GitHub deploy attaches them:
