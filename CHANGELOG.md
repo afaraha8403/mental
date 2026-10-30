@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-30
+
 ### Fixes
 - Titles keep `#`, `:`, and quotes, and a newline in a title is rejected instead of breaking the file.
 - The README and install docs name Node `>=22.13`, matching `engines`.
