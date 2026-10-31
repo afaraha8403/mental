@@ -2,6 +2,11 @@
 @import '@astryxdesign/core/astryx.css';
 @import '../themes/mental/mental.css';
 
+html,
+body {
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
   min-height: 100dvh;
@@ -18,18 +23,166 @@ img {
   height: auto;
 }
 
-#how,
+[role='banner'] {
+  background: var(--color-background-body);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.page {
+  width: 100%;
+  max-width: 73.5rem;
+}
+
+#top {
+  padding-top: var(--spacing-12);
+  padding-bottom: var(--spacing-8);
+}
+
+.band {
+  padding-block: var(--spacing-12);
+}
+
+.hero-copy {
+  margin-inline: auto;
+  text-align: center;
+}
+
+.hero-demo-frame {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: 28rem;
+  border: none;
+  border-radius: var(--radius-md);
+  background: var(--color-background-card);
+}
+
+.term {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background-card);
+  overflow: hidden;
+}
+
+.term-bar {
+  padding: var(--spacing-3) var(--spacing-4);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-background-body);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.term-bar > :first-child {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.term-title {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: 100%;
+  text-align: center;
+}
+
+.term-dot {
+  display: block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: var(--radius-full);
+  font-size: 0;
+  line-height: 0;
+}
+
+.term-dot-close {
+  background: var(--color-error);
+}
+
+.term-dot-min {
+  background: var(--color-warning);
+}
+
+.term-dot-max {
+  background: var(--color-success);
+}
+
+.term-body {
+  padding: var(--spacing-5);
+}
+
+.term-line {
+  font-family: var(--font-family-code);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.term-cmd {
+  color: var(--color-text-accent);
+}
+
+.term-pair {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr);
+  column-gap: var(--spacing-4);
+}
+
+.term-sub {
+  padding-left: calc(6.5rem + var(--spacing-4));
+}
+
+.term-foot {
+  padding-top: var(--spacing-2);
+}
+
+.term-caret {
+  display: inline-block;
+  width: 0.5rem;
+  height: 1em;
+  margin-left: 0.2rem;
+  background: var(--color-text-accent);
+  vertical-align: text-bottom;
+  animation: term-blink 1.1s steps(1) infinite;
+}
+
+@keyframes term-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.view-window {
+  display: block;
+  width: 100%;
+  height: 36rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background-card);
+}
+
+@media (min-width: 60rem) {
+  .hero-demo-frame {
+    height: auto;
+    aspect-ratio: 16 / 9;
+  }
+}
+
+#cycle,
+#attention,
+#decisions,
+#pulse,
 #claude,
-#features,
 #privacy,
 #install,
-#faq,
-#product {
+#faq {
   scroll-margin-top: 4.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  .term-caret {
+    animation: none;
   }
 }

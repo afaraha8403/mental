@@ -11,9 +11,8 @@ import {GITHUB_URL, INSTALL_CMD} from '../site';
 import {useColorMode} from './AstryxRoot';
 
 const NAV = [
+  {label: 'Attention', href: '#attention'},
   {label: 'Claude', href: '#claude'},
-  {label: 'How', href: '#how'},
-  {label: 'Features', href: '#features'},
   {label: 'Privacy', href: '#privacy'},
   {label: 'Install', href: '#install'},
   {label: 'FAQ', href: '#faq'},

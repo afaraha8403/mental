@@ -26,17 +26,10 @@ try {
     return {
       h1: document.querySelector('#top h1')?.textContent?.trim() ?? '',
       installCount: document.querySelectorAll('#install').length,
-      leads: ['Git records what changed', 'Your agents write it', 'Files stay on this machine'].map(
-        (lead) => {
-          const el = [...document.querySelectorAll('h3')].find((node) => node.textContent?.trim() === lead);
-          if (!el) return null;
-          return el.getBoundingClientRect().top + window.scrollY;
-        },
-      ),
       install: y('#install'),
-      iframe: y('iframe[src*="/demo/"]'),
+      iframe: y('#top iframe'),
+      attention: y('#attention'),
       claude: y('#claude'),
-      how: y('#how'),
       installText: document.querySelector('#install')?.textContent ?? '',
     };
   });
@@ -45,24 +38,21 @@ try {
     fail(`h1 was ${JSON.stringify(order.h1)}`);
   }
   if (order.installCount !== 1) fail(`expected one #install, found ${order.installCount}`);
-  for (const [index, leadY] of order.leads.entries()) {
-    if (leadY == null) fail(`missing value lead ${index}`);
-    else if (order.install == null || leadY >= order.install) {
-      fail(`value lead ${index} is not above #install`);
-    }
+  if (order.install == null || order.iframe == null || order.install > order.iframe + 8) {
+    fail('#install starts below the demo iframe');
   }
-  if (order.install == null || order.iframe == null || order.install >= order.iframe) {
-    fail('#install is not above the demo iframe');
+  if (order.iframe == null || order.attention == null || order.iframe >= order.attention) {
+    fail('demo iframe is not above #attention');
   }
-  if (order.claude == null || order.how == null || order.claude >= order.how) {
-    fail('#claude is not before #how');
-  }
+  if (order.claude == null) fail('#claude is missing');
   for (const command of ['npm i -g @balacode/mental', 'mental install', 'mental doctor']) {
     if (!order.installText.includes(command)) fail(`#install missing ${command}`);
   }
 
-  const iframe = page.locator('iframe[src*="/demo/"]');
-  const frame = page.frame({url: /\/demo\/index\.html/});
+  const iframe = page.locator('#top iframe');
+  const frame = page.frames().find((entry) => {
+    return /\/demo\/index\.html/.test(entry.url()) && !entry.url().includes('embed');
+  });
   if (!frame) fail('demo iframe document did not load');
   else {
     await frame.locator('.hero-resume').waitFor({timeout: 15000});
@@ -97,6 +87,13 @@ try {
     }
   }
   if ((await iframe.count()) !== 1) fail('expected one demo iframe');
+
+  await page.setViewportSize({width: 390, height: 844});
+  await page.goto(origin, {waitUntil: 'networkidle'});
+  const mobileBox = await page.locator('#top iframe').boundingBox();
+  if (!mobileBox || mobileBox.height < 400) {
+    fail(`mobile iframe height ${mobileBox ? mobileBox.height : 'missing'}`);
+  }
 } catch (err) {
   fail(err instanceof Error ? err.message : String(err));
 } finally {

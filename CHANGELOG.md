@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changes
 - The homepage states the value first, puts install above an interactive sample dashboard, and describes the Claude Code mod.
+- The homepage stays in a fixed column: a contained sample dashboard, then the out-of-the-box session (no pre-configuration, no command list, agents already know it).
+- The pulse is a terminal of that sample session, and attention and decisions are live views.
 
 ## [0.14.0] - 2026-10-30
 
