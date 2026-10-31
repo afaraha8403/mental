@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changes
+- The homepage states the value first, puts install above an interactive sample dashboard, and describes the Claude Code mod.
+
 ## [0.14.0] - 2026-10-30
 
 ### Fixes

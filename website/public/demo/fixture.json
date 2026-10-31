@@ -1,0 +1,776 @@
+{
+  "routes": {
+    "/api/boot": {
+      "ok": true,
+      "data": {
+        "projects": [
+          {
+            "id": "11111111-1111-4111-8111-111111111111",
+            "name": "sample",
+            "resume": "Ship the pointer, not the dump. Open loops: none",
+            "attentionCount": 2,
+            "needYouCount": 1,
+            "openDecisionCount": 1,
+            "outcome": "Resolver landed",
+            "lastTouched": "2026-10-30T23:10:59.000Z"
+          }
+        ],
+        "activeId": "11111111-1111-4111-8111-111111111111",
+        "id": "11111111-1111-4111-8111-111111111111",
+        "heartbeat": {
+          "id": "11111111-1111-4111-8111-111111111111",
+          "mode": "home",
+          "git": {
+            "branch": "main",
+            "dirty": false,
+            "porcelain": "",
+            "recent": [
+              "6273eae init"
+            ]
+          },
+          "gitRoot": "/sample/repo",
+          "handoff": {
+            "resume": "Ship the pointer, not the dump. Open loops: none",
+            "outcome": "Resolver landed",
+            "file": "journal/2026-10-30.md",
+            "when": {
+              "date": "2026-10-30",
+              "time": "19:10"
+            },
+            "against": "PLAN.md",
+            "via": "cursor"
+          },
+          "against": "PLAN.md",
+          "attention": [
+            {
+              "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+              "file": "2026-10-30-resolver-tests-not-reviewed.md",
+              "title": "Resolver tests not reviewed",
+              "status": "open",
+              "kind": "verify",
+              "from": "",
+              "against": "",
+              "description": "Resolver tests not reviewed",
+              "timestamp": "2026-10-30T23:10:20.989Z"
+            },
+            {
+              "path": "attention/2026-10-30-tom-said-ship-the-pointer.md",
+              "file": "2026-10-30-tom-said-ship-the-pointer.md",
+              "title": "Tom said ship the pointer",
+              "status": "open",
+              "kind": "direction",
+              "from": "Tom",
+              "against": "",
+              "description": "Tom said ship the pointer",
+              "timestamp": "2026-10-30T23:10:21.087Z"
+            }
+          ],
+          "openDecisions": [
+            {
+              "path": "decisions/2026-10-30-okf-markdown-is-the-source-of-truth.md",
+              "file": "2026-10-30-okf-markdown-is-the-source-of-truth.md",
+              "title": "OKF markdown is the source of truth",
+              "status": "open",
+              "description": "OKF markdown is the source of truth",
+              "timestamp": "2026-10-30T23:10:20.896Z"
+            }
+          ],
+          "attentionCount": 2,
+          "needYouCount": 1,
+          "freshEyesCount": 1,
+          "agingCount": 0,
+          "directionCount": 1,
+          "openDecisionCount": 1,
+          "needsEyes": [
+            {
+              "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+              "file": "2026-10-30-resolver-tests-not-reviewed.md",
+              "title": "Resolver tests not reviewed",
+              "status": "open",
+              "kind": "verify",
+              "from": "",
+              "against": "",
+              "description": "Resolver tests not reviewed",
+              "timestamp": "2026-10-30T23:10:20.989Z"
+            }
+          ],
+          "needsEyesCount": 1,
+          "later": [],
+          "laterCount": 0,
+          "guardrails": [
+            {
+              "path": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+              "file": "2026-10-30-heartbeat-only-no-standing-tui.md",
+              "title": "Heartbeat only, no standing TUI",
+              "status": "decided",
+              "timestamp": "2026-10-30T23:10:20.802Z"
+            }
+          ],
+          "guardrailCount": 1,
+          "hopsToday": 0,
+          "delta": {
+            "since": null,
+            "writes": 0,
+            "attention": 0,
+            "decisions": 0,
+            "parks": 0
+          },
+          "stale": {
+            "days": 14,
+            "count": 0,
+            "decisions": [],
+            "attention": []
+          }
+        },
+        "heartbeatError": null
+      }
+    },
+    "/api/boot?id=11111111-1111-4111-8111-111111111111": {
+      "ok": true,
+      "data": {
+        "projects": [
+          {
+            "id": "11111111-1111-4111-8111-111111111111",
+            "name": "sample",
+            "resume": "Ship the pointer, not the dump. Open loops: none",
+            "attentionCount": 2,
+            "needYouCount": 1,
+            "openDecisionCount": 1,
+            "outcome": "Resolver landed",
+            "lastTouched": "2026-10-30T23:10:59.000Z"
+          }
+        ],
+        "activeId": "11111111-1111-4111-8111-111111111111",
+        "id": "11111111-1111-4111-8111-111111111111",
+        "heartbeat": {
+          "id": "11111111-1111-4111-8111-111111111111",
+          "mode": "home",
+          "git": {
+            "branch": "main",
+            "dirty": false,
+            "porcelain": "",
+            "recent": [
+              "6273eae init"
+            ]
+          },
+          "gitRoot": "/sample/repo",
+          "handoff": {
+            "resume": "Ship the pointer, not the dump. Open loops: none",
+            "outcome": "Resolver landed",
+            "file": "journal/2026-10-30.md",
+            "when": {
+              "date": "2026-10-30",
+              "time": "19:10"
+            },
+            "against": "PLAN.md",
+            "via": "cursor"
+          },
+          "against": "PLAN.md",
+          "attention": [
+            {
+              "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+              "file": "2026-10-30-resolver-tests-not-reviewed.md",
+              "title": "Resolver tests not reviewed",
+              "status": "open",
+              "kind": "verify",
+              "from": "",
+              "against": "",
+              "description": "Resolver tests not reviewed",
+              "timestamp": "2026-10-30T23:10:20.989Z"
+            },
+            {
+              "path": "attention/2026-10-30-tom-said-ship-the-pointer.md",
+              "file": "2026-10-30-tom-said-ship-the-pointer.md",
+              "title": "Tom said ship the pointer",
+              "status": "open",
+              "kind": "direction",
+              "from": "Tom",
+              "against": "",
+              "description": "Tom said ship the pointer",
+              "timestamp": "2026-10-30T23:10:21.087Z"
+            }
+          ],
+          "openDecisions": [
+            {
+              "path": "decisions/2026-10-30-okf-markdown-is-the-source-of-truth.md",
+              "file": "2026-10-30-okf-markdown-is-the-source-of-truth.md",
+              "title": "OKF markdown is the source of truth",
+              "status": "open",
+              "description": "OKF markdown is the source of truth",
+              "timestamp": "2026-10-30T23:10:20.896Z"
+            }
+          ],
+          "attentionCount": 2,
+          "needYouCount": 1,
+          "freshEyesCount": 1,
+          "agingCount": 0,
+          "directionCount": 1,
+          "openDecisionCount": 1,
+          "needsEyes": [
+            {
+              "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+              "file": "2026-10-30-resolver-tests-not-reviewed.md",
+              "title": "Resolver tests not reviewed",
+              "status": "open",
+              "kind": "verify",
+              "from": "",
+              "against": "",
+              "description": "Resolver tests not reviewed",
+              "timestamp": "2026-10-30T23:10:20.989Z"
+            }
+          ],
+          "needsEyesCount": 1,
+          "later": [],
+          "laterCount": 0,
+          "guardrails": [
+            {
+              "path": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+              "file": "2026-10-30-heartbeat-only-no-standing-tui.md",
+              "title": "Heartbeat only, no standing TUI",
+              "status": "decided",
+              "timestamp": "2026-10-30T23:10:20.802Z"
+            }
+          ],
+          "guardrailCount": 1,
+          "hopsToday": 0,
+          "delta": {
+            "since": null,
+            "writes": 0,
+            "attention": 0,
+            "decisions": 0,
+            "parks": 0
+          },
+          "stale": {
+            "days": 14,
+            "count": 0,
+            "decisions": [],
+            "attention": []
+          }
+        },
+        "heartbeatError": null
+      }
+    },
+    "/api/heartbeat?id=11111111-1111-4111-8111-111111111111": {
+      "ok": true,
+      "data": {
+        "id": "11111111-1111-4111-8111-111111111111",
+        "mode": "home",
+        "git": {
+          "branch": "main",
+          "dirty": false,
+          "porcelain": "",
+          "recent": [
+            "6273eae init"
+          ]
+        },
+        "gitRoot": "/sample/repo",
+        "handoff": {
+          "resume": "Ship the pointer, not the dump. Open loops: none",
+          "outcome": "Resolver landed",
+          "file": "journal/2026-10-30.md",
+          "when": {
+            "date": "2026-10-30",
+            "time": "19:10"
+          },
+          "against": "PLAN.md",
+          "via": "cursor"
+        },
+        "against": "PLAN.md",
+        "attention": [
+          {
+            "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+            "file": "2026-10-30-resolver-tests-not-reviewed.md",
+            "title": "Resolver tests not reviewed",
+            "status": "open",
+            "kind": "verify",
+            "from": "",
+            "against": "",
+            "description": "Resolver tests not reviewed",
+            "timestamp": "2026-10-30T23:10:20.989Z"
+          },
+          {
+            "path": "attention/2026-10-30-tom-said-ship-the-pointer.md",
+            "file": "2026-10-30-tom-said-ship-the-pointer.md",
+            "title": "Tom said ship the pointer",
+            "status": "open",
+            "kind": "direction",
+            "from": "Tom",
+            "against": "",
+            "description": "Tom said ship the pointer",
+            "timestamp": "2026-10-30T23:10:21.087Z"
+          }
+        ],
+        "openDecisions": [
+          {
+            "path": "decisions/2026-10-30-okf-markdown-is-the-source-of-truth.md",
+            "file": "2026-10-30-okf-markdown-is-the-source-of-truth.md",
+            "title": "OKF markdown is the source of truth",
+            "status": "open",
+            "description": "OKF markdown is the source of truth",
+            "timestamp": "2026-10-30T23:10:20.896Z"
+          }
+        ],
+        "attentionCount": 2,
+        "needYouCount": 1,
+        "freshEyesCount": 1,
+        "agingCount": 0,
+        "directionCount": 1,
+        "openDecisionCount": 1,
+        "needsEyes": [
+          {
+            "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+            "file": "2026-10-30-resolver-tests-not-reviewed.md",
+            "title": "Resolver tests not reviewed",
+            "status": "open",
+            "kind": "verify",
+            "from": "",
+            "against": "",
+            "description": "Resolver tests not reviewed",
+            "timestamp": "2026-10-30T23:10:20.989Z"
+          }
+        ],
+        "needsEyesCount": 1,
+        "later": [],
+        "laterCount": 0,
+        "guardrails": [
+          {
+            "path": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+            "file": "2026-10-30-heartbeat-only-no-standing-tui.md",
+            "title": "Heartbeat only, no standing TUI",
+            "status": "decided",
+            "timestamp": "2026-10-30T23:10:20.802Z"
+          }
+        ],
+        "guardrailCount": 1,
+        "hopsToday": 0,
+        "delta": {
+          "since": null,
+          "writes": 0,
+          "attention": 0,
+          "decisions": 0,
+          "parks": 0
+        },
+        "stale": {
+          "days": 14,
+          "count": 0,
+          "decisions": [],
+          "attention": []
+        }
+      }
+    },
+    "/api/activity?id=11111111-1111-4111-8111-111111111111&days=30": {
+      "ok": true,
+      "data": {
+        "hops": [
+          {
+            "at": "2026-10-30T23:10:59.000Z",
+            "date": "2026-10-30",
+            "time": "19:10",
+            "title": "Resolver landed",
+            "kind": "journal",
+            "summary": "Head: 6273eae77d678dd691fc4266d0e4c20697cf2929 UUID bindings survive a repo move. Tests cover remap after a folder rename.",
+            "via": "cursor",
+            "against": "PLAN.md",
+            "resume": "Ship the pointer, not the dump. Open loops: none",
+            "path": "journal/2026-10-30.md#19:10"
+          }
+        ],
+        "days": 30,
+        "truncated": false
+      }
+    },
+    "/api/list?id=11111111-1111-4111-8111-111111111111&type=Attention&limit=100&offset=0": {
+      "ok": true,
+      "data": {
+        "items": [
+          {
+            "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+            "type": "Attention",
+            "title": "Resolver tests not reviewed",
+            "description": "Resolver tests not reviewed",
+            "status": "open",
+            "kind": "verify",
+            "tags": [
+              "verify"
+            ]
+          },
+          {
+            "path": "attention/2026-10-30-tom-said-ship-the-pointer.md",
+            "type": "Attention",
+            "title": "Tom said ship the pointer",
+            "description": "Tom said ship the pointer",
+            "status": "open",
+            "kind": "direction",
+            "tags": [
+              "direction"
+            ]
+          }
+        ],
+        "total": 2,
+        "offset": 0,
+        "limit": 100,
+        "truncated": false,
+        "type": "Attention",
+        "status": null,
+        "tag": null,
+        "kind": null
+      }
+    },
+    "/api/list?id=11111111-1111-4111-8111-111111111111&type=Decision&limit=100&offset=0": {
+      "ok": true,
+      "data": {
+        "items": [
+          {
+            "path": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+            "type": "Decision",
+            "title": "Heartbeat only, no standing TUI",
+            "description": "Heartbeat only, no standing TUI",
+            "status": "decided",
+            "kind": "",
+            "tags": [
+              "cli"
+            ]
+          },
+          {
+            "path": "decisions/2026-10-30-okf-markdown-is-the-source-of-truth.md",
+            "type": "Decision",
+            "title": "OKF markdown is the source of truth",
+            "description": "OKF markdown is the source of truth",
+            "status": "open",
+            "kind": "",
+            "tags": [
+              "okf"
+            ]
+          }
+        ],
+        "total": 2,
+        "offset": 0,
+        "limit": 100,
+        "truncated": false,
+        "type": "Decision",
+        "status": null,
+        "tag": null,
+        "kind": null
+      }
+    },
+    "/api/list?id=11111111-1111-4111-8111-111111111111&limit=100&offset=0": {
+      "ok": true,
+      "data": {
+        "items": [
+          {
+            "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+            "type": "Attention",
+            "title": "Resolver tests not reviewed",
+            "description": "Resolver tests not reviewed",
+            "status": "open",
+            "kind": "verify",
+            "tags": [
+              "verify"
+            ]
+          },
+          {
+            "path": "attention/2026-10-30-tom-said-ship-the-pointer.md",
+            "type": "Attention",
+            "title": "Tom said ship the pointer",
+            "description": "Tom said ship the pointer",
+            "status": "open",
+            "kind": "direction",
+            "tags": [
+              "direction"
+            ]
+          },
+          {
+            "path": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+            "type": "Decision",
+            "title": "Heartbeat only, no standing TUI",
+            "description": "Heartbeat only, no standing TUI",
+            "status": "decided",
+            "kind": "",
+            "tags": [
+              "cli"
+            ]
+          },
+          {
+            "path": "decisions/2026-10-30-okf-markdown-is-the-source-of-truth.md",
+            "type": "Decision",
+            "title": "OKF markdown is the source of truth",
+            "description": "OKF markdown is the source of truth",
+            "status": "open",
+            "kind": "",
+            "tags": [
+              "okf"
+            ]
+          },
+          {
+            "path": "journal/2026-10-30.md",
+            "type": "Journal",
+            "title": "Journal — 2026-10-30",
+            "description": "Work log for 2026-10-30.",
+            "status": "active",
+            "kind": "",
+            "tags": [
+              "journal"
+            ]
+          },
+          {
+            "path": "notes/identity-is-a-uuid-in-bindings-json.md",
+            "type": "Note",
+            "title": "Identity is a UUID in bindings.json",
+            "description": "Two clones of the same origin share one brain until you split.",
+            "status": "active",
+            "kind": "",
+            "tags": [
+              "identity"
+            ]
+          }
+        ],
+        "total": 6,
+        "offset": 0,
+        "limit": 100,
+        "truncated": false,
+        "type": null,
+        "status": null,
+        "tag": null,
+        "kind": null
+      }
+    },
+    "/api/graph?id=11111111-1111-4111-8111-111111111111": {
+      "ok": true,
+      "data": {
+        "nodes": [
+          {
+            "path": "notes/identity-is-a-uuid-in-bindings-json.md",
+            "type": "Note",
+            "title": "Identity is a UUID in bindings.json",
+            "status": "active",
+            "tags": [
+              "identity"
+            ],
+            "description": "Two clones of the same origin share one brain until you split.",
+            "hopSummary": "",
+            "kind": "",
+            "against": "",
+            "from": ""
+          },
+          {
+            "path": "attention/2026-10-30-tom-said-ship-the-pointer.md",
+            "type": "Attention",
+            "title": "Tom said ship the pointer",
+            "status": "open",
+            "tags": [
+              "direction"
+            ],
+            "description": "Tom said ship the pointer",
+            "hopSummary": "",
+            "kind": "direction",
+            "against": "",
+            "from": "Tom"
+          },
+          {
+            "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+            "type": "Attention",
+            "title": "Resolver tests not reviewed",
+            "status": "open",
+            "tags": [
+              "verify"
+            ],
+            "description": "Resolver tests not reviewed",
+            "hopSummary": "",
+            "kind": "verify",
+            "against": "",
+            "from": ""
+          },
+          {
+            "path": "decisions/2026-10-30-okf-markdown-is-the-source-of-truth.md",
+            "type": "Decision",
+            "title": "OKF markdown is the source of truth",
+            "status": "open",
+            "tags": [
+              "okf"
+            ],
+            "description": "OKF markdown is the source of truth",
+            "hopSummary": "",
+            "kind": "",
+            "against": "",
+            "from": ""
+          },
+          {
+            "path": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+            "type": "Decision",
+            "title": "Heartbeat only, no standing TUI",
+            "status": "decided",
+            "tags": [
+              "cli"
+            ],
+            "description": "Heartbeat only, no standing TUI",
+            "hopSummary": "",
+            "kind": "",
+            "against": "",
+            "from": ""
+          },
+          {
+            "path": "journal/2026-10-30.md",
+            "type": "Journal",
+            "title": "Journal — 2026-10-30",
+            "status": "active",
+            "tags": [
+              "journal"
+            ],
+            "description": "Resolver landed",
+            "hopSummary": "Resolver landed",
+            "kind": "",
+            "against": "",
+            "from": ""
+          }
+        ],
+        "edges": [],
+        "total": 6,
+        "truncated": false
+      }
+    },
+    "/api/search?id=11111111-1111-4111-8111-111111111111&q=pointer&limit=100": {
+      "ok": true,
+      "data": {
+        "q": "pointer",
+        "hits": [
+          {
+            "path": "attention/2026-10-30-tom-said-ship-the-pointer.md",
+            "type": "Attention",
+            "title": "Tom said ship the pointer",
+            "description": "Tom said ship the pointer",
+            "status": "open",
+            "kind": "direction",
+            "tags": [
+              "direction"
+            ],
+            "snippet": "Tom said ship the pointer\nTom said ship the pointer\n# Tom said ship the pointer",
+            "timestamp": "2026-10-30T23:10:21.087Z",
+            "updated": "2026-10-30T23:10:21.087Z"
+          },
+          {
+            "path": "journal/2026-10-30.md#19:10",
+            "type": "Journal",
+            "title": "Resolver landed",
+            "description": "",
+            "status": "active",
+            "kind": "",
+            "tags": [
+              "journal"
+            ],
+            "snippet": "Resolver landed\nVia: cursor\nHead: 6273eae77d678dd691fc4266d0e4c20697cf2929\nUUID bindings survive a repo move. Tests cover remap after a folder rename.\n\nAgainst: PLAN.md\nResume: Ship the pointer, not the dump. Open loops: none",
+            "timestamp": "2026-10-30T23:10:20.707Z",
+            "updated": "2026-10-30T23:10:20.707Z"
+          }
+        ],
+        "total": 2,
+        "offset": 0,
+        "limit": 100,
+        "truncated": false,
+        "tokens": [
+          "pointer"
+        ],
+        "op": "and",
+        "backend": "sqlite"
+      }
+    },
+    "/api/projects": {
+      "ok": true,
+      "data": {
+        "projects": [
+          {
+            "id": "11111111-1111-4111-8111-111111111111",
+            "name": "sample",
+            "resume": "Ship the pointer, not the dump. Open loops: none",
+            "attentionCount": 2,
+            "needYouCount": 1,
+            "openDecisionCount": 1,
+            "outcome": "Resolver landed",
+            "lastTouched": "2026-10-30T23:10:59.000Z"
+          }
+        ],
+        "activeId": "11111111-1111-4111-8111-111111111111"
+      }
+    },
+    "/api/show?id=11111111-1111-4111-8111-111111111111&path=attention%2F2026-10-30-resolver-tests-not-reviewed.md": {
+      "ok": true,
+      "data": {
+        "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+        "frontmatter": {
+          "type": "Attention",
+          "title": "Resolver tests not reviewed",
+          "description": "Resolver tests not reviewed",
+          "tags": [
+            "verify"
+          ],
+          "timestamp": "2026-10-30T23:10:20.989Z",
+          "status": "open",
+          "kind": "verify",
+          "via": "cursor",
+          "head": "6273eae77d678dd691fc4266d0e4c20697cf2929"
+        },
+        "body": "# Resolver tests not reviewed\n",
+        "text": "---\ntype: Attention\ntitle: Resolver tests not reviewed\ndescription: Resolver tests not reviewed\ntags: [verify]\ntimestamp: \"2026-10-30T23:10:20.989Z\"\nstatus: open\nkind: verify\nvia: cursor\nhead: 6273eae77d678dd691fc4266d0e4c20697cf2929\n---\n# Resolver tests not reviewed\n",
+        "backlinks": []
+      }
+    },
+    "/api/why?id=11111111-1111-4111-8111-111111111111&path=attention%2F2026-10-30-resolver-tests-not-reviewed.md": {
+      "ok": true,
+      "data": {
+        "target": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+        "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+        "sha": null,
+        "hits": [
+          {
+            "path": "attention/2026-10-30-resolver-tests-not-reviewed.md",
+            "type": "Attention",
+            "title": "Resolver tests not reviewed",
+            "head": "6273eae77d678dd691fc4266d0e4c20697cf2929",
+            "paths": [],
+            "refs": [],
+            "timestamp": "2026-10-30T23:10:20.989Z"
+          }
+        ]
+      }
+    },
+    "/api/show?id=11111111-1111-4111-8111-111111111111&path=decisions%2F2026-10-30-heartbeat-only-no-standing-tui.md": {
+      "ok": true,
+      "data": {
+        "path": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+        "frontmatter": {
+          "type": "Decision",
+          "title": "Heartbeat only, no standing TUI",
+          "description": "Heartbeat only, no standing TUI",
+          "tags": [
+            "cli"
+          ],
+          "timestamp": "2026-10-30T23:10:20.802Z",
+          "status": "decided",
+          "via": "cursor",
+          "head": "6273eae77d678dd691fc4266d0e4c20697cf2929"
+        },
+        "body": "# Heartbeat only, no standing TUI\n\nDefault TTY mental prints a one-shot heartbeat and exits. Optional dashboard is a localhost page over the same files.\n",
+        "text": "---\ntype: Decision\ntitle: Heartbeat only, no standing TUI\ndescription: Heartbeat only, no standing TUI\ntags: [cli]\ntimestamp: \"2026-10-30T23:10:20.802Z\"\nstatus: decided\nvia: cursor\nhead: 6273eae77d678dd691fc4266d0e4c20697cf2929\n---\n# Heartbeat only, no standing TUI\n\nDefault TTY mental prints a one-shot heartbeat and exits. Optional dashboard is a localhost page over the same files.\n",
+        "backlinks": []
+      }
+    },
+    "/api/why?id=11111111-1111-4111-8111-111111111111&path=decisions%2F2026-10-30-heartbeat-only-no-standing-tui.md": {
+      "ok": true,
+      "data": {
+        "target": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+        "path": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+        "sha": null,
+        "hits": [
+          {
+            "path": "decisions/2026-10-30-heartbeat-only-no-standing-tui.md",
+            "type": "Decision",
+            "title": "Heartbeat only, no standing TUI",
+            "head": "6273eae77d678dd691fc4266d0e4c20697cf2929",
+            "paths": [],
+            "refs": [],
+            "timestamp": "2026-10-30T23:10:20.802Z"
+          }
+        ]
+      }
+    }
+  }
+}

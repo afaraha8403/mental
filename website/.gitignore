@@ -14,3 +14,7 @@ pnpm-debug.log*
 .DS_Store
 .idea/
 public/screenshots/*.txt
+public/demo/*
+!public/demo/index.html
+!public/demo/fixture-shim.js
+!public/demo/fixture.json

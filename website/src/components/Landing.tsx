@@ -17,6 +17,7 @@ import {VStack} from '@astryxdesign/core/VStack';
 import {ArrowTopRightOnSquareIcon} from '@heroicons/react/24/outline';
 import {DOCS_URL, GITHUB_URL, INSTALL_CMD, README_URL, VERSION} from '../site';
 import {AstryxRoot} from './AstryxRoot';
+import {DashboardDemo} from './DashboardDemo';
 import {ProductShot} from './ProductShot';
 import {SiteFooter} from './SiteFooter';
 import {SiteHeader} from './SiteHeader';
@@ -145,20 +146,34 @@ export function Landing() {
                   >
                     Picking up where your AI agents left off
                   </Heading>
-                  <Text
-                    type="body"
-                    color="secondary"
-                    justify="center"
-                    textWrap="balance"
-                  >
-                    Local-first continuity for you and your coding agents.
-                  </Text>
-                  <Text color="secondary" justify="center" textWrap="balance">
-                    Git records what changed. Mental records the resume, the
-                    decision git cannot explain, and what is still in the air.
-                    Your agents write it. You type{' '}
-                    <Code size="inherit">mental</Code> for the pulse.
-                  </Text>
+                  <VStack gap={4} width="100%">
+                    <VStack gap={1} hAlign="center">
+                      <Heading level={3} justify="center">
+                        Git records what changed
+                      </Heading>
+                      <Text color="secondary" justify="center" textWrap="balance">
+                        Mental records the resume, the decision git cannot
+                        explain, and what is still in the air.
+                      </Text>
+                    </VStack>
+                    <VStack gap={1} hAlign="center">
+                      <Heading level={3} justify="center">
+                        Your agents write it
+                      </Heading>
+                      <Text color="secondary" justify="center" textWrap="balance">
+                        You type <Code size="inherit">mental</Code> for the pulse.
+                      </Text>
+                    </VStack>
+                    <VStack gap={1} hAlign="center">
+                      <Heading level={3} justify="center">
+                        Files stay on this machine
+                      </Heading>
+                      <Text color="secondary" justify="center" textWrap="balance">
+                        No account. Journals are not uploaded. Default store is{' '}
+                        <Code size="inherit">~/.mental</Code>.
+                      </Text>
+                    </VStack>
+                  </VStack>
                 </VStack>
                 <HStack gap={3} wrap hAlign="center">
                   <Button
@@ -181,20 +196,121 @@ export function Landing() {
                     }
                   />
                 </HStack>
-                <Text type="supporting" color="secondary" justify="center">
-                  Then <Code size="inherit">mental install</Code> and{' '}
-                  <Code size="inherit">mental doctor</Code>.
+              </VStack>
+            </Section>
+
+            <Section id="install" variant="transparent" padding={0}>
+              <VStack gap={4}>
+                <VStack gap={2}>
+                  <Text type="label" color="secondary">
+                    INSTALL
+                  </Text>
+                  <Heading level={2}>Three commands</Heading>
+                  <Text color="secondary">
+                    PowerShell, cmd.exe, Windows Terminal, Git Bash, macOS, and
+                    Linux. Node.js 22.13 or newer. Zero runtime npm dependencies.
+                  </Text>
+                </VStack>
+                <SyntaxTheme theme={githubDark}>
+                  <CodeBlock
+                    code={`${INSTALL_CMD}\nmental install\nmental doctor`}
+                    language="bash"
+                    hasCopyButton
+                    hasLanguageLabel={false}
+                    width="100%"
+                  />
+                </SyntaxTheme>
+                <Text color="secondary">
+                  Then run <Code size="inherit">mental install</Code> and{' '}
+                  <Code size="inherit">mental doctor</Code>. The unscoped npm
+                  package named <Code size="inherit">mental</Code> is a different
+                  project. Install <Code size="inherit">@balacode/mental</Code>.
+                  The binary is <Code size="inherit">mental</Code>.
+                </Text>
+                <Text color="secondary">
+                  After that, paste the install block from the{' '}
+                  <Link href={README_URL} isExternalLink>
+                    README
+                  </Link>{' '}
+                  into your agent, or follow host plugin steps in{' '}
+                  <Link href={DOCS_URL} isExternalLink>
+                    the docs
+                  </Link>
+                  . Existing Windows installs from Mental 0.8.1 or older run{' '}
+                  <Code size="inherit">mental-repair.cmd</Code> once after npm
+                  updates.
                 </Text>
               </VStack>
             </Section>
 
             <Section variant="transparent" padding={0}>
-              <ProductShot
-                src="/screenshots/dashboard-today.png"
-                alt="Mental dashboard Today view with resume line, git, attention lanes, and journal activity from a real local session"
-                caption="The Mental dashboard (localhost, read-only) over the same files the CLI writes."
-                loading="eager"
-              />
+              <DashboardDemo />
+            </Section>
+
+            <Section id="claude" variant="transparent" padding={0}>
+              <VStack gap={5}>
+                <VStack gap={2}>
+                  <Text type="label" color="secondary">
+                    IN CLAUDE CODE
+                  </Text>
+                  <Heading level={2}>How the mod appears in the session</Heading>
+                  <Text color="secondary">
+                    The Claude plugin ships a mod that draws Mental inside Claude
+                    Code. It only reads{' '}
+                    <Code size="inherit">mental heartbeat --json --passive</Code>,{' '}
+                    <Code size="inherit">mental list --json</Code>, and{' '}
+                    <Code size="inherit">mental show --json</Code>. The panel
+                    itself never writes. Mobile is left alone.
+                  </Text>
+                </VStack>
+                <Grid columns={{minWidth: 240, max: 3}} gap={4} width="100%">
+                  <Card width="100%">
+                    <VStack gap={2}>
+                      <Text type="label" color="accent">
+                        Band
+                      </Text>
+                      <Heading level={3}>Two rows above the prompt</Heading>
+                      <Text color="secondary">
+                        The resume point, a live pulse while the agent works,
+                        open attention and decision counts, and a short receipt
+                        each time Mental writes. It steps aside while a survey
+                        is showing and drops to one row when the prompt area is
+                        short.
+                      </Text>
+                    </VStack>
+                  </Card>
+                  <Card width="100%">
+                    <VStack gap={2}>
+                      <Text type="label" color="accent">
+                        Desktop
+                      </Text>
+                      <Heading level={3}>Footer button and side panel</Heading>
+                      <Text color="secondary">
+                        In the Claude Desktop Code tab, for local sessions, a
+                        Mental button sits in the prompt footer. Click it, or
+                        type <Code size="inherit">/mental</Code>, for the resume,
+                        this session, attention that needs you, and what Mental
+                        recorded. Park, Hand off, Ask Claude, and Refresh send a
+                        message. Not WSL. Not cloud sessions.
+                      </Text>
+                    </VStack>
+                  </Card>
+                  <Card width="100%">
+                    <VStack gap={2}>
+                      <Text type="label" color="accent">
+                        /mental
+                      </Text>
+                      <Heading level={3}>A pane in the terminal</Heading>
+                      <Text color="secondary">
+                        Tabs for Now, Residue, Decisions, Session, and Time.
+                        Park and Handoff put the request in the prompt so the
+                        agent records it. The pane docks fullscreen at 110
+                        columns or more, and opens as a dialog otherwise.
+                      </Text>
+                    </VStack>
+                  </Card>
+                </Grid>
+              </VStack>
             </Section>
 
             <Section id="how" variant="transparent" padding={0}>
@@ -360,50 +476,6 @@ export function Landing() {
                     </Text>
                   </VStack>
                 </Card>
-              </VStack>
-            </Section>
-
-            <Section id="install" variant="transparent" padding={0}>
-              <VStack gap={4}>
-                <VStack gap={2}>
-                  <Text type="label" color="secondary">
-                    INSTALL
-                  </Text>
-                  <Heading level={2}>Three commands</Heading>
-                  <Text color="secondary">
-                    PowerShell, cmd.exe, Windows Terminal, Git Bash, macOS, and
-                    Linux. Node.js 22.13 or newer. Zero runtime npm dependencies.
-                  </Text>
-                </VStack>
-                <SyntaxTheme theme={githubDark}>
-                  <CodeBlock
-                    code={`${INSTALL_CMD}\nmental install\nmental doctor`}
-                    language="bash"
-                    hasCopyButton
-                    hasLanguageLabel={false}
-                    width="100%"
-                  />
-                </SyntaxTheme>
-                <Text color="secondary">
-                  Then run <Code size="inherit">mental install</Code> and{' '}
-                  <Code size="inherit">mental doctor</Code>. The unscoped npm
-                  package named <Code size="inherit">mental</Code> is a different
-                  project. Install <Code size="inherit">@balacode/mental</Code>.
-                  The binary is <Code size="inherit">mental</Code>.
-                </Text>
-                <Text color="secondary">
-                  After that, paste the install block from the{' '}
-                  <Link href={README_URL} isExternalLink>
-                    README
-                  </Link>{' '}
-                  into your agent, or follow host plugin steps in{' '}
-                  <Link href={DOCS_URL} isExternalLink>
-                    the docs
-                  </Link>
-                  . Existing Windows installs from Mental 0.8.1 or older run{' '}
-                  <Code size="inherit">mental-repair.cmd</Code> once after npm
-                  updates.
-                </Text>
               </VStack>
             </Section>
 

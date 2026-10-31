@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <title>Mental</title>
+    <link rel="icon" href="./favicon.png" type="image/png" sizes="32x32" />
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./fixture-shim.js"></script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <div class="app" id="app">
+      <nav class="rail" id="rail" aria-label="Views">
+        <a class="rail-brand" href="#/today" aria-label="Mental — Today">
+          <img src="./favicon.png" alt="" width="22" height="22" />
+          <span class="rail-label">Mental</span>
+        </a>
+        <ul class="rail-nav" id="rail-nav" role="list"></ul>
+        <div class="rail-foot">
+          <button type="button" class="rail-btn" id="rail-help" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts"></button>
+          <button type="button" class="rail-btn" id="rail-expand" title="Expand sidebar" aria-label="Expand sidebar" aria-expanded="false"></button>
+        </div>
+      </nav>
+
+      <div class="main-col">
+        <header class="topbar">
+          <div class="project-switch" id="project-switch">
+            <button type="button" class="project-btn" id="project-btn" aria-haspopup="listbox" aria-expanded="false">
+              <span class="project-dot" aria-hidden="true"></span>
+              <span class="project-name" id="project-name">Loading…</span>
+              <span class="project-caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="project-pop" id="project-pop" hidden>
+              <input type="search" id="project-filter" placeholder="Find a project…" autocomplete="off" aria-label="Find a project" />
+              <ul id="project-options" role="listbox" aria-label="Projects"></ul>
+            </div>
+            <select id="project" hidden aria-hidden="true" tabindex="-1"></select>
+          </div>
+          <nav class="crumbs" aria-label="Breadcrumb"><span id="crumb-view">Today</span></nav>
+          <div class="topbar-spacer"></div>
+          <span class="live" id="live" title="Read-only. Refreshes when you return to this tab.">
+            <span class="live-dot" aria-hidden="true"></span><span class="live-text">Read-only</span>
+          </span>
+          <button type="button" class="search-trigger" id="search-trigger" aria-label="Search and commands">
+            <span class="search-trigger-icon"></span>
+            <span class="search-trigger-text">Search or jump to…</span>
+            <kbd class="kbd" id="search-kbd">⌘K</kbd>
+          </button>
+          <button type="button" class="icon-btn" id="theme-toggle" aria-label="Toggle theme" title="Toggle theme"></button>
+        </header>
+
+        <div class="net-banner" id="net-banner" role="alert" hidden>
+          <span class="net-banner-dot" aria-hidden="true"></span>
+          <span id="net-banner-text">Can't reach the dashboard server.</span>
+          <button type="button" class="btn btn-ghost net-retry" id="net-retry">Retry</button>
+        </div>
+
+        <main id="main" class="views" tabindex="-1">
+          <section class="view" id="view-today" data-view="today" aria-labelledby="crumb-view" hidden></section>
+          <section class="view" id="view-attention" data-view="attention" hidden></section>
+          <section class="view" id="view-library" data-view="library" hidden></section>
+          <section class="view" id="view-decisions" data-view="decisions" hidden></section>
+          <section class="view view-map" id="view-map" data-view="map" hidden>
+            <div class="map-toolbar" id="map-toolbar"></div>
+            <div id="map-wrap">
+              <div id="map" role="img" aria-label="Map of decisions, attention, notes, and journals"></div>
+              <div id="map-empty" class="map-overlay-empty" hidden>
+                <span class="empty-icon" aria-hidden="true">🧠</span>
+                <p>Nothing to map yet</p>
+                <code class="empty-cmd">mental decide --title "…"</code>
+              </div>
+            </div>
+            <p class="map-help" id="map-help"></p>
+          </section>
+          <section class="view" id="view-sitdowns" data-view="sitdowns" hidden></section>
+          <section class="view" id="view-projects" data-view="projects" hidden></section>
+        </main>
+      </div>
+
+      <div class="scrim" id="scrim" hidden></div>
+      <div class="insp-deck" id="insp-deck" data-depth="0">
+        <button type="button" class="insp-ghost" data-n="2" tabindex="-1" aria-hidden="true"></button>
+        <button type="button" class="insp-ghost" data-n="1" tabindex="-1" aria-hidden="true"></button>
+      </div>
+      <aside class="inspector" id="inspector" aria-label="Item details" hidden>
+        <header class="insp-head">
+          <button type="button" class="icon-btn insp-back" id="insp-back" title="Back" aria-label="Back" hidden></button>
+          <div class="insp-kind" id="insp-kind"></div>
+          <div class="insp-actions">
+            <button type="button" class="icon-btn" id="insp-copy-path" title="Copy path" aria-label="Copy path"></button>
+            <button type="button" class="icon-btn" id="insp-copy-md" title="Copy markdown" aria-label="Copy markdown"></button>
+            <button type="button" class="icon-btn" id="insp-pin" title="Pin drawer" aria-label="Pin drawer" aria-pressed="false"></button>
+            <button type="button" class="icon-btn" id="insp-close" title="Close (Esc)" aria-label="Close"></button>
+          </div>
+        </header>
+        <nav class="insp-trail" id="insp-trail" aria-label="Drawer history" hidden></nav>
+        <div class="insp-scroll" id="insp-scroll">
+          <h2 class="insp-title" id="insp-title"></h2>
+          <p class="insp-path" id="insp-path"></p>
+          <div id="insp-fm"></div>
+          <article class="md" id="insp-body"></article>
+          <section class="insp-section" id="insp-why-wrap" hidden>
+            <h3 class="eyebrow">Why</h3>
+            <ul class="mini-list" id="insp-why" role="list"></ul>
+          </section>
+          <section class="insp-section" id="insp-backlinks-wrap" hidden>
+            <h3 class="eyebrow">Linked from</h3>
+            <ul class="mini-list" id="insp-backlinks" role="list"></ul>
+          </section>
+          <section class="insp-section" id="insp-related-wrap" hidden>
+            <h3 class="eyebrow">Related by tag</h3>
+            <ul class="mini-list" id="insp-related" role="list"></ul>
+          </section>
+        </div>
+      </aside>
+    </div>
+
+    <nav class="tabbar" id="tabbar" aria-label="Views"></nav>
+
+    <dialog class="palette" id="palette" aria-label="Command palette">
+      <div class="palette-box">
+        <div class="palette-input-row">
+          <span class="palette-icon" id="palette-icon"></span>
+          <input
+            type="text"
+            id="palette-input"
+            placeholder="Search items, projects, views…  (type > for commands)"
+            autocomplete="off"
+            spellcheck="false"
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="palette-list"
+            aria-autocomplete="list"
+          />
+          <kbd class="kbd">esc</kbd>
+        </div>
+        <ul class="palette-list" id="palette-list" role="listbox"></ul>
+        <footer class="palette-foot">
+          <span><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd> move</span>
+          <span><kbd class="kbd">⏎</kbd> open</span>
+          <span><kbd class="kbd">&gt;</kbd> commands</span>
+        </footer>
+      </div>
+    </dialog>
+
+    <dialog class="sheet-dialog" id="shortcuts" aria-labelledby="shortcuts-title">
+      <div class="sheet-box">
+        <header class="sheet-head">
+          <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+          <button type="button" class="icon-btn" id="shortcuts-close" aria-label="Close"></button>
+        </header>
+        <div class="shortcut-grid" id="shortcut-grid"></div>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
