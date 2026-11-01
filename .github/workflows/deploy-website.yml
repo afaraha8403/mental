@@ -1,18 +1,18 @@
 # Deploys website/ to the getmental Worker on Cloudflare.
-# Production deploys happen only in this workflow: a push to main that changes
-# the site, a published GitHub Release, or a manual run. Do not wrangler deploy
-# from a laptop. Auth is repo secrets, never committed:
+# A push to main waits until the CI matrix is green, then deploys only if that
+# commit changes the site or this workflow. A published GitHub Release and a
+# manual run deploy without that wait. Do not wrangler deploy from a laptop.
+# Auth is repo secrets, never committed:
 #   CLOUDFLARE_API_TOKEN  — "Edit Cloudflare Workers", scoped to this account
 #                           and the getmental.dev zone
 #   CLOUDFLARE_ACCOUNT_ID
 name: Deploy website
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
-    paths:
-      - "website/**"
-      - ".github/workflows/deploy-website.yml"
   release:
     types: [published]
   workflow_dispatch:
@@ -29,17 +29,44 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Decide whether this commit changes the site
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "workflow_run" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          sha="${{ github.event.workflow_run.head_sha }}"
+          files=$(gh api "repos/${GITHUB_REPOSITORY}/commits/${sha}" --jq '.files[].filename')
+          if printf '%s\n' "$files" | grep -Eq '^(website/|\.github/workflows/deploy-website\.yml)'; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require the test matrix
+        if: github.event_name == 'workflow_run' && steps.gate.outputs.deploy == 'true'
+        run: test "${{ github.event.workflow_run.conclusion }}" = "success"
+
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.deploy == 'true'
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.deploy == 'true'
         with:
           node-version: 24
 
       - name: Install and build
+        if: steps.gate.outputs.deploy == 'true'
         working-directory: website
         run: npm ci && npm run build
 
       - name: Browser checks
+        if: steps.gate.outputs.deploy == 'true'
         working-directory: website
         run: |
           npx playwright install --with-deps chromium
@@ -52,6 +79,7 @@ jobs:
           node scripts/check-docs.mjs
 
       - name: Deploy to Cloudflare
+        if: steps.gate.outputs.deploy == 'true'
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
