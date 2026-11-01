@@ -16,13 +16,14 @@ const NAV = [
   {label: 'Privacy', href: '#privacy'},
   {label: 'Install', href: '#install'},
   {label: 'FAQ', href: '#faq'},
+  {label: 'Docs', href: '/docs'},
 ];
 
 function copyInstall() {
   void navigator.clipboard?.writeText(INSTALL_CMD);
 }
 
-export function SiteHeader() {
+export function SiteHeader({atHome = true}: {atHome?: boolean}) {
   const {mode, toggleMode} = useColorMode();
   const themeIcon = mode === 'dark' ? SunIcon : MoonIcon;
   const themeLabel =
@@ -41,7 +42,13 @@ export function SiteHeader() {
       centerContent={
         <>
           {NAV.map((item) => (
-            <TopNavItem key={item.href} label={item.label} href={item.href} />
+            <TopNavItem
+              key={item.href}
+              label={item.label}
+              href={
+                atHome || item.href.startsWith('/') ? item.href : `/${item.href}`
+              }
+            />
           ))}
         </>
       }

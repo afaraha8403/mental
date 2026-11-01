@@ -1,6 +1,7 @@
 import {Button} from '@astryxdesign/core/Button';
 import {Grid} from '@astryxdesign/core/Grid';
 import {Heading} from '@astryxdesign/core/Heading';
+import {HStack} from '@astryxdesign/core/HStack';
 import {Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/VStack';
 import {useEffect, useState} from 'react';
@@ -86,31 +87,54 @@ export function WorkCycle() {
   const shown = reduced ? BEATS : [BEATS[index]];
 
   return (
-    <VStack id="cycle" className="band" gap={5} width="100%">
-      <VStack gap={2} hAlign="start" maxWidth={640}>
-        <Heading level={2}>It already knows</Heading>
-        <Text color="secondary">
+    <VStack id="cycle" className="chapter reveal" gap={8} width="100%">
+      <HStack className="chapter-rule" gap={4} vAlign="center" width="100%">
+        <Text className="chapter-index">02</Text>
+        <Text className="chapter-label">The loop</Text>
+      </HStack>
+      <VStack className="chapter-head" gap={3} hAlign="start">
+        <Heading level={2} className="chapter-title">
+          It already knows
+        </Heading>
+        <Text className="chapter-lead">
           No pre-configuration. No commands to learn. After install, your agents use it on the next chat.
         </Text>
       </VStack>
-      <Grid columns={{minWidth: 280, max: 2}} gap={6} align="start" width="100%">
-        <VStack gap={4} width="100%">
+      <Grid columns={{minWidth: 300, max: 2}} gap={10} align="start" width="100%">
+        <VStack gap={0} width="100%">
           {BEATS.map((beat, beatIndex) => {
             const active = reduced || beatIndex === index;
             return (
-              <VStack key={beat.id} gap={2} hAlign="start" width="100%">
-                <Button
-                  label={beat.step}
-                  size="sm"
-                  variant={active ? 'primary' : 'ghost'}
-                  onClick={() => choose(beatIndex)}
-                />
-                <Text color={active ? 'primary' : 'secondary'}>{beat.claim}</Text>
+              <VStack
+                key={beat.id}
+                className={active ? 'beat beat-active' : 'beat'}
+                gap={3}
+                hAlign="start"
+                width="100%"
+              >
+                <HStack gap={4} vAlign="center">
+                  <Text className="beat-index">0{beatIndex + 1}</Text>
+                  <Button
+                    label={beat.step}
+                    size="sm"
+                    variant={active ? 'primary' : 'ghost'}
+                    onClick={() => choose(beatIndex)}
+                  />
+                </HStack>
+                <Text className="beat-claim">{beat.claim}</Text>
+                {active && !reduced && !paused ? (
+                  <Text key={index} className="beat-progress"
+                    aria-hidden="true"
+                    style={{animationDuration: `${BEAT_MS}ms`}}
+                  >
+                    {' '}
+                  </Text>
+                ) : null}
               </VStack>
             );
           })}
         </VStack>
-        <VStack gap={4} width="100%">
+        <VStack className="glow-frame" gap={4} width="100%">
           {shown.map((beat) => (
             <TerminalWindow
               key={beat.id}

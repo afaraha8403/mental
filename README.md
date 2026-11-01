@@ -172,7 +172,7 @@ Measured. Reproducible. `npm test` · `npm run bench`
 | | | |
 | ---: | --- | --- |
 | **0** | runtime npm dependencies | Node `>=22.13` |
-| **562** | automated tests | identity, search, install, MCP, optional track |
+| **532** | automated tests | identity, search, install, MCP, optional track |
 | **51 ms** | `mental heartbeat --json` | p50, fresh process |
 | **11 ms** | same pulse in-process | MCP after `mental serve` |
 | **46 ms** | search over **2,000** notes | **1.2 ms** in-process |
@@ -218,6 +218,9 @@ Only if you turn it on (`mental option track on`). Agents automatically record p
 | [Why Mental CLI](docs/why.md) | Contract, non-goals, architecture |
 | [The research](docs/research.md) | Verification load, supervisory work, 2024–2026 citations |
 | [Install Mental CLI](docs/install.md) | npm, plugins, clone, upgrade, doctor, uninstall |
+| [Dashboard](docs/dashboard.md) | Read-only localhost page over the same files |
+| [Host UIs](docs/hosts.md) | Claude Code mod and the Cursor sidebar |
+| [Decision models](docs/decide.md) | Optional model assist (`option decide`; `option jev` is an alias) |
 | [Optional time tracking](docs/track.md) | Sit-down clock; what hours can and cannot do |
 | [Mental CLI reference](docs/cli.md) | Commands, flags, exit codes |
 | [Mental CLI for agents](docs/agents.md) | `--json`, skill, MCP, receipts |

@@ -27,7 +27,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +38,18 @@ jobs:
       - name: Install and build
         working-directory: website
         run: npm ci && npm run build
+
+      - name: Browser checks
+        working-directory: website
+        run: |
+          npx playwright install --with-deps chromium
+          npm run preview &
+          for _ in $(seq 1 30); do
+            curl -sf -o /dev/null http://127.0.0.1:4321 && break
+            sleep 1
+          done
+          node scripts/check-landing.mjs
+          node scripts/check-docs.mjs
 
       - name: Deploy to Cloudflare
         uses: cloudflare/wrangler-action@v4

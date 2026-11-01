@@ -8,12 +8,12 @@ Two clones of the same origin share one brain until you split.
 
 | Situation | Command |
 | --- | --- |
-| This clone should use an existing UUID | `mental remap --to <uuid>` (or `mental link --to <uuid>`) |
+| This clone should use an existing UUID | `mental remap --to <uuid>` (`--from` is the same retarget) or `mental link --to <uuid>` |
 | This clone should diverge | `mental split` (`--copy` keeps OKF files) |
 | List bindings | `mental remap` |
 | Opt in to `./.mental` in this repo | `mental doctor --fix-ignore` then `mental local` |
 | Copy home slice into `./.mental` | `mental local --import` |
-| Same, and mark store=local | `mental local --move` |
+| Same, and mark store=local | `mental local --move` (`--delete-home` removes the home slice after the copy) |
 | Carry this HOME to another PC | `mental backup --out <dir>` then `mental restore --from <dir>` on the other machine |
 | Disaster: replace packed slices only | `mental restore --from <dir> --replace --confirm REPLACE` |
 
@@ -51,6 +51,8 @@ Same contract as the README table [What leaves your machine](../README.md#what-l
 ```text
 ~/.mental/
   bindings.json
+  config.json          # decision-model keys when you opt in
+  dashboard.json       # port file while `mental dashboard` is running
   projects/<uuid>/
     journal/YYYY-MM-DD.md
     decisions/

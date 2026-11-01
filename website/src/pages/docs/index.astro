@@ -1,0 +1,28 @@
+---
+import {getCollection, render} from 'astro:content';
+import {DocsFrame} from '../../components/DocsFrame';
+import Layout from '../../layouts/Layout.astro';
+import {DOC_NAV, SITE_URL} from '../../site';
+
+const docs = await getCollection('docs');
+const entry = docs.find((doc) => doc.id.toLowerCase() === 'readme');
+if (!entry) {
+  throw new Error('docs/README.md is not in the docs collection');
+}
+const {Content, headings} = await render(entry);
+const meta = DOC_NAV.find((item) => item.id === 'readme');
+const title = `${meta?.title ?? 'Docs'} · Mental CLI`;
+const canonical = `${SITE_URL}/docs`;
+---
+
+<Layout
+  title={title}
+  description="Install, commands, the dashboard, host panels, and decision models for Mental CLI."
+  canonical={canonical}
+>
+  <DocsFrame client:load current={entry.id} headings={headings}>
+    <article class="docs-prose">
+      <Content />
+    </article>
+  </DocsFrame>
+</Layout>

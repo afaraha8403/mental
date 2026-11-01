@@ -50,7 +50,7 @@ Layers never invert: files → resolver → CLI → index → skill / rule / hoo
 - Not a second `PLAN.md` — point at the plan with `--against`, do not copy it
 - Not a secret store
 - Not a hosted SaaS, vector database, or graph as source of truth
-- Not a standing TUI. `mental` prints a pulse and exits. Optional `mental dashboard` is a localhost page over the same read paths, not a terminal session.
+- Not a standing TUI. `mental` prints a pulse and exits. Optional `mental dashboard` is a localhost page over the same read paths, not a terminal session. Views and flags: [Dashboard](./dashboard.md). Claude and Cursor panels: [Host UIs](./hosts.md).
 - Not a reconstruction from git. Optional Track is a default-off automated project-time record: private/customer descriptions, wall/billable, and dated client export. [Track](./track.md).
 
 ## Vocabulary

@@ -15,7 +15,7 @@ mental where --json
 mental heartbeat --json
 ```
 
-`heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue (Needs eyes / In the air / Later), unsettled + settled (lists capped at 7; counts via `attentionCount` / `openDecisionCount` / `needsEyesCount` / `laterCount` / `guardrailCount` / `hopsToday`; `stale` lists decisions and attention untouched 14+ days). JSON also includes `id` and `mode`. Use `mental status --json` when you also need notes. Do not call `pulse` every turn. Flag grammar: `mental <cmd> --help` or `mental schema --json`. Unknown flags fail (`error.code` `unknown-flag`, `error.hint` lists legal flags). Journal requires `--resume` (same as park/handoff). Decide create requires `--body` (same `--title` without `--body` updates).
+`heartbeat` is the cheap mid-chat reload: resume, last outcome, git, hops today, residue (Needs eyes / In the air / Later), unsettled + settled (lists capped at 7; counts via `attentionCount` / `needYouCount` / `agingCount` / `directionCount` / `freshEyesCount` / `openDecisionCount` / `needsEyesCount` / `laterCount` / `guardrailCount` / `hopsToday`; `stale` lists decisions and attention untouched 14+ days). JSON also includes `id` and `mode`. `--fields` keeps only the named keys. Use `mental status --json` when you also need notes. Do not call `pulse` every turn. Flag grammar: `mental <cmd> --help` or `mental schema --json`. Unknown flags fail (`error.code` `unknown-flag`, `error.hint` lists legal flags). Journal requires `--resume` (same as park/handoff). Decide create requires `--body` (same `--title` without `--body` updates). Create for `decide`, `attention`, and `note` also requires `--tag` (1–3 topic slugs). Omit `--tag` on update. Do not pass `--tag` on park or journal.
 
 If JSON includes `data.track.enabled`, follow the Mental Track skill. `track start --via <host>` if `runningCount` is 0 (start twice is ensure-running). If tracking is off, do not enable it. After `mental install` or `mental doctor`, ask about optionals (`needsConsent: true`) with a one-liner each: hooks (session-start status), MCP (`mental serve` for clients that cannot shell the CLI), time tracking (per-project sit-down clock). Check whether MCP is needed. Never run `mental option … on` or `install --hooks|--mcp|--track` until the user says yes **this turn**.
 
@@ -68,7 +68,7 @@ Mid-chat, not just start/finish:
 | --- | --- | --- |
 | Claude Code | `~/.claude/rules/mental.md` | body, no `paths:` (loads every session) |
 | Claude Code | `~/.claude/CLAUDE.md` managed block | body (kept for older Claude Code and OpenCode fallback) |
-| Cursor | `~/.cursor/rules/mental.mdc` | `.mdc` with `alwaysApply: true` — Cursor 2.1+ loads this; `doctor` fails if missing |
+| Cursor | `~/.cursor/rules/mental.mdc` | `.mdc` with `alwaysApply: true`. `doctor` fails if this file is missing, unless the Cursor plugin already ships the rule. If both exist, `doctor` warns that Cursor loads the rule twice, and `mental install` drops the home copy |
 | Cursor | `.cursor/rules/mental.mdc` | same `.mdc`, only with `mental install --project` (project-only; no home recopy; Cloud/CLI / git-shared; `doctor` warns) |
 | Codex | `~/.codex/AGENTS.md` managed block | body |
 | OpenCode | `~/.config/opencode/AGENTS.md` managed block | body, **only if that file already exists** (creating it would drop the CLAUDE.md fallback) |
@@ -124,7 +124,7 @@ When **releasing this repo**, git tag `vX.Y.Z`, `package.json`, and `npm view @b
 
 ## In-session panel (Claude Desktop)
 
-The plugin ships `claude-mod/`, a Claude Code **mod**: an ES module that draws UI inside the host. It is a host UI API, not MCP, and it only reads: `mental heartbeat --json --passive`, `mental list --json`, `mental show <path> --json`. The surface decides the look: `desktop` gets rich cards and a footer button, the terminal gets the plain text pane, `mobile` is left alone. Park and Hand off send a prompt so the agent writes through the skill. Hide dismisses a concern from the footer only.
+The plugin ships `claude-mod/`, a Claude Code **mod**: an ES module that draws UI inside the host. It is a host UI API, not MCP, and it only reads: `mental heartbeat --json --passive`, `mental brief --json --hops 8` when the Desktop pane is open, plus `mental list --json` and `mental show <path> --json`. The surface decides the look: `desktop` gets rich cards and a footer button, the terminal gets the plain text pane, `mobile` is left alone. Park and Hand off send a prompt so the agent writes through the skill. Hide dismisses a concern from the footer only. User steps: [Host UIs](./hosts.md). The localhost page: [Dashboard](./dashboard.md).
 
 Details for editing it live in [`.cursor/rules/claude-mod.mdc`](../.cursor/rules/claude-mod.mdc). Validate with `claude plugin validate . --strict`. Codex and DeepSeek panels are separate, later work, one host at a time.
 
@@ -133,11 +133,11 @@ Details for editing it live in [`.cursor/rules/claude-mod.mdc`](../.cursor/rules
 Default **off**. Skill + rule are enough for agents that can shell.
 
 ```bash
-mental serve            # stdio: heartbeat, pulse, where, status, search, list, show, park, handoff, journal, attention, decide, note
+mental serve            # stdio: heartbeat, pulse, where, status, search, list, show, park, handoff, journal, attention, decide, note, why, brief, move, option, track
 mental install --mcp    # register in ~/.cursor/mcp.json + ~/.claude.json (+ ~/.codex/config.toml if present)
 ```
 
-MCP is how tool-only agents (parallel sessions, orchestrators) re-pulse and record mid-chat. Tools wrap the same handlers as the CLI. Search/list accept `type` / `status` / `tag` / `kind`. Tool JSON is compact. `mental uninstall` removes only Mental’s MCP entry.
+MCP is how tool-only agents (parallel sessions, orchestrators) re-pulse and record mid-chat. Tools wrap the same handlers as the CLI. Search/list accept `type` / `status` / `tag` / `kind`. Tool JSON is compact. `option` is a tool, but decision-model keys are refused: the user sets those in a terminal. `mental uninstall` removes only Mental’s MCP entry. Contract: [Decision models](./decide.md).
 
 ## Optional hooks
 

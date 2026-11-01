@@ -31,38 +31,38 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | Command | What it does |
 | --- | --- |
 | `mental` | Heartbeat (TTY): resume, last outcome, git, hops today, Needs eyes, In the air, Later, unsettled + settled; then exit |
-| `mental heartbeat` | Same cheap reload; agents pass `--json`. Does not write the pulse watermark. With time tracking on it updates `last_seen` unless `--passive`. It may write `jev-hint.json` and `npm-latest.json`, and it may run a synchronous `npm view` (about 5s) when the update cache is stale, including on `--json`. `MENTAL_SKIP_UPDATE_CHECK=1` skips that. Delta is counts only. `hopsToday` is parks since local midnight. `later` / `laterCount` are `--status later` residue |
+| `mental heartbeat` | Same cheap reload; agents pass `--json`. Does not write the pulse watermark. With time tracking on it updates `last_seen` unless `--passive`. It may write `jev-hint.json` and `npm-latest.json`, and it may run a synchronous `npm view` (about 5s) when the update cache is stale, including on `--json`. `MENTAL_SKIP_UPDATE_CHECK=1` skips that. Delta is counts only. `hopsToday` is parks since local midnight. `later` / `laterCount` are `--status later` residue. JSON also includes `needYouCount`, `agingCount`, `directionCount`, and `freshEyesCount`. `--fields` keeps only the named keys |
 | `mental pulse` | Cross-project compact rows from `bindings.json` (id, name, resume, attentionCount, openDecisionCount). No journal bodies. Writes watermark for the active bundle |
 | `mental where` | Active bundle: `root`, `id`, `mode`, `reason`, `gitRoot` (read-only; does not create identity) |
 | `mental status` | Git + resume + residue + open/deferred decisions + notes; writes `status/current.md`; first write creates identity |
-| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`, `--project`, `--all-projects`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op`. Every backend matches word prefixes. Hits are ordered by type, then title weight, then path. A search rebuilds the index when files changed outside Mental |
+| `mental search <q>` | Query the derived index (`--type`, `--status`, `--tag`, `--kind`, `--any`, `--project`, `--all-projects`); journal hops as `path#HH:MM`; JSON includes `tokens` + `op`. Every backend matches word prefixes. Hits are ordered by type, then title weight, then path. A search rebuilds the index when files changed outside Mental. Pages of 50 via `--limit`, `--offset`, `--all`, plus `--since` and `--on` |
 | `mental list` | List concepts (`--type`, `--status`, `--tag`, `--kind`, `--since`, `--on`; pages of 50 via `--limit`, `--offset`, `--all`; `--project <id\|name>` or `--all-projects` to cross projects) |
 | `mental move <path> --to <project>` | Re-file one attention/decision/note into another bound project, keeping timestamp, frontmatter and body; warns on dangling links |
 | `mental why <path\|sha\|path:line>` | Decisions and hops anchored to that path or commit, plus `Mental-Decision` trailers. JSON matches search: hits with path, type, title, head |
 | `mental show <path>` | One OKF file relative to the bundle root (includes `backlinks`; with a decision-model key also `suggestedLinks` and, for agent-directed text, `flags`; writes may add advisory `data.guard`) |
 | `mental relink [path] [--apply]` | Optional (needs a Jev key). Suggest links for a file, or the 5 most recent non-journal files, each labelled with how it relates (`supports`, `supersedes`, `contradicts`, `depends_on`; plain `related` is unlabelled). Dry run by default; `--apply` appends only high-confidence links under `## Related` (`- supersedes: [Title](path)`) |
-| `mental retag [path] [--apply] [--limit N]` | Optional (needs a Jev key). Propose one topic tag for untagged files from existing tags plus frequent title words (bootstrap, `*` marks a new topic). Dry run by default; `--apply` writes only the `tags:` line of confident matches. Never runs on the personal bundle |
+| `mental retag [path] [--apply] [--limit N]` | Optional (needs a Jev key). Propose one topic tag for untagged files from existing tags plus frequent title words (bootstrap, `*` marks a new topic). Dry run by default; `--apply` writes only the `tags:` line of confident matches. Does not run on the personal bundle unless `mental option decide personal on` |
 | `mental supersede <path> --by <newer>` / `mental obsolete <path>` (`--restore` undoes) | Mark a note or decision as replaced by a newer one, or no longer true. Only frontmatter changes (`status`, `superseded_by`); the file is kept and the newer one gets a `supersedes:` link. Journals are refused. Marked files leave the heartbeat, brief and open-decision lists and rank last in `search`. No model needed; `doctor` can also propose these marks (`--apply` writes) |
 | `mental brief [--hops N] [--find WORD] [--since park|handoff]` | Read-only continue packet for a new agent or chat: resume, last hop, git, capped residue, open decisions, recent hops. With a decision-model key residue is ordered by relevance and irrelevant items are hidden; `--no-rank` skips the model. Also an MCP tool |
 | `mental extract <file\|-> [--apply --tag slug]` | Optional (needs a Jev key). Propose actions, decisions and concerns from pasted meeting notes. Dry run by default; `--apply` writes them (needs `--tag`). The raw text is never stored |
 | `mental search <q> --rank` | Optional (needs a key). Re-order hits by relevance, favoring the file type the question points at (decision, attention, note); never drops a hit. With zero hits and a key, `search` also lets the model read the freshest files (`broad: true`) |
 | `mental reindex` | Rebuild `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.sqlite` |
 | `mental park --resume` | Encode at an interruption (default title `"Parked"`). Optional `--attention` + `--kind` (and `--from`, `--against`, `--via`, `--ref`). Requires `--resume`. Then heartbeat; writes watermark |
-| `mental handoff --share <dir>` | After the journal entry, pack this one project (never personal files or hours) into a directory outside the worktree, with `HANDOFF.md` |
-| `mental import <dir>` | Merge a share into the binding with the same git origin. A second import does not duplicate hops |
+| `mental handoff --share <dir>` | After the journal entry, pack this one project (never personal files or hours) into a directory outside the worktree, with `HANDOFF.md`. `--since YYYY-MM-DD` limits journal days. `--no-journal` packs decisions and residue only. `--allow-secrets` writes the pack even if a credential shape is present |
+| `mental import <dir>` | Merge a share into the binding with the same git origin. A second import does not duplicate hops. `--allow-secrets` merges even if a credential shape is present |
 | `mental option trailer on` | Install `prepare-commit-msg` (chains an existing hook). It appends `Mental-Decision: <id>/<path>` and never fails the commit. Default off |
 | `mental trailer` | Read-only list of those trailers. The hook calls it |
 | `mental handoff --title --resume` | Planned boundary: journal then heartbeat. Both flags required. JSON `{ path, heartbeat }`. Writes watermark. `--via` optional |
 | `mental journal --title --body --resume [--against] [--via]` | Append today’s journal section. `--resume` is required (same as park/handoff) |
 | `mental schema [command]` | Dump the command catalog as JSON (`mental schema heartbeat --json` for one command) |
 | `mental completion bash\|zsh\|fish` | Print a completion script (do not auto-write shell rc files) |
-| `mental attention --title --kind` | Create or update residue (`direction` \| `concern` \| `thread` \| `verify`; `--status later` is come-back-to-this, not a note; `--status resolved` closes). `--via` optional |
-| `mental decide --title --body` | Create or update a decision. Create requires `--body` (the why). Same `--title` without `--body` updates; `--status decided` closes by title; `--path` targets a file. `--via` optional |
-| `mental note --title` | Scaffold a durable fact (not "come back to this" — that is `attention --status later`) |
+| `mental attention --title --kind` | Create or update residue (`direction` \| `concern` \| `thread` \| `verify`; `--status later` is come-back-to-this, not a note; `--status resolved` closes). Create requires `--tag` (1–3 topic slugs). Omit `--tag` on update. `--via` optional |
+| `mental decide --title --body` | Create or update a decision. Create requires `--body` (the why) and `--tag` (1–3 topic slugs). Same `--title` without `--body` updates; omit `--tag` on update so existing tags stay. `--status decided` closes by title; `--path` targets a file. `--via` optional |
+| `mental note --title` | Scaffold a durable fact (not "come back to this" — that is `attention --status later`). Create requires `--tag` (1–3 topic slugs) |
 | `mental move <path> --to <project>` | Re-file one attention/decision/note into another bound project's bundle, keeping timestamp and body. Same as `attention --title … --move-to <project>`. Warns about dangling links; a name clash gets `-2` |
 | (create commands) `--project <id\|name>` | `attention`, `decide` and `note` can file into another bound project from any cwd (never `journal`/`park`/`handoff`) |
-| `mental local [--import \| --move]` | Project `./.mental` after ignore check |
-| `mental remap [--to id]` | List or retarget this clone’s UUID |
+| `mental local [--import \| --move]` | Project `./.mental` after ignore check. `--move --delete-home` removes the home slice after the copy |
+| `mental remap [--to id]` | List or retarget this clone’s UUID. `--from <id>` is the same retarget as `--to` |
 | `mental split [--copy]` | New UUID for this clone (`mental new` is an alias) |
 | `mental link --to <id>` | Point this clone at an existing UUID |
 | `mental backup --out <dir>` | Pack this HOME's OKF + identities into a portable directory (outside the git worktree; no sqlite, no hours, no machine paths). Default includes personal |
@@ -72,23 +72,25 @@ Non-TTY (pipes, agents) with no args prints help and exits 2. `mental --json` wi
 | `mental option` | List or set optional features (`track` per UUID; `mcp` / `hooks` user-global). `--all` sets track default on. `--this` before a UUID is usage |
 | `mental track` | Optional automated project-time record (off until `option track on`): private/customer copy, wall/billable, several clocks, dated client export. [Full contract](./track.md) |
 | `mental hooks on\|off` | Optional session hooks (default off; alias of `option hooks`) |
-| `mental option decide [status\|on\|off\|key <KEY>\|key -\|key clear\|provider <P>\|url\|model\|account <v>\|fallback <P\|off>\|personal on\|off\|budget <tokens/day>\|budget off] [--provider P]` | Optional [decision-model](../README.md#decision-models-optional) assist: TypeSafe Jev, OpenAI Decisions, Cloudflare Clef or a custom endpoint. Status (with today's usage), mute, store keys (config only, mode 0600, never env), pick the active provider and a fallback, allow or block personal-slice notes, cap daily input tokens. `option jev` is an alias. Never in MCP |
+| `mental option decide [status\|on\|off\|key <KEY>\|key -\|key clear\|provider <P>\|url\|model\|account <v>\|fallback <P\|off>\|personal on\|off\|budget <tokens/day>\|budget off] [--provider P]` | Optional [decision model](./decide.md): TypeSafe Jev, OpenAI Decisions, Cloudflare Clef, or a custom endpoint. Status (with today's usage), mute, store keys (config only, mode 0600, never env), pick the active provider and a fallback, allow or block personal-slice notes, cap daily input tokens. `option jev` is an alias. Never in MCP |
 | `mental serve` | Optional MCP stdio (session verbs: heartbeat, journal, park, …). Identity/setup stay CLI |
-| `mental dashboard` | Optional read-only localhost explorer (`127.0.0.1:3847`; busy port falls back unless `--port` is set). Opens on where you left off, then a catalog, 3D mind map, or sit-down timeline beside the open file. Track clocks stay collapsed until opened. `--no-open` prints the URL. Loopback only; GET/HEAD; no CORS. Agents still `--json` |
-| `mental doctor` | PATH, bindings, ignore, skills, npm update, host plugin / skill-copy lag, decision budget, stale residue, `optionals[]`, `time.sqlite` never git-tracked (exit 3). `--fix` recopies home skills/rules and git excludes (never `--project` or optionals). `--fix-ignore` is ignore-only. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns). TTY: ✓ ok, ⚠ failed warn, ✖ error; ASCII fallback OK / ! / X. Footer `next:` is a portable command (no `&&`). JSON `data.next`. `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips host CLIs. With a [Jev](#jev-optional) key it also runs warn-only content checks (`jev-stale`, `jev-decisions`, `jev-handoff`, `jev-untagged`, `jev-secrets`, plus a `jev` self-check); `--offline` skips them. With a key, plain `doctor` also previews model-proposed tags and links for historical files (`jev-repair`); `--apply` writes them, `--limit N` files per run (default 10, max 200, progress resumes). Personal-slice notes are never sent. |
+| `mental dashboard` | Optional read-only localhost explorer (`127.0.0.1:3847`; a busy port falls back unless `--port` is set). Views: Today, Attention, Library, Decisions, Map, Sit-downs (track on), All projects. `--no-open` prints the URL. `--idle-exit` quits after idle minutes. Loopback only; GET/HEAD; no CORS. Full page: [Dashboard](./dashboard.md). Agents still `--json` |
+| `mental doctor` | PATH, bindings, ignore, skills, npm update, host plugin / skill-copy lag, decision budget, stale residue, `optionals[]`, `time.sqlite` never git-tracked (exit 3). `--fix` recopies home skills/rules and git excludes (never `--project` or optionals). `--fix-ignore` is ignore-only. `--days <n>` overrides the 14-day stale threshold (warn only; exit 0 if only warns). TTY: ✓ ok, ⚠ failed warn, ✖ error; ASCII fallback OK / ! / X. Footer `next:` is a portable command (no `&&`). JSON `data.next`. `MENTAL_SKIP_HOST_PLUGIN_CHECK=1` skips host CLIs. With a [decision-model](./decide.md) key it also runs warn-only content checks (`jev-stale`, `jev-decisions`, `jev-handoff`, `jev-untagged`, `jev-secrets`, plus a `jev` self-check); `--offline` skips them. With a key, plain `doctor` also previews model-proposed tags and links for historical files (`jev-repair`); `--apply` writes them, `--limit N` files per run (default 10, max 200, progress resumes). Personal-slice notes are not sent unless `mental option decide personal on`. |
 
 ## Writes
 
 Same `--title` updates the existing decision or attention file (paths are identities). `--path` targets a specific file.
 
+Create for `decide`, `attention`, and `note` requires `--tag` (1–3 topic slugs). Omit `--tag` when the same title updates an existing file. Do not pass `--tag` on `journal` or `park`.
+
 ```bash
 mental journal --title "What landed" --body "Evidence git cannot see." --resume "Exact next action — open loops: none" --against PLAN.md --via cursor
-mental decide --title "Heartbeat only, no standing TUI" --body "Default TTY mental prints a one-shot heartbeat and exits." --status decided --via cursor
-mental attention --title "Tom said ship the pointer not the dump" --kind direction --from Tom --via cursor
-mental attention --title "Come back to MCP" --kind thread --status later --via cursor
-mental attention --title "Resolver tests not reviewed" --kind verify --via cursor
+mental decide --title "Heartbeat only, no standing TUI" --body "Default TTY mental prints a one-shot heartbeat and exits." --status decided --tag continuity --via cursor
+mental attention --title "Tom said ship the pointer not the dump" --kind direction --from Tom --tag continuity --via cursor
+mental attention --title "Come back to MCP" --kind thread --status later --tag continuity --via cursor
+mental attention --title "Resolver tests not reviewed" --kind verify --tag continuity --via cursor
 mental attention --title "Tom said ship the pointer not the dump" --status resolved
-mental note --title "Identity is a UUID in bindings.json"
+mental note --title "Identity is a UUID in bindings.json" --tag continuity
 mental track start --title-internal "Auth callback" --via cursor
 mental park --resume "Exact next action — open loops: none"
 mental track report --since 2026-08-01 --until 2026-08-31
@@ -148,4 +150,4 @@ Pulse watermark: `${XDG_CACHE_HOME:-~/.cache}/mental/<uuid>.pulse.json` (`{ at: 
 
 Heartbeat lists (attention and open decisions) are capped at 7; JSON includes `attentionCount` / `openDecisionCount` / `laterCount`. Extra later: `mental list --type Attention --status later`. Extra open decisions: `mental list --type Decision --status open`. JSON `stale` (and a `Stale (> 14d)` text block) lists open/deferred decisions and open/later attention untouched for 14+ days, oldest first, capped at 5 per kind with a true `count`.
 
-See [identity](./identity.md) for UUID / local / leftover import, [agents](./agents.md) for the `--json` contract, and [optional time tracking](./track.md) for what hours can and cannot do.
+See [identity](./identity.md) for UUID / local / leftover import, [agents](./agents.md) for the `--json` contract, [dashboard](./dashboard.md) for the localhost page, [decision models](./decide.md) for optional model assist, and [optional time tracking](./track.md) for what hours can and cannot do.

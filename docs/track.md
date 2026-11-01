@@ -98,10 +98,14 @@ Customer export fails with `needs-customer-copy` instead of writing a partial fi
 
 ```bash
 mental track --json                          # glance: running + today (not a focus ping)
+mental track focus --id <id> --json          # make that running clock the focused one
+mental track discard --json                  # drop the focused clock (wall and billable become 0:00)
 mental track --history --json                # nested tasks[] history (large)
 mental track report --since YYYY-MM-DD --until YYYY-MM-DD --json
 mental track export --external --project Acme --out /tmp/invoice.csv --json
 ```
+
+`focus` needs a running interval id from glance. `discard` with no `--id` drops the focused interval. Discarded time is not billed.
 
 `--from` / `--to` are remap/attention, not dates. Use `--since` / `--until`.
 

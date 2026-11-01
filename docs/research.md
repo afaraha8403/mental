@@ -78,6 +78,6 @@ We do not lead the product story with 1998–2011 interruption studies. Those pa
 | Control, don’t vibe (Huang) | **Settled** = newest decided titles on the pulse (cap 7, titles only) |
 | Job resource vs demand dump (Feng) | Fail open; never auto-journal every turn; hooks off by default |
 
-Demoted (not shipped): episodic git cue, `mental why`. The four research-shaped items above shipped in [Unreleased]; trail: [issue #5](https://github.com/afaraha8403/mental/issues/5).
+`mental why` ships. It lists decisions and hops anchored to a path, a commit, or `path:line`, plus `Mental-Decision` trailers. Trail: [issue #5](https://github.com/afaraha8403/mental/issues/5).
 
 Citations stay on this page so the README can stay a landing page.

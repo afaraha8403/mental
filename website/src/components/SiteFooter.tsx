@@ -14,15 +14,13 @@ import {
 
 export function SiteFooter() {
   return (
-      <VStack gap={4} paddingBlock={8}>
+      <VStack className="site-footer" gap={4} paddingBlock={8}>
         <Divider />
         <HStack gap={4} wrap>
           <Link href={README_URL} isExternalLink>
             README
           </Link>
-          <Link href={DOCS_URL} isExternalLink>
-            Docs
-          </Link>
+          <Link href={DOCS_URL}>Docs</Link>
           <Link href={GITHUB_URL} isExternalLink>
             GitHub
           </Link>

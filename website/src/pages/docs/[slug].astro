@@ -1,0 +1,39 @@
+---
+import {getCollection, render} from 'astro:content';
+import {DocsFrame} from '../../components/DocsFrame';
+import Layout from '../../layouts/Layout.astro';
+import {DOC_NAV, SITE_URL} from '../../site';
+
+export async function getStaticPaths() {
+  const docs = await getCollection('docs');
+  return docs
+    .filter((doc) => doc.id.toLowerCase() !== 'readme')
+    .map((doc) => ({
+      params: {slug: doc.id},
+      props: {id: doc.id},
+    }));
+}
+
+const {id} = Astro.props;
+const docs = await getCollection('docs');
+const entry = docs.find((doc) => doc.id === id);
+if (!entry) {
+  throw new Error(`missing docs entry ${id}`);
+}
+const {Content, headings} = await render(entry);
+const meta = DOC_NAV.find((item) => item.id === id);
+const title = `${meta?.title ?? id} · Mental CLI`;
+const canonical = `${SITE_URL}/docs/${id}`;
+---
+
+<Layout
+  title={title}
+  description={`${meta?.title ?? id} for Mental CLI.`}
+  canonical={canonical}
+>
+  <DocsFrame client:load current={id} headings={headings}>
+    <article class="docs-prose">
+      <Content />
+    </article>
+  </DocsFrame>
+</Layout>

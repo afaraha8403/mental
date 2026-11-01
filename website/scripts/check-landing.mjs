@@ -8,7 +8,11 @@ const origin = process.env.SITE_ORIGIN || 'http://127.0.0.1:4321';
 const RESUME = 'Ship the pointer, not the dump';
 
 const browser = await chromium.launch();
-const page = await browser.newPage({viewport: {width: 1440, height: 900}});
+const context = await browser.newContext({
+  viewport: {width: 1440, height: 900},
+  permissions: ['clipboard-read', 'clipboard-write'],
+});
+const page = await context.newPage();
 const failures = [];
 
 function fail(message) {
@@ -48,6 +52,55 @@ try {
   for (const command of ['npm i -g @balacode/mental', 'mental install', 'mental doctor']) {
     if (!order.installText.includes(command)) fail(`#install missing ${command}`);
   }
+
+  const chapters = await page.locator('.chapter').evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      id: node.id,
+      index: node.querySelector('.chapter-index')?.textContent?.trim() ?? '',
+      label: node.querySelector('.chapter-label')?.textContent?.trim() ?? '',
+    })),
+  );
+  const expectedChapters = [
+    ['tax', '01', 'The tax'],
+    ['cycle', '02', 'The loop'],
+    ['pulse', '03', 'The pulse'],
+    ['attention', '04', 'The residue'],
+    ['claude', '05', 'In the host'],
+    ['privacy', '06', 'The ledger'],
+    ['faq', '07', 'FAQ'],
+  ];
+  const chapterKey = chapters.map((chapter) => `${chapter.id}:${chapter.index}:${chapter.label}`).join('|');
+  const expectedKey = expectedChapters.map((chapter) => chapter.join(':')).join('|');
+  if (chapterKey !== expectedKey) fail(`chapters were ${chapterKey}`);
+
+  const figures = (await page.locator('.stat-figure').allTextContents()).map((text) => text.trim());
+  if (figures.join(',') !== '+20%,−19%,74%') fail(`stat figures were ${figures.join(',')}`);
+
+  const hosts = await page.locator('.marquee').innerText();
+  for (const host of ['Claude Code', 'Cursor', 'GitHub Copilot']) {
+    if (!hosts.includes(host)) fail(`host strip missing ${host}`);
+  }
+
+  const states = (await page.locator('.ledger-state').allTextContents()).map((text) => text.trim());
+  if (states.join(',') !== 'Stays here,Optional,Opt-in') fail(`ledger states were ${states.join(',')}`);
+  const privacyHref = await page.locator('#privacy a').getAttribute('href');
+  if (privacyHref !== '/docs/identity') fail(`privacy href was ${JSON.stringify(privacyHref)}`);
+
+  const finale = (await page.locator('.finale-word').innerText()).trim();
+  if (finale !== 'mental') fail(`finale was ${JSON.stringify(finale)}`);
+
+  await page.locator('#install').getByRole('button', {name: 'Copy'}).first().click();
+  try {
+    await page.waitForFunction(
+      () => navigator.clipboard.readText().then((text) => text === 'npm i -g @balacode/mental'),
+      null,
+      {timeout: 3000},
+    );
+  } catch {
+    fail('copy did not put the install command on the clipboard');
+  }
+  const demoSrc = await page.locator('#top iframe').getAttribute('src');
+  if (!demoSrc?.includes('theme=dark')) fail(`demo src was ${JSON.stringify(demoSrc)}`);
 
   const iframe = page.locator('#top iframe');
   const frame = page.frames().find((entry) => {
@@ -94,6 +147,10 @@ try {
   if (!mobileBox || mobileBox.height < 400) {
     fail(`mobile iframe height ${mobileBox ? mobileBox.height : 'missing'}`);
   }
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  if (overflow > 1) fail(`mobile home overflows by ${overflow}px`);
 } catch (err) {
   fail(err instanceof Error ? err.message : String(err));
 } finally {

@@ -9,7 +9,7 @@ const PULSE: TermRow[] = [
   {kind: 'blank'},
   {kind: 'pair', label: 'Now', value: 'Resolver landed (17:27)'},
   {kind: 'pair', label: 'Git', value: 'cursor/marketing-website-aac0 (dirty)'},
-  {kind: 'sub', text: '212b5b1 Release 0.13.3'},
+  {kind: 'sub', text: '212b5b1 Release 0.14.0'},
   {kind: 'pair', label: 'Hops', value: '0'},
   {kind: 'blank'},
   {kind: 'pair', label: 'Needs eyes', value: '[verify] Resolver tests not reviewed'},

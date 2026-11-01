@@ -384,7 +384,21 @@ function setTheme(next) {
   paintThemeButton();
 }
 
+function themeLock() {
+  const value = new URLSearchParams(location.search).get("theme");
+  return value === "light" || value === "dark" ? value : null;
+}
+
 function initTheme() {
+  // ?theme= is the marketing sample. It wins over a saved choice and over the OS,
+  // and the in-frame toggle stays hidden so it cannot drift from the page.
+  const locked = themeLock();
+  if (locked) {
+    document.documentElement.dataset.theme = locked;
+    const btn = $("#theme-toggle");
+    btn.hidden = true;
+    return;
+  }
   const saved = store.get(THEME_KEY);
   if (saved === "light" || saved === "dark") document.documentElement.dataset.theme = saved;
   paintThemeButton();

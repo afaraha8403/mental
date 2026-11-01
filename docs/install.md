@@ -163,6 +163,8 @@ After a release: `claude plugin marketplace update mental` then `claude plugin u
 
 The panel reads `mental heartbeat --json --passive`. `--passive` does not ping a running Track timer. Older Claude builds ignore the mod and the rest of the plugin works. `mental doctor` reports `claude-panel` with the Claude Code version it found on PATH (Claude Desktop bundles its own; use `/status` there). To try it from a checkout: in a terminal, `claude --plugin-dir /path/to/mental`; in Claude Desktop, add `"env": { "CLAUDE_CODE_PLUGIN_DIRS": "/path/to/mental" }` to `~/.claude/settings.json` and restart the app. Then type `/mental`.
 
+The panel contract, the Cursor sidebar, and the localhost page: [Host UIs](./hosts.md), [Dashboard](./dashboard.md). Decision-model keys: [Decision models](./decide.md).
+
 **VS Code** — Command Palette → **Chat: Install Plugin From Source**, then `https://github.com/afaraha8403/mental`.
 
 **GitHub Copilot CLI:**

@@ -8,9 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changes
+- The production site deploy runs the homepage and docs browser checks before it publishes.
+- The homepage is redesigned as numbered chapters. It opens with a large headline over a teal glow, a three-line install card, and a sample dashboard that settles flat as you scroll. It then shows a list of supported agents, the research figures on lost context, the install-to-pulse loop, a breakdown of what the pulse shows, a privacy section on what leaves the machine, and a closing install call.
+- Docs pages group the sidebar into Start, Surfaces, Reference, and Background. Each page adds an "On this page" outline that tracks scroll position, previous and next links, and an "Edit on GitHub" link. Code blocks, tables, and callouts are restyled.
+- Docs on the site cover the dashboard, the Claude Code mod, the Cursor sidebar, and decision models. Create commands in the CLI docs require `--tag`. Personal notes stay off the model unless `option decide personal on`.
+- Docs pages keep a full-width column on a phone, mark each section with an icon, and show bullets and numbers in the article.
+- The homepage marks each section with an icon, and numbers the install commands and the three-step cycle.
+- The site version and the sample pulse show 0.14.0.
 - The homepage states the value first, puts install above an interactive sample dashboard, and describes the Claude Code mod.
 - The homepage stays in a fixed column: a contained sample dashboard, then the out-of-the-box session (no pre-configuration, no command list, agents already know it).
 - The pulse is a terminal of that sample session, and attention and decisions are live views.
+- The sample dashboard follows the page's light or dark mode, not the operating system.
 
 ## [0.14.0] - 2026-10-30
 
