@@ -25,7 +25,7 @@ try {
   }
 
   await docsLinks.first().click();
-  await page.waitForURL('**/docs');
+  await page.waitForURL((url) => url.pathname === '/docs' || url.pathname === '/docs/');
   const hub = await page.locator('h1').first().innerText();
   if (!hub.includes('Mental CLI docs')) fail(`hub h1 was ${JSON.stringify(hub)}`);
   const groups = await page.locator('.docs-nav-group .docs-nav-heading').allTextContents();
@@ -42,7 +42,7 @@ try {
   for (const [label, path, needle] of pages) {
     if (!hubHtml.includes(`href="${path}"`)) fail(`hub article missing ${path}`);
     await page.locator('.docs-nav').getByRole('link', {name: label, exact: true}).click();
-    await page.waitForURL(`**${path}`);
+    await page.waitForURL((url) => url.pathname.replace(/\/$/, '') === path);
     const body = await page.locator('article').innerText();
     if (!body.includes(needle)) fail(`${path} missing ${JSON.stringify(needle)}`);
     const attention = await page.getByRole('link', {name: 'Attention', exact: true}).getAttribute('href');

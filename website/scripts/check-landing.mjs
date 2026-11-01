@@ -104,7 +104,9 @@ try {
 
   const iframe = page.locator('#top iframe');
   const frame = page.frames().find((entry) => {
-    return /\/demo\/index\.html/.test(entry.url()) && !entry.url().includes('embed');
+    const url = entry.url();
+    // Cloudflare redirects /demo/index.html to /demo/ and keeps the query.
+    return /\/demo\/(?:index\.html)?(?:\?|#|$)/.test(url) && !url.includes('embed');
   });
   if (!frame) fail('demo iframe document did not load');
   else {
