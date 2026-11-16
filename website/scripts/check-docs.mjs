@@ -28,6 +28,10 @@ try {
   await page.waitForURL((url) => url.pathname === '/docs' || url.pathname === '/docs/');
   const hub = await page.locator('h1').first().innerText();
   if (!hub.includes('Mental CLI docs')) fail(`hub h1 was ${JSON.stringify(hub)}`);
+  const hubLead = (await page.locator('article > p').first().innerText()).trim();
+  if (hubLead !== 'Git records what changed. Mental records the resume. Your agents write it. You type mental.') {
+    fail(`hub lead was ${JSON.stringify(hubLead)}`);
+  }
   const groups = await page.locator('.docs-nav-group .docs-nav-heading').allTextContents();
   if (groups.join(',') !== 'Start,Surfaces,Reference,Background') {
     fail(`doc groups were ${groups.join(',')}`);

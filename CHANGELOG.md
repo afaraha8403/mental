@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changes
+- The docs hub opens with the same sentence as the homepage, and the title sits closer to that lead.
 - The homepage hero uses a short lead and real space between the title, the lead, and the install card.
 - The homepage is a left-aligned editorial page: no glow, no scrolling host strip, and no giant wordmark. It opens in light unless a theme was already saved.
 - The homepage now leads with what Mental is, a real sample session, and the install commands, and the research figures moved below the product.

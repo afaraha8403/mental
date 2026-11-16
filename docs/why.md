@@ -1,12 +1,14 @@
 # Why Mental CLI
 
+Git records what changed. Mental records the resume, the decision git cannot explain, and what is still in the air.
+
 You should not have to reconstruct a project from chat history.
 
 That reconstruction is the fatigue: mental fry from orchestrating several projects and several agents. The 2024–2026 literature calls the mechanisms **supervisory engineering work**, **verification load**, and **stealth context switching**. Mental CLI is the external cue that hop needs — the control surface git cannot see.
 
 Git already records **what** changed. The expensive part of a hop — a weekend, a new agent, a second clone — is the rest: where you left off, why a decision was made, what is still in the air, and the next exact action. That is the only thing Mental stores.
 
-Write for the human who comes back in two weeks. **The agent is the scribe** — after install, agents call the CLI while you work. You do not have to journal by hand. **I type mental.** You type `mental` for the pulse.
+Write for the human who comes back in two weeks. **The agent is the scribe** — after install, agents call the CLI while you work. You do not have to journal by hand. You type `mental` for the pulse.
 
 Citations: [The research](./research.md).
 

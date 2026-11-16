@@ -1,6 +1,6 @@
 # Mental CLI docs
 
-Mental CLI is a local-first continuity layer for you and your coding agents. **I type mental.** This hub is the map. The [README](../README.md) is the landing page.
+Git records what changed. Mental records the resume. Your agents write it. You type `mental`.
 
 ## Start here
 

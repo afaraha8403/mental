@@ -842,12 +842,12 @@ html[data-theme='light'] .astryx-button[data-variant='primary'] {
 }
 
 .docs-eyebrow {
-  margin-bottom: calc(var(--spacing-8) * -1);
+  margin-bottom: calc(var(--spacing-4) - var(--spacing-10));
   font-family: var(--font-family-code);
   font-size: 0.75rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--color-text-accent);
+  color: var(--color-text-tertiary);
 }
 
 .docs-pager {
@@ -910,20 +910,25 @@ html[data-theme='light'] .astryx-button[data-variant='primary'] {
 }
 
 .docs-prose h1 {
-  font-size: clamp(2.25rem, 4.5vw, 3.25rem);
+  font-size: clamp(2rem, 3.2vw, 2.5rem);
   font-weight: 650;
-  line-height: 1.05;
-  letter-spacing: -0.04em;
-  margin-bottom: var(--spacing-5);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  margin-bottom: var(--spacing-6);
 }
 
 .docs-prose > h1 + p {
-  font-size: 1.1875rem;
-  line-height: 1.6;
+  max-width: 36rem;
+  font-size: 1.125rem;
+  line-height: 1.45;
   color: var(--color-text-secondary);
-  padding-bottom: var(--spacing-8);
-  margin-bottom: var(--spacing-8);
+  padding-bottom: var(--spacing-6);
+  margin-bottom: 0;
   border-bottom: 1px solid var(--hairline);
+}
+
+.docs-prose > h1 + p + h2 {
+  margin-top: var(--spacing-8);
 }
 
 .docs-prose h2 {

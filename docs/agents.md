@@ -1,6 +1,6 @@
 # Mental CLI for agents
 
-**Agents write Mental CLI on the user's behalf.** After `mental install`, the skill plus the always-on rule tell them when to journal, decide, and record residue. The human does not keep a second journal. **I type mental.** They may still type `mental` for the pulse.
+**Agents write Mental CLI on the user's behalf.** After `mental install`, the skill plus the always-on rule tell them when to journal, decide, and record residue. The human does not keep a second journal. You type `mental` for the pulse.
 
 The CLI is the contract. Humans type `mental`. Agents call `mental … --json`. They do not grep `.mental`, `~/.mental`, or YAML frontmatter.
 
