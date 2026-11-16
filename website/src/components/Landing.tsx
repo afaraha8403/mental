@@ -417,25 +417,28 @@ export function Landing() {
         <VStack width="100%" hAlign="center">
           <VStack className="page" gap={0} width="100%">
             <VStack id="top" className="hero" gap={10} width="100%">
-              <VStack className="hero-copy" gap={7} hAlign="start" width="100%">
-                <HStack className="hero-pill" gap={2} vAlign="center">
-                  <Text className="hero-pill-dot" aria-hidden="true">
-                    {' '}
+              <VStack className="hero-copy" gap={6} hAlign="start" width="100%">
+                <VStack gap={4} hAlign="start" width="100%">
+                  <HStack className="hero-pill" gap={2} vAlign="center">
+                    <Text className="hero-pill-dot" aria-hidden="true">
+                      {' '}
+                    </Text>
+                    <Text className="hero-pill-text">
+                      v{VERSION} · local-first · no account
+                    </Text>
+                  </HStack>
+                  <Heading level={1} className="hero-title">
+                    Never reconstruct where you left off
+                  </Heading>
+                </VStack>
+                <VStack gap={2} hAlign="start" width="100%">
+                  <Text className="hero-lead">
+                    Git records what changed. Mental records the resume.
                   </Text>
-                  <Text className="hero-pill-text">
-                    v{VERSION} · local-first · no account
+                  <Text className="hero-next">
+                    Your agents write it. You type <Code size="inherit">mental</Code>.
                   </Text>
-                </HStack>
-                <Heading level={1} className="hero-title">
-                  Never reconstruct where you left off
-                </Heading>
-                <Text className="hero-lead">
-                  Git records what changed. Mental records the resume, the decision git cannot
-                  explain, and what is still in the air.
-                </Text>
-                <Text className="hero-lead">
-                  Your agents write it. You type <Code size="inherit">mental</Code>.
-                </Text>
+                </VStack>
 
                 <VStack id="install" className="install" gap={0} width="100%">
                   <HStack className="install-row install-main" gap={3} vAlign="center" width="100%">
@@ -474,21 +477,23 @@ export function Landing() {
                   ))}
                 </VStack>
 
-                <HStack gap={5} vAlign="center" hAlign="start" wrap="wrap">
-                  <Button
-                    label="Read the docs"
-                    variant="secondary"
-                    href={DOCS_URL}
-                    endContent={<Icon icon={ArrowRightIcon} size="sm" color="inherit" />}
-                  />
-                  <Link href={GITHUB_URL} isExternalLink isStandalone>
-                    GitHub
-                  </Link>
-                </HStack>
-                <Text className="hero-fine">
-                  Node.js 22.13 or newer. The unscoped package named{' '}
-                  <Code size="inherit">mental</Code> is a different project.
-                </Text>
+                <VStack gap={3} hAlign="start" width="100%">
+                  <HStack gap={5} vAlign="center" hAlign="start" wrap="wrap">
+                    <Button
+                      label="Read the docs"
+                      variant="secondary"
+                      href={DOCS_URL}
+                      endContent={<Icon icon={ArrowRightIcon} size="sm" color="inherit" />}
+                    />
+                    <Link href={GITHUB_URL} isExternalLink isStandalone>
+                      GitHub
+                    </Link>
+                  </HStack>
+                  <Text className="hero-fine">
+                    Node.js 22.13 or newer. The unscoped package named{' '}
+                    <Code size="inherit">mental</Code> is a different project.
+                  </Text>
+                </VStack>
               </VStack>
               <VStack className="hero-stage" width="100%">
                 <DashboardDemo />

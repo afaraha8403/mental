@@ -29,6 +29,9 @@ try {
     };
     return {
       h1: document.querySelector('#top h1')?.textContent?.trim() ?? '',
+      lead: document.querySelector('.hero-lead')?.textContent?.trim() ?? '',
+      leadCount: document.querySelectorAll('.hero-lead').length,
+      heroGap: getComputedStyle(document.querySelector('.hero-copy')).rowGap,
       installCount: document.querySelectorAll('#install').length,
       install: y('#install'),
       iframe: y('#top iframe'),
@@ -43,6 +46,12 @@ try {
 
   if (order.h1 !== 'Never reconstruct where you left off') {
     fail(`h1 was ${JSON.stringify(order.h1)}`);
+  }
+  if (order.leadCount !== 1 || order.lead !== 'Git records what changed. Mental records the resume.') {
+    fail(`hero lead was ${JSON.stringify(order.lead)} (count ${order.leadCount})`);
+  }
+  if (order.heroGap === 'normal' || parseFloat(order.heroGap) < 16) {
+    fail(`hero copy gap was ${JSON.stringify(order.heroGap)}`);
   }
   if (order.installCount !== 1) fail(`expected one #install, found ${order.installCount}`);
   if (order.install == null || order.iframe == null || order.install > order.iframe + 8) {
