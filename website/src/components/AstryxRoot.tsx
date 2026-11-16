@@ -19,7 +19,7 @@ type ColorModeContextValue = {
 };
 
 const ColorModeContext = createContext<ColorModeContextValue>({
-  mode: 'dark',
+  mode: 'light',
   toggleMode: () => {},
 });
 
@@ -34,7 +34,8 @@ function storedMode(): ColorMode | null {
 }
 
 export function AstryxRoot({children}: {children: ReactNode}) {
-  const [mode, setMode] = useState<ColorMode>('dark');
+  // Paper by default. A saved `mental-theme` still wins in the effect below.
+  const [mode, setMode] = useState<ColorMode>('light');
 
   useLayoutEffect(() => {
     const stored = storedMode();

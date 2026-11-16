@@ -417,7 +417,7 @@ export function Landing() {
         <VStack width="100%" hAlign="center">
           <VStack className="page" gap={0} width="100%">
             <VStack id="top" className="hero" gap={10} width="100%">
-              <VStack className="hero-copy" gap={7} hAlign="center" width="100%">
+              <VStack className="hero-copy" gap={7} hAlign="start" width="100%">
                 <HStack className="hero-pill" gap={2} vAlign="center">
                   <Text className="hero-pill-dot" aria-hidden="true">
                     {' '}
@@ -474,7 +474,7 @@ export function Landing() {
                   ))}
                 </VStack>
 
-                <HStack gap={5} vAlign="center" hAlign="center" wrap="wrap">
+                <HStack gap={5} vAlign="center" hAlign="start" wrap="wrap">
                   <Button
                     label="Read the docs"
                     variant="secondary"
@@ -499,12 +499,8 @@ export function Landing() {
               <Text className="hosts-label">Works in the agents you already use</Text>
               <VStack className="marquee" width="100%">
                 <HStack className="marquee-track" gap={0}>
-                  {[...HOSTS, ...HOSTS].map((host, index) => (
-                    <Text
-                      key={`${host}-${index}`}
-                      className="marquee-item"
-                      aria-hidden={index >= HOSTS.length ? 'true' : undefined}
-                    >
+                  {HOSTS.map((host) => (
+                    <Text key={host} className="marquee-item">
                       {host}
                     </Text>
                   ))}
@@ -685,12 +681,12 @@ export function Landing() {
               </VStack>
             </Chapter>
 
-            <VStack className="finale reveal" gap={8} hAlign="center" width="100%">
+            <VStack className="finale reveal" gap={6} hAlign="start" width="100%">
               <Text className="finale-word" aria-hidden="true">
                 mental
               </Text>
               <Text className="finale-lead">Three commands. Then the next session can pick up.</Text>
-              <HStack gap={4} hAlign="center" wrap="wrap">
+              <HStack gap={4} hAlign="start" wrap="wrap">
                 <Button
                   label={copied === INSTALL_CMD ? 'Copied' : INSTALL_CMD}
                   variant="primary"

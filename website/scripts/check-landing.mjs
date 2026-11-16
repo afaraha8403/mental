@@ -117,7 +117,7 @@ try {
     fail('copy did not put the install command on the clipboard');
   }
   const demoSrc = await page.locator('#top iframe').getAttribute('src');
-  if (!demoSrc?.includes('theme=dark')) fail(`demo src was ${JSON.stringify(demoSrc)}`);
+  if (!demoSrc?.includes('theme=light')) fail(`demo src was ${JSON.stringify(demoSrc)}`);
 
   const iframe = page.locator('#top iframe');
   const frame = page.frames().find((entry) => {
