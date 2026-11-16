@@ -300,6 +300,65 @@ html[data-theme='light'] .astryx-button[data-variant='primary'] {
   }
 }
 
+/* Fits */
+
+.fits {
+  padding-top: var(--chapter-gap);
+}
+
+.fits-label {
+  font-family: var(--font-family-code);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-tertiary);
+}
+
+.fits-item {
+  padding: var(--spacing-5);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+}
+
+.notice-label {
+  font-family: var(--font-family-code);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-accent);
+}
+
+.notice {
+  color: var(--color-text-secondary);
+}
+
+.glance {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.glance-row {
+  padding: var(--spacing-5) var(--spacing-6);
+}
+
+.glance-row + .glance-row {
+  border-top: 1px solid var(--hairline);
+}
+
+.glance-label {
+  flex: 0 0 7rem;
+  font-family: var(--font-family-code);
+  font-size: 0.75rem;
+  color: var(--color-text-accent);
+}
+
+.glance-value {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Chapters */
 
 .chapter {
@@ -1206,9 +1265,15 @@ html[data-theme='light'] .astryx-button[data-variant='primary'] {
     grid-column: 1;
   }
 
-  .ledger-row {
+  .ledger-row,
+  .glance-row {
     flex-wrap: wrap;
     padding-inline: var(--spacing-4);
+  }
+
+  .glance-label,
+  .fits-item {
+    flex: none;
   }
 
   .pulse-part {
@@ -1221,13 +1286,13 @@ html[data-theme='light'] .astryx-button[data-variant='primary'] {
   }
 }
 
-#cycle,
-#tax,
-#attention,
-#decisions,
+#fits,
 #pulse,
-#claude,
+#session,
+#surfaces,
 #privacy,
+#glance,
+#why,
 #install,
 #faq {
   scroll-margin-top: 4.5rem;

@@ -32,23 +32,36 @@ try {
       installCount: document.querySelectorAll('#install').length,
       install: y('#install'),
       iframe: y('#top iframe'),
-      attention: y('#attention'),
-      claude: y('#claude'),
+      pulse: y('#pulse'),
       installText: document.querySelector('#install')?.textContent ?? '',
+      body: document.body.innerText,
+      sessionFrames: [...document.querySelectorAll('#session iframe')].map(
+        (node) => node.getAttribute('src') ?? '',
+      ),
     };
   });
 
-  if (order.h1 !== 'Picking up where your AI agents left off') {
+  if (order.h1 !== 'Never reconstruct where you left off') {
     fail(`h1 was ${JSON.stringify(order.h1)}`);
   }
   if (order.installCount !== 1) fail(`expected one #install, found ${order.installCount}`);
   if (order.install == null || order.iframe == null || order.install > order.iframe + 8) {
     fail('#install starts below the demo iframe');
   }
-  if (order.iframe == null || order.attention == null || order.iframe >= order.attention) {
-    fail('demo iframe is not above #attention');
+  if (order.iframe == null || order.pulse == null || order.iframe >= order.pulse) {
+    fail('demo iframe is not above #pulse');
   }
-  if (order.claude == null) fail('#claude is missing');
+  if (order.body.includes('your agents remember')) fail('page still says agents remember');
+  if (order.body.includes('marketing-website-aac0')) fail('page still shows the leaked branch');
+  if (order.sessionFrames.length !== 2) {
+    fail(`expected two #session iframes, found ${order.sessionFrames.length}`);
+  }
+  if (!order.sessionFrames.some((src) => src.includes('embed=1') && src.includes('#/attention'))) {
+    fail(`attention embed missing: ${JSON.stringify(order.sessionFrames)}`);
+  }
+  if (!order.sessionFrames.some((src) => src.includes('embed=1') && src.includes('#/decisions'))) {
+    fail(`decisions embed missing: ${JSON.stringify(order.sessionFrames)}`);
+  }
   for (const command of ['npm i -g @balacode/mental', 'mental install', 'mental doctor']) {
     if (!order.installText.includes(command)) fail(`#install missing ${command}`);
   }
@@ -61,12 +74,12 @@ try {
     })),
   );
   const expectedChapters = [
-    ['tax', '01', 'The tax'],
-    ['cycle', '02', 'The loop'],
-    ['pulse', '03', 'The pulse'],
-    ['attention', '04', 'The residue'],
-    ['claude', '05', 'In the host'],
-    ['privacy', '06', 'The ledger'],
+    ['pulse', '01', 'The pulse'],
+    ['session', '02', 'One session'],
+    ['surfaces', '03', 'In the tools'],
+    ['privacy', '04', 'Privacy'],
+    ['glance', '05', 'At a glance'],
+    ['why', '06', 'The measurement'],
     ['faq', '07', 'FAQ'],
   ];
   const chapterKey = chapters.map((chapter) => `${chapter.id}:${chapter.index}:${chapter.label}`).join('|');
@@ -88,6 +101,10 @@ try {
 
   const finale = (await page.locator('.finale-word').innerText()).trim();
   if (finale !== 'mental') fail(`finale was ${JSON.stringify(finale)}`);
+  const finaleLead = (await page.locator('.finale-lead').innerText()).trim();
+  if (finaleLead !== 'Three commands. Then the next session can pick up.') {
+    fail(`finale lead was ${JSON.stringify(finaleLead)}`);
+  }
 
   await page.locator('#install').getByRole('button', {name: 'Copy'}).first().click();
   try {
@@ -130,7 +147,11 @@ try {
         await frame.waitForFunction(
           ({viewId, expected}) => {
             const el = document.querySelector(`#view-${viewId}`);
-            return Boolean(el && !el.hidden && (el.innerText || '').includes(expected));
+            if (!el || el.hidden) return false;
+            // The sample verify item is older than the dashboard's 7-day fold, so its title sits in a closed disclosure.
+            const folded = el.querySelector('details.aging');
+            if (folded && !folded.open) folded.open = true;
+            return (el.innerText || '').includes(expected);
           },
           {viewId: id, expected: needle},
           {timeout: 10000},

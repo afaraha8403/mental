@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changes
+- The homepage now leads with what Mental is, a real sample session, and the install commands, and the research figures moved below the product.
 - The production site deploy waits until the three-OS test matrix is green, then publishes only if that commit changes the site.
 - The production site deploy runs the homepage and docs browser checks before it publishes.
 - The homepage is redesigned as numbered chapters. It opens with a large headline over a teal glow, a three-line install card, and a sample dashboard that settles flat as you scroll. It then shows a list of supported agents, the research figures on lost context, the install-to-pulse loop, a breakdown of what the pulse shows, a privacy section on what leaves the machine, and a closing install call.

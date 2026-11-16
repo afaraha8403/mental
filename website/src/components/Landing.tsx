@@ -12,13 +12,10 @@ import {VStack} from '@astryxdesign/core/VStack';
 import {
   ArrowPathIcon,
   ArrowRightIcon,
-  ChatBubbleLeftRightIcon,
   CheckIcon,
   ClipboardDocumentIcon,
-  ComputerDesktopIcon,
   LightBulbIcon,
   ShieldCheckIcon,
-  ViewColumnsIcon,
 } from '@heroicons/react/24/outline';
 import {useState, type ComponentType, type ReactNode, type SVGProps} from 'react';
 import {DOCS_URL, GITHUB_URL, INSTALL_CMD, VERSION} from '../site';
@@ -27,9 +24,17 @@ import {DashboardDemo, demoSrc} from './DashboardDemo';
 import {PulseTerminal} from './PulseTerminal';
 import {SiteFooter} from './SiteFooter';
 import {SiteHeader} from './SiteHeader';
-import {WorkCycle} from './WorkCycle';
+import {WorkCycle, type SessionBeatView} from './WorkCycle';
 
 type HeroIcon = ComponentType<SVGProps<SVGSVGElement>>;
+
+type Fit = {title: string};
+
+type SurfaceCard = {title: string; text: string};
+
+type GlanceRow = {label: string; value: ReactNode};
+
+type Faq = {q: string; a: ReactNode};
 
 const HOSTS = [
   'Claude Code',
@@ -71,21 +76,77 @@ const PULSE_PARTS = [
   {label: 'Settled', text: 'Decisions in force, so nobody argues them again.'},
 ] as const;
 
-const CLAUDE_CARDS: {icon: HeroIcon; title: ReactNode; text: string}[] = [
+const FITS: readonly Fit[] = [
+  {title: 'A repo you left on Friday'},
+  {title: 'The next agent on the same project'},
+  {title: 'A decision git cannot explain'},
+  {title: 'Whatever is still in the air'},
+];
+
+const WRITE_NOTES = [
+  {label: 'Resume', value: 'Ship the pointer, not the dump.'},
+  {label: 'Needs eyes', value: 'Resolver tests not reviewed'},
+  {label: 'In the air', value: 'Tom said ship the pointer'},
+] as const;
+
+const SESSION_BEATS: readonly SessionBeatView[] = [
   {
-    icon: ChatBubbleLeftRightIcon,
-    title: 'Above the prompt',
-    text: 'Resume, pulse, and open counts in two rows. It steps aside for a survey.',
+    id: 'install',
+    step: 'Install',
+    claim: (
+      <>
+        <Code size="inherit">mental install</Code> copies the skill into the agents you already
+        use. Hooks, MCP, and time tracking stay off.
+      </>
+    ),
   },
   {
-    icon: ComputerDesktopIcon,
-    title: 'Desktop Code tab',
-    text: 'A panel for this session. Local sessions only, not cloud or WSL.',
+    id: 'write',
+    step: 'The agent writes',
+    claim:
+      'You stay in the task. The agent writes the resume, the decision, and what is still in the air.',
+    notes: WRITE_NOTES,
   },
   {
-    icon: ViewColumnsIcon,
-    title: <Code size="inherit">/mental</Code>,
-    text: 'Now, residue, decisions, session, and time. Park and Hand off ask the agent.',
+    id: 'pulse',
+    step: 'You type mental',
+    claim: (
+      <>
+        <Code size="inherit">mental</Code> prints the pulse and exits. On the sample, git reads{' '}
+        <Code size="inherit">main (dirty)</Code>.
+      </>
+    ),
+  },
+  {
+    id: 'look',
+    step: 'You look',
+    claim: 'Attention is what is still in the air. Decisions are why it stayed that way.',
+  },
+  {
+    id: 'next',
+    step: 'The next chat',
+    claim: (
+      <>
+        The next agent reads that resume. If <Code size="inherit">mental</Code> is not installed,
+        it continues the task and shows the install block. It does not run a{' '}
+        <Code size="inherit">.mjs</Code> file.
+      </>
+    ),
+  },
+];
+
+const SURFACE_CARDS: readonly SurfaceCard[] = [
+  {
+    title: 'Claude Code',
+    text: 'Resume, pulse, and open counts. Open it with /mental. On Claude Desktop it is the Code tab for local sessions, not WSL or cloud. It steps aside for a survey.',
+  },
+  {
+    title: 'Cursor',
+    text: 'The sidebar extension draws this session. It does not type into Cursor chat. You paste the prompt it copies. The extension does not write the journal.',
+  },
+  {
+    title: 'Every other host',
+    text: 'GitHub Copilot, Codex, OpenCode, VS Code, and Kiro get the skill and the rule. Hooks, MCP, and time tracking stay off until you turn them on.',
   },
 ];
 
@@ -95,8 +156,8 @@ const LEDGER: {icon: HeroIcon; item: ReactNode; detail: ReactNode; state: string
     item: 'Journals, decisions, residue',
     detail: (
       <>
-        Markdown in <Code size="inherit">~/.mental/</Code>. No account. Uninstall keeps
-        the files unless you type DELETE.
+        Markdown in <Code size="inherit">~/.mental/</Code>. No account. Uninstall keeps the files
+        unless you type DELETE.
       </>
     ),
     state: 'Stays here',
@@ -106,8 +167,8 @@ const LEDGER: {icon: HeroIcon; item: ReactNode; detail: ReactNode; state: string
     item: 'Version check',
     detail: (
       <>
-        The package name, sent to npm.{' '}
-        <Code size="inherit">MENTAL_SKIP_UPDATE_CHECK=1</Code> turns it off.
+        The package name, sent to npm. <Code size="inherit">MENTAL_SKIP_UPDATE_CHECK=1</Code> turns
+        it off.
       </>
     ),
     state: 'Optional',
@@ -117,50 +178,147 @@ const LEDGER: {icon: HeroIcon; item: ReactNode; detail: ReactNode; state: string
     item: 'Decision model',
     detail: (
       <>
-        Redacted text, only after you store a key in{' '}
-        <Code size="inherit">~/.mental/config.json</Code>.
+        Redacted text, only after you store a key in <Code size="inherit">~/.mental/config.json</Code>.
       </>
     ),
     state: 'Opt-in',
   },
 ];
 
-const FAQS = [
+const GLANCE: readonly GlanceRow[] = [
   {
-    q: 'Do I have to write the journal myself?',
-    a: 'No. After install, agents write it on your behalf. You type mental when you want the pulse.',
+    label: 'You type',
+    value: (
+      <>
+        <Code size="inherit">mental</Code>. It prints a pulse, then exits.
+      </>
+    ),
   },
   {
-    q: 'Is this chat memory or a vector store?',
-    a: 'No. Mental CLI is project continuity, not conversation memory. Markdown files are the source of truth. There are no embeddings as source of truth, and there is no cloud store.',
+    label: 'Agents',
+    value: 'After install, they write the journal. You do not keep a second one.',
+  },
+  {
+    label: 'Store',
+    value: (
+      <>
+        Markdown in <Code size="inherit">~/.mental</Code>. No account.
+      </>
+    ),
+  },
+  {label: 'Engine', value: 'Node.js 22.13 or newer.'},
+  {
+    label: 'Hosts',
+    value: 'Claude Code, Cursor, GitHub Copilot, Codex, OpenCode, VS Code, Kiro.',
+  },
+  {
+    label: 'Also',
+    value: 'Optional localhost dashboard. Optional MCP. Time tracking is off until you turn it on.',
+  },
+  {label: 'License', value: 'MIT.'},
+  {label: 'Version', value: `v${VERSION}`},
+];
+
+const FAQS: readonly Faq[] = [
+  {
+    q: 'What is Mental?',
+    a: 'Local-first continuity for you and your coding agents. Git records what changed. Mental records the resume, the decision git cannot explain, and what is still in the air.',
+  },
+  {
+    q: 'Do I have to write the journal myself?',
+    a: (
+      <>
+        No. After install, agents write it. You type <Code size="inherit">mental</Code> when you
+        want the pulse.
+      </>
+    ),
+  },
+  {
+    q: 'Is this chat memory, a vector database, or a hosted brain?',
+    a: 'No. Markdown files are the source of truth. There is no cloud store and no account. It is not a transcript of the chat.',
   },
   {
     q: 'Does it replace git, issues, or PLAN.md?',
-    a: 'No. Git still records what changed. --against PLAN.md points at the plan. Mental holds the small amount those systems cannot see: resume, decisions, and residue.',
+    a: (
+      <>
+        No. Git still records what changed. <Code size="inherit">--against PLAN.md</Code> points at
+        the plan. Mental holds the small amount those systems cannot see.
+      </>
+    ),
   },
   {
-    q: 'Will it auto-journal every chat turn?',
-    a: 'No. Agents journal at task boundaries, real decisions, and residue in the air. Session hooks stay off until you run mental hooks on.',
+    q: 'Where does the data live?',
+    a: (
+      <>
+        Default store is <Code size="inherit">~/.mental</Code>. Never commit it. A project{' '}
+        <Code size="inherit">./.mental</Code> exists only after{' '}
+        <Code size="inherit">mental local</Code>. Uninstall keeps the files unless you type DELETE.
+      </>
+    ),
+  },
+  {
+    q: 'What leaves this machine?',
+    a: (
+      <>
+        Journals stay here. A version check can send the package name to npm.{' '}
+        <Code size="inherit">MENTAL_SKIP_UPDATE_CHECK=1</Code> turns that off. A decision model
+        sends redacted text only after you store a key in{' '}
+        <Code size="inherit">~/.mental/config.json</Code>.
+      </>
+    ),
+  },
+  {
+    q: 'Will it journal every chat turn?',
+    a: (
+      <>
+        No. Agents journal at task boundaries, real decisions, and what is still in the air. Session
+        hooks stay off until you run <Code size="inherit">mental hooks on</Code>.
+      </>
+    ),
   },
   {
     q: 'When do I use park, handoff, or pulse?',
-    a: 'park encodes an interruption mid-hop. handoff is a planned close (journal plus heartbeat). pulse is a compact cross-project overview. The cheap mid-chat reload is still mental / heartbeat --json.',
+    a: (
+      <>
+        <Code size="inherit">park</Code> is an interruption mid-hop.{' '}
+        <Code size="inherit">handoff</Code> is a planned close. <Code size="inherit">pulse</Code> is
+        the compact cross-project overview. The cheap mid-chat reload is still{' '}
+        <Code size="inherit">mental / heartbeat --json</Code>.
+      </>
+    ),
   },
   {
-    q: 'How do I upgrade?',
-    a: 'Run npm i -g @balacode/mental, then mental install, then mental doctor. Journals stay. From a git checkout: npm run mental -- install.',
+    q: 'Does Mental track my hours?',
+    a: (
+      <>
+        Only after <Code size="inherit">mental option track on</Code>. Default off. Hours never go
+        in git.
+      </>
+    ),
   },
   {
     q: 'What if mental is not installed?',
-    a: 'Agents continue the coding task and mention the install block. They never execute a .mjs file directly. Fail open.',
+    a: 'Agents continue the coding task and mention the install block. They never execute a .mjs file directly.',
   },
   {
-    q: 'Where does data live?',
-    a: 'Default store is ~/.mental (never commit). Project ./.mental only after mental local. Uninstall does not delete OKF files unless you type DELETE.',
+    q: 'How do I upgrade?',
+    a: (
+      <>
+        <Code size="inherit">npm i -g @balacode/mental</Code>, then{' '}
+        <Code size="inherit">mental install</Code>, then <Code size="inherit">mental doctor</Code>.
+        Journals stay.
+      </>
+    ),
   },
   {
-    q: 'Does Mental CLI track my hours?',
-    a: 'Only if you turn it on with mental option track on. Default off. Hours never go in git.',
+    q: 'Which package on npm?',
+    a: (
+      <>
+        <Code size="inherit">@balacode/mental</Code>. The unscoped package named{' '}
+        <Code size="inherit">mental</Code> is a different project. The binary is{' '}
+        <Code size="inherit">mental</Code>.
+      </>
+    ),
   },
 ];
 
@@ -180,6 +338,16 @@ function ViewWindow({src, title}: {src: string; title: string}) {
       title={title}
       loading="lazy"
     />
+  );
+}
+
+/** "What to notice" line beside a real artifact. */
+function Notice({text}: {text: string}) {
+  return (
+    <VStack className="notice" gap={1} hAlign="start">
+      <Text className="notice-label">What to notice</Text>
+      <Text>{text}</Text>
+    </VStack>
   );
 }
 
@@ -216,6 +384,9 @@ function Chapter({
   );
 }
 
+/**
+ * Marketing homepage: definition, sample session, and install.
+ */
 export function Landing() {
   const [copied, setCopied] = useState<string | null>(null);
 
@@ -256,11 +427,14 @@ export function Landing() {
                   </Text>
                 </HStack>
                 <Heading level={1} className="hero-title">
-                  Picking up where your AI agents left off
+                  Never reconstruct where you left off
                 </Heading>
                 <Text className="hero-lead">
-                  Agents write the resume. You type{' '}
-                  <Code size="inherit">mental</Code>.
+                  Git records what changed. Mental records the resume, the decision git cannot
+                  explain, and what is still in the air.
+                </Text>
+                <Text className="hero-lead">
+                  Your agents write it. You type <Code size="inherit">mental</Code>.
                 </Text>
 
                 <VStack id="install" className="install" gap={0} width="100%">
@@ -338,47 +512,45 @@ export function Landing() {
               </VStack>
             </VStack>
 
-            <Chapter
-              id="tax"
-              index="01"
-              label="The tax"
-              title="Feeling faster is not the same as picking up"
-              lead="Every new chat, every Monday, every second clone pays to rebuild where you were. The research measured it."
-            >
-              <Grid columns={{minWidth: 240, max: 3}} gap={4} width="100%">
-                {STATS.map((stat) => (
-                  <VStack key={stat.figure} className="stat" gap={4} hAlign="start">
-                    <Text className="stat-figure">{stat.figure}</Text>
-                    <Text className="stat-claim">{stat.claim}</Text>
-                    <Link href={stat.href} isExternalLink isStandalone>
-                      {stat.source}
-                    </Link>
+            <VStack id="fits" className="fits" gap={6} width="100%">
+              <Text className="fits-label">Mental is how you pick up</Text>
+              <Grid columns={{minWidth: 200, max: 4}} gap={4} width="100%">
+                {FITS.map((fit) => (
+                  <VStack key={fit.title} className="fits-item" gap={2} hAlign="start">
+                    <Text>{fit.title}</Text>
                   </VStack>
                 ))}
               </Grid>
-            </Chapter>
-
-            <WorkCycle />
+            </VStack>
 
             <Chapter
               id="pulse"
-              index="03"
+              index="01"
               label="The pulse"
               title={
                 <>
                   You type <Code size="inherit">mental</Code>
                 </>
               }
-              lead="One screen, then it exits. Not a dashboard you keep open, not a dump of the chat."
+              lead="One screen, then it exits. Not a dashboard you leave open, and not a dump of the chat."
             >
               <Grid columns={{minWidth: 300, max: 2}} gap={10} align="center" width="100%">
-                <VStack className="pulse-parts" gap={0} width="100%">
-                  {PULSE_PARTS.map((part) => (
-                    <HStack key={part.label} className="pulse-part" gap={4} vAlign="baseline" width="100%">
-                      <Text className="pulse-part-label">{part.label}</Text>
-                      <Text className="pulse-part-text">{part.text}</Text>
-                    </HStack>
-                  ))}
+                <VStack gap={6} width="100%">
+                  <VStack className="pulse-parts" gap={0} width="100%">
+                    {PULSE_PARTS.map((part) => (
+                      <HStack
+                        key={part.label}
+                        className="pulse-part"
+                        gap={4}
+                        vAlign="baseline"
+                        width="100%"
+                      >
+                        <Text className="pulse-part-label">{part.label}</Text>
+                        <Text className="pulse-part-text">{part.text}</Text>
+                      </HStack>
+                    ))}
+                  </VStack>
+                  <Notice text="The resume is one line. The chat transcript is not on this screen." />
                 </VStack>
                 <VStack className="glow-frame" width="100%">
                   <PulseTerminal />
@@ -387,69 +559,69 @@ export function Landing() {
             </Chapter>
 
             <Chapter
-              id="attention"
-              index="04"
-              label="The residue"
-              title="When the chat is gone"
-              lead="Same sample session. Two things git does not keep."
+              id="session"
+              index="02"
+              label="One session"
+              title="The same sample, start to finish"
+              lead="The dashboard above is this session. Five beats. Nothing here is a second product."
             >
-              <Grid columns={{minWidth: 320, max: 2}} gap={6} width="100%">
-                <VStack className="view-card" gap={4} hAlign="start">
-                  <ViewWindow
-                    src="/demo/index.html?embed=1#/attention"
-                    title="Attention view from the sample session"
-                  />
-                  <VStack gap={1} hAlign="start">
-                    <Text className="view-card-title">Attention</Text>
-                    <Text className="view-card-text">What is still in the air.</Text>
-                  </VStack>
-                </VStack>
-                <VStack className="view-card" gap={4} hAlign="start">
-                  <ViewWindow
-                    src="/demo/index.html?embed=1#/decisions"
-                    title="Decisions view from the sample session"
-                  />
-                  <VStack gap={1} hAlign="start">
-                    <Text className="view-card-title">Decisions</Text>
-                    <Text className="view-card-text">Why it stayed that way.</Text>
-                  </VStack>
-                </VStack>
-              </Grid>
+              <WorkCycle
+                beats={SESSION_BEATS}
+                look={
+                  <Grid columns={{minWidth: 320, max: 2}} gap={6} width="100%">
+                    <VStack className="view-card" gap={4} hAlign="start">
+                      <ViewWindow
+                        src="/demo/index.html?embed=1#/attention"
+                        title="Attention view from the sample session"
+                      />
+                      <VStack gap={1} hAlign="start">
+                        <Text className="view-card-title">Attention</Text>
+                        <Text className="view-card-text">What is still in the air.</Text>
+                      </VStack>
+                    </VStack>
+                    <VStack className="view-card" gap={4} hAlign="start">
+                      <ViewWindow
+                        src="/demo/index.html?embed=1#/decisions"
+                        title="Decisions view from the sample session"
+                      />
+                      <VStack gap={1} hAlign="start">
+                        <Text className="view-card-title">Decisions</Text>
+                        <Text className="view-card-text">Why it stayed that way.</Text>
+                      </VStack>
+                    </VStack>
+                  </Grid>
+                }
+              />
             </Chapter>
 
             <Chapter
-              id="claude"
-              index="05"
-              label="In the host"
-              title="Inside Claude Code"
-              lead="It reads the session. It does not write."
+              id="surfaces"
+              index="03"
+              label="In the tools"
+              title="Inside the tools you already use"
+              lead="The skill is how agents write. Two hosts also draw a panel. Neither panel writes files."
             >
               <Grid columns={{minWidth: 220, max: 3}} gap={4} width="100%">
-                {CLAUDE_CARDS.map((card, index) => (
-                  <VStack key={index} className="bento" gap={5} hAlign="start">
-                    <HStack className="bento-icon" vAlign="center" hAlign="center">
-                      <Icon icon={card.icon} size="md" color="accent" />
-                    </HStack>
-                    <VStack gap={2} hAlign="start">
-                      <Heading level={3} className="bento-title">
-                        {card.title}
-                      </Heading>
-                      <Text className="bento-text">{card.text}</Text>
-                    </VStack>
+                {SURFACE_CARDS.map((card) => (
+                  <VStack key={card.title} className="bento" gap={3} hAlign="start">
+                    <Heading level={3} className="bento-title">
+                      {card.title}
+                    </Heading>
+                    <Text className="bento-text">{card.text}</Text>
                   </VStack>
                 ))}
               </Grid>
               <Link href="/docs/hosts" isStandalone>
-                Claude panel and Cursor sidebar in the docs
+                Host UIs in the docs
               </Link>
             </Chapter>
 
             <Chapter
               id="privacy"
-              index="06"
-              label="The ledger"
+              index="04"
+              label="Privacy"
               title="What leaves this machine"
-              lead="Journals stay here. Everything else is off until you turn it on."
+              lead="Journals stay in ~/.mental. Everything else is off until you turn it on."
             >
               <VStack className="ledger" gap={0} width="100%">
                 {LEDGER.map((row) => (
@@ -470,6 +642,37 @@ export function Landing() {
               </Link>
             </Chapter>
 
+            <Chapter id="glance" index="05" label="At a glance" title="At a glance">
+              <VStack className="glance" gap={0} width="100%">
+                {GLANCE.map((row) => (
+                  <HStack key={row.label} className="glance-row" gap={5} vAlign="baseline" width="100%">
+                    <Text className="glance-label">{row.label}</Text>
+                    <Text className="glance-value">{row.value}</Text>
+                  </HStack>
+                ))}
+              </VStack>
+            </Chapter>
+
+            <Chapter
+              id="why"
+              index="06"
+              label="The measurement"
+              title="Feeling faster is not the same as picking up"
+              lead="People felt faster. The measurements did not agree. Mental does not make the model faster. It keeps the resume the next session would otherwise rebuild."
+            >
+              <Grid columns={{minWidth: 240, max: 3}} gap={4} width="100%">
+                {STATS.map((stat) => (
+                  <VStack key={stat.figure} className="stat" gap={4} hAlign="start">
+                    <Text className="stat-figure">{stat.figure}</Text>
+                    <Text className="stat-claim">{stat.claim}</Text>
+                    <Link href={stat.href} isExternalLink isStandalone>
+                      {stat.source}
+                    </Link>
+                  </VStack>
+                ))}
+              </Grid>
+            </Chapter>
+
             <Chapter id="faq" index="07" label="FAQ" title="Short answers">
               <VStack className="faq" width="100%">
                 <CollapsibleGroup type="multiple" hasDividers>
@@ -486,7 +689,7 @@ export function Landing() {
               <Text className="finale-word" aria-hidden="true">
                 mental
               </Text>
-              <Text className="finale-lead">Three commands. Then your agents remember.</Text>
+              <Text className="finale-lead">Three commands. Then the next session can pick up.</Text>
               <HStack gap={4} hAlign="center" wrap="wrap">
                 <Button
                   label={copied === INSTALL_CMD ? 'Copied' : INSTALL_CMD}

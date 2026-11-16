@@ -29,8 +29,8 @@ export const README_URL = 'https://github.com/afaraha8403/mental#readme';
 export const LICENSE_URL = 'https://github.com/afaraha8403/mental/blob/main/LICENSE';
 
 export const DESCRIPTION =
-  'Local-first continuity for you and your coding agents.';
+  'Local-first continuity for you and your coding agents. Git records what changed. Mental records the resume, the decision, and what is still in the air.';
 
-export const TITLE = 'Mental CLI, pick up where your agents left off';
+export const TITLE = 'Mental CLI, never reconstruct where you left off';
 
 export const OG_IMAGE = `${SITE_URL}/screenshots/dashboard-today.png`;

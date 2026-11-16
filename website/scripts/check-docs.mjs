@@ -45,8 +45,8 @@ try {
     await page.waitForURL((url) => url.pathname.replace(/\/$/, '') === path);
     const body = await page.locator('article').innerText();
     if (!body.includes(needle)) fail(`${path} missing ${JSON.stringify(needle)}`);
-    const attention = await page.getByRole('link', {name: 'Attention', exact: true}).getAttribute('href');
-    if (attention !== '/#attention') fail(`${path} Attention href was ${JSON.stringify(attention)}`);
+    const session = await page.getByRole('link', {name: 'Session', exact: true}).getAttribute('href');
+    if (session !== '/#session') fail(`${path} Session href was ${JSON.stringify(session)}`);
     if (path === '/docs/dashboard') {
       const views = page.locator('a.docs-toc-link[href="#views"]');
       if ((await views.count()) !== 1) fail('dashboard outline missing Views');
